@@ -8,19 +8,20 @@ demoversion=8.3.0
 # glu version
 gluversion=9.0.0
 # set debug to 1 to compile a version with debugging symbols
-debug=1
+debug=0
 # set clean to 1 to clean the source directories first (recommended)
 clean=1
-# set osmesaclassic to 1 to use "classic" osmesa resterizer instead of the Gallium driver
-osmesaclassic=0
-# set osmesallvm to 1 to compile with the llvmpipe Gallium driver, which uses LLVM, instead of softpipe
-osmesallvm=1
-# do we want to build the proper LLVM static libraries too? or are they already installed ?
-buildllvm=0
+# set osmesadriver to:
+# - 1 to use "classic" osmesa resterizer instead of the Gallium driver
+# - 2 to use the "softpipe" Gallium driver
+# - 3 to use the "llvmpipe" Gallium driver
+osmesadriver=3
 # do we want a mangled mesa + GLU ?
 mangled=1
 # the prefix to the LLVM installation
 llvmprefix="/opt/llvm"
+# do we want to build the proper LLVM static libraries too? or are they already installed ?
+buildllvm=0
 
 # tell curl to continue downloads
 curlopts="-C -"
@@ -38,17 +39,18 @@ else
     echo "- non-mangled"
 fi
 
-if [ "$osmesaclassic" = 1 ]; then
+if [ "$osmesadriver" = 1 ]; then
     echo "- classic osmesa software renderer"
-else
-    if [ "$osmesallvm" = 1 ]; then
-	echo "- llvmpipe Gallium renderer"
-    else
-	echo "- softpipe Gallium renderer"
+elif [ "$osmesadriver" = 2 ]; then
+    echo "- softpipe Gallium renderer"
+elif [ "$osmesadriver" = 3 ]; then
+    echo "- llvmpipe Gallium renderer"
+    if [ "$buildllvm" = 1 ]; then
+	echo "- also build and install LLVM 3.4.2"
     fi
-fi
-if [ "$buildllvm" = 1 ]; then
-    echo "- also build and install LLVM 3.4.2"
+else
+    echo "Error: osmesadriver must be 1, 2 or 3"
+    exit
 fi
 if [ "$clean" = 1 ]; then
     echo "- clean sources"
@@ -71,7 +73,7 @@ if [ ! -d "$osmesaprefix" -o ! -w "$osmesaprefix" ]; then
    echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
    exit
 fi
-if [ "$osmesallvm" = 1 ]; then
+if [ "$osmesadriver" = 3 ]; then
    if [ ! -x "$llvmprefix/bin/llvm-config" ]; then
       echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo " download the LLVM sources from llvm.org, and configure it with:"
@@ -99,7 +101,7 @@ if [ "$osmesallvm" = 1 ]; then
       make install
       cd ../..
    fi
-   llvmlibs=`${llvmprefix}/bin/llvm-config --ldflags --libs --system-libs`
+   llvmlibs=`${llvmprefix}/bin/llvm-config --ldflags --libs engine --system-libs`
 fi
 
 if [ "$clean" = 1 ]; then
@@ -189,7 +191,7 @@ confopts="\
     --prefix=$osmesaprefix \
 "
 
-if [ "$osmesaclassic" = 1 ]; then
+if [ "$osmesadriver" = 1 ]; then
     # pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
     confopts="${confopts} \
      --enable-osmesa \
@@ -197,24 +199,23 @@ if [ "$osmesaclassic" = 1 ]; then
      --disable-gallium-llvm \
      --with-gallium-drivers= \
     "
+elif [ "$osmesadriver" = 2 ]; then
+    # gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
+    confopts="${confopts} \
+     --disable-osmesa \
+     --enable-gallium-osmesa \
+     --disable-gallium-llvm \
+     --with-gallium-drivers=swrast \
+    "
 else
-    if [ "$osmesallvm" = 1 ]; then
-	confopts="${confopts} \
-         --enable-gallium-osmesa \
-         --enable-gallium-llvm=yes \
-         --with-llvm-prefix=$llvmprefix \
-         --disable-llvm-shared-libs \
-         --with-gallium-drivers=swrast \
-         "
-    else
-	# gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
-	confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --disable-gallium-llvm \
-         --with-gallium-drivers=swrast \
-        "
-    fi
+    # gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
+    confopts="${confopts} \
+     --enable-gallium-osmesa \
+     --enable-gallium-llvm=yes \
+     --with-llvm-prefix=$llvmprefix \
+     --disable-llvm-shared-libs \
+     --with-gallium-drivers=swrast \
+    "
 fi
 
 if [ "$debug" = 1 ]; then
