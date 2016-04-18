@@ -4,3 +4,6 @@ project.xcworkspace
 xcuserdata
 *~
 osdemo32
+osdemo32-mangled
+*.dSYM
+*.exe

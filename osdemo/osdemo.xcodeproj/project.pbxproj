@@ -11,10 +11,23 @@
 		1E3AC21B1CC2424900DBAB99 /* libMangledOSMesa32.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E3AC2191CC2424900DBAB99 /* libMangledOSMesa32.a */; };
 		1E3AC21D1CC242B300DBAB99 /* libstdc++.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E3AC21C1CC242B300DBAB99 /* libstdc++.dylib */; };
 		1ED651FD1CC4F9C500CD1C8A /* osdemo32.c in Sources */ = {isa = PBXBuildFile; fileRef = 1ED651FA1CC4C38E00CD1C8A /* osdemo32.c */; };
+		1ED652001CC5068400CD1C8A /* osdemo32.c in Sources */ = {isa = PBXBuildFile; fileRef = 1ED651FA1CC4C38E00CD1C8A /* osdemo32.c */; };
+		1ED652041CC5068400CD1C8A /* libstdc++.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E3AC21C1CC242B300DBAB99 /* libstdc++.dylib */; };
+		1ED6520F1CC507CB00CD1C8A /* libGLU.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1ED6520B1CC507C400CD1C8A /* libGLU.a */; };
+		1ED652101CC507CF00CD1C8A /* libOSMesa32.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1ED6520C1CC507C400CD1C8A /* libOSMesa32.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		1E49E4D01CC2402000E06294 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		1ED652051CC5068400CD1C8A /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = /usr/share/man/man1/;
@@ -29,9 +42,12 @@
 		1E3AC2181CC2424900DBAB99 /* libMangledGLU.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libMangledGLU.a; path = lib/libMangledGLU.a; sourceTree = OSMESA_PATH; };
 		1E3AC2191CC2424900DBAB99 /* libMangledOSMesa32.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libMangledOSMesa32.a; path = lib/libMangledOSMesa32.a; sourceTree = OSMESA_PATH; };
 		1E3AC21C1CC242B300DBAB99 /* libstdc++.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libstdc++.dylib"; path = "/usr/lib/libstdc++.dylib"; sourceTree = "<absolute>"; };
-		1E49E4D21CC2402000E06294 /* osdemo32 */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = osdemo32; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E49E4D21CC2402000E06294 /* osdemo32-mangled */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "osdemo32-mangled"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1ED651F91CC4C30E00CD1C8A /* glut_wrap.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = glut_wrap.h; sourceTree = "<group>"; };
 		1ED651FA1CC4C38E00CD1C8A /* osdemo32.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = osdemo32.c; sourceTree = "<group>"; };
+		1ED652091CC5068400CD1C8A /* osdemo32 */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = osdemo32; sourceTree = BUILT_PRODUCTS_DIR; };
+		1ED6520B1CC507C400CD1C8A /* libGLU.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libGLU.a; path = lib/libGLU.a; sourceTree = OSMESA_PATH; };
+		1ED6520C1CC507C400CD1C8A /* libOSMesa32.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libOSMesa32.a; path = lib/libOSMesa32.a; sourceTree = OSMESA_PATH; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -45,6 +61,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1ED652011CC5068400CD1C8A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1ED6520F1CC507CB00CD1C8A /* libGLU.a in Frameworks */,
+				1ED652041CC5068400CD1C8A /* libstdc++.dylib in Frameworks */,
+				1ED652101CC507CF00CD1C8A /* libOSMesa32.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -52,11 +78,12 @@
 			isa = PBXGroup;
 			children = (
 				1E3AC21C1CC242B300DBAB99 /* libstdc++.dylib */,
+				1ED6520B1CC507C400CD1C8A /* libGLU.a */,
+				1ED6520C1CC507C400CD1C8A /* libOSMesa32.a */,
 				1E3AC2181CC2424900DBAB99 /* libMangledGLU.a */,
 				1E3AC2191CC2424900DBAB99 /* libMangledOSMesa32.a */,
 			);
 			name = Libraries;
-			path = ../../../../../opt/osmesa.os/lib;
 			sourceTree = "<group>";
 		};
 		1E49E4C91CC2402000E06294 = {
@@ -71,7 +98,8 @@
 		1E49E4D31CC2402000E06294 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1E49E4D21CC2402000E06294 /* osdemo32 */,
+				1E49E4D21CC2402000E06294 /* osdemo32-mangled */,
+				1ED652091CC5068400CD1C8A /* osdemo32 */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -88,9 +116,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		1E49E4D11CC2402000E06294 /* osdemo32 */ = {
+		1E49E4D11CC2402000E06294 /* osdemo32-mangled */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1E49E4D91CC2402000E06294 /* Build configuration list for PBXNativeTarget "osdemo32" */;
+			buildConfigurationList = 1E49E4D91CC2402000E06294 /* Build configuration list for PBXNativeTarget "osdemo32-mangled" */;
 			buildPhases = (
 				1E49E4CE1CC2402000E06294 /* Sources */,
 				1E49E4CF1CC2402000E06294 /* Frameworks */,
@@ -100,9 +128,26 @@
 			);
 			dependencies = (
 			);
+			name = "osdemo32-mangled";
+			productName = osdemo32;
+			productReference = 1E49E4D21CC2402000E06294 /* osdemo32-mangled */;
+			productType = "com.apple.product-type.tool";
+		};
+		1ED651FE1CC5068400CD1C8A /* osdemo32 */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1ED652061CC5068400CD1C8A /* Build configuration list for PBXNativeTarget "osdemo32" */;
+			buildPhases = (
+				1ED651FF1CC5068400CD1C8A /* Sources */,
+				1ED652011CC5068400CD1C8A /* Frameworks */,
+				1ED652051CC5068400CD1C8A /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
 			name = osdemo32;
 			productName = osdemo32;
-			productReference = 1E49E4D21CC2402000E06294 /* osdemo32 */;
+			productReference = 1ED652091CC5068400CD1C8A /* osdemo32 */;
 			productType = "com.apple.product-type.tool";
 		};
 /* End PBXNativeTarget section */
@@ -131,7 +176,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				1E49E4D11CC2402000E06294 /* osdemo32 */,
+				1E49E4D11CC2402000E06294 /* osdemo32-mangled */,
+				1ED651FE1CC5068400CD1C8A /* osdemo32 */,
 			);
 		};
 /* End PBXProject section */
@@ -142,6 +188,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				1ED651FD1CC4F9C500CD1C8A /* osdemo32.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1ED651FF1CC5068400CD1C8A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1ED652001CC5068400CD1C8A /* osdemo32.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -187,10 +241,12 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = "$(OSMESA_PATH)/include";
 				LIBRARY_SEARCH_PATHS = "$(OSMESA_PATH)/lib";
-				LLVM_LIBS = "-L/opt/llvm/lib -Wl,-search_paths_first -Wl,-headerpad_max_install_names -lLLVMLTO -lLLVMObjCARCOpts -lLLVMSymbolize -lLLVMDebugInfoPDB -lLLVMDebugInfoDWARF -lLLVMXCoreDisassembler -lLLVMXCoreCodeGen -lLLVMXCoreDesc -lLLVMXCoreInfo -lLLVMXCoreAsmPrinter -lLLVMSystemZDisassembler -lLLVMSystemZCodeGen -lLLVMSystemZAsmParser -lLLVMSystemZDesc -lLLVMSystemZInfo -lLLVMSystemZAsmPrinter -lLLVMSparcDisassembler -lLLVMSparcCodeGen -lLLVMSparcAsmParser -lLLVMSparcDesc -lLLVMSparcInfo -lLLVMSparcAsmPrinter -lLLVMPowerPCDisassembler -lLLVMPowerPCCodeGen -lLLVMPowerPCAsmParser -lLLVMPowerPCDesc -lLLVMPowerPCInfo -lLLVMPowerPCAsmPrinter -lLLVMNVPTXCodeGen -lLLVMNVPTXDesc -lLLVMNVPTXInfo -lLLVMNVPTXAsmPrinter -lLLVMMSP430CodeGen -lLLVMMSP430Desc -lLLVMMSP430Info -lLLVMMSP430AsmPrinter -lLLVMMipsDisassembler -lLLVMMipsCodeGen -lLLVMMipsAsmParser -lLLVMMipsDesc -lLLVMMipsInfo -lLLVMMipsAsmPrinter -lLLVMHexagonDisassembler -lLLVMHexagonCodeGen -lLLVMHexagonAsmParser -lLLVMHexagonDesc -lLLVMHexagonInfo -lLLVMCppBackendCodeGen -lLLVMCppBackendInfo -lLLVMBPFCodeGen -lLLVMBPFDesc -lLLVMBPFInfo -lLLVMBPFAsmPrinter -lLLVMARMDisassembler -lLLVMARMCodeGen -lLLVMARMAsmParser -lLLVMARMDesc -lLLVMARMInfo -lLLVMARMAsmPrinter -lLLVMAMDGPUCodeGen -lLLVMAMDGPUAsmParser -lLLVMAMDGPUDesc -lLLVMAMDGPUUtils -lLLVMAMDGPUInfo -lLLVMAMDGPUAsmPrinter -lLLVMAArch64Disassembler -lLLVMAArch64CodeGen -lLLVMAArch64AsmParser -lLLVMAArch64Desc -lLLVMAArch64Info -lLLVMAArch64AsmPrinter -lLLVMAArch64Utils -lLLVMMIRParser -lLLVMLibDriver -lLLVMOption -lLLVMTableGen -lLLVMLineEditor -lLLVMX86Disassembler -lLLVMX86AsmParser -lLLVMX86CodeGen -lLLVMSelectionDAG -lLLVMAsmPrinter -lLLVMX86Desc -lLLVMMCDisassembler -lLLVMX86Info -lLLVMX86AsmPrinter -lLLVMX86Utils -lLLVMMCJIT -lLLVMPasses -lLLVMipo -lLLVMVectorize -lLLVMLinker -lLLVMIRReader -lLLVMAsmParser -lLLVMDebugInfoCodeView -lLLVMInterpreter -lLLVMCodeGen -lLLVMScalarOpts -lLLVMInstCombine -lLLVMInstrumentation -lLLVMProfileData -lLLVMBitWriter -lLLVMOrcJIT -lLLVMTransformUtils -lLLVMExecutionEngine -lLLVMTarget -lLLVMAnalysis -lLLVMRuntimeDyld -lLLVMObject -lLLVMMCParser -lLLVMBitReader -lLLVMMC -lLLVMCore -lLLVMSupport -lcurses -lpthread -lz -lm -lc++";
+				LLVM_LIBS = "-L$(LLVM_PATH)/lib -Wl,-search_paths_first -Wl,-headerpad_max_install_names\n-lLLVMX86Disassembler -lLLVMX86AsmParser -lLLVMX86CodeGen -lLLVMSelectionDAG -lLLVMAsmPrinter -lLLVMCodeGen -lLLVMScalarOpts -lLLVMInstCombine -lLLVMInstrumentation -lLLVMProfileData -lLLVMTransformUtils -lLLVMBitWriter -lLLVMX86Desc -lLLVMMCDisassembler -lLLVMX86Info -lLLVMX86AsmPrinter -lLLVMX86Utils -lLLVMMCJIT -lLLVMExecutionEngine -lLLVMTarget -lLLVMAnalysis -lLLVMRuntimeDyld -lLLVMObject -lLLVMMCParser -lLLVMBitReader -lLLVMMC -lLLVMCore -lLLVMSupport\n-lcurses -lpthread -lz -lm";
+				LLVM_PATH = /opt/llvm;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				OSMESA_PATH = /opt/osmesa;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -228,7 +284,8 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = "$(OSMESA_PATH)/include";
 				LIBRARY_SEARCH_PATHS = "$(OSMESA_PATH)/lib";
-				LLVM_LIBS = "-L/opt/llvm/lib -Wl,-search_paths_first -Wl,-headerpad_max_install_names -lLLVMLTO -lLLVMObjCARCOpts -lLLVMSymbolize -lLLVMDebugInfoPDB -lLLVMDebugInfoDWARF -lLLVMXCoreDisassembler -lLLVMXCoreCodeGen -lLLVMXCoreDesc -lLLVMXCoreInfo -lLLVMXCoreAsmPrinter -lLLVMSystemZDisassembler -lLLVMSystemZCodeGen -lLLVMSystemZAsmParser -lLLVMSystemZDesc -lLLVMSystemZInfo -lLLVMSystemZAsmPrinter -lLLVMSparcDisassembler -lLLVMSparcCodeGen -lLLVMSparcAsmParser -lLLVMSparcDesc -lLLVMSparcInfo -lLLVMSparcAsmPrinter -lLLVMPowerPCDisassembler -lLLVMPowerPCCodeGen -lLLVMPowerPCAsmParser -lLLVMPowerPCDesc -lLLVMPowerPCInfo -lLLVMPowerPCAsmPrinter -lLLVMNVPTXCodeGen -lLLVMNVPTXDesc -lLLVMNVPTXInfo -lLLVMNVPTXAsmPrinter -lLLVMMSP430CodeGen -lLLVMMSP430Desc -lLLVMMSP430Info -lLLVMMSP430AsmPrinter -lLLVMMipsDisassembler -lLLVMMipsCodeGen -lLLVMMipsAsmParser -lLLVMMipsDesc -lLLVMMipsInfo -lLLVMMipsAsmPrinter -lLLVMHexagonDisassembler -lLLVMHexagonCodeGen -lLLVMHexagonAsmParser -lLLVMHexagonDesc -lLLVMHexagonInfo -lLLVMCppBackendCodeGen -lLLVMCppBackendInfo -lLLVMBPFCodeGen -lLLVMBPFDesc -lLLVMBPFInfo -lLLVMBPFAsmPrinter -lLLVMARMDisassembler -lLLVMARMCodeGen -lLLVMARMAsmParser -lLLVMARMDesc -lLLVMARMInfo -lLLVMARMAsmPrinter -lLLVMAMDGPUCodeGen -lLLVMAMDGPUAsmParser -lLLVMAMDGPUDesc -lLLVMAMDGPUUtils -lLLVMAMDGPUInfo -lLLVMAMDGPUAsmPrinter -lLLVMAArch64Disassembler -lLLVMAArch64CodeGen -lLLVMAArch64AsmParser -lLLVMAArch64Desc -lLLVMAArch64Info -lLLVMAArch64AsmPrinter -lLLVMAArch64Utils -lLLVMMIRParser -lLLVMLibDriver -lLLVMOption -lLLVMTableGen -lLLVMLineEditor -lLLVMX86Disassembler -lLLVMX86AsmParser -lLLVMX86CodeGen -lLLVMSelectionDAG -lLLVMAsmPrinter -lLLVMX86Desc -lLLVMMCDisassembler -lLLVMX86Info -lLLVMX86AsmPrinter -lLLVMX86Utils -lLLVMMCJIT -lLLVMPasses -lLLVMipo -lLLVMVectorize -lLLVMLinker -lLLVMIRReader -lLLVMAsmParser -lLLVMDebugInfoCodeView -lLLVMInterpreter -lLLVMCodeGen -lLLVMScalarOpts -lLLVMInstCombine -lLLVMInstrumentation -lLLVMProfileData -lLLVMBitWriter -lLLVMOrcJIT -lLLVMTransformUtils -lLLVMExecutionEngine -lLLVMTarget -lLLVMAnalysis -lLLVMRuntimeDyld -lLLVMObject -lLLVMMCParser -lLLVMBitReader -lLLVMMC -lLLVMCore -lLLVMSupport -lcurses -lpthread -lz -lm -lc++";
+				LLVM_LIBS = "-L$(LLVM_PATH)/lib -Wl,-search_paths_first -Wl,-headerpad_max_install_names\n-lLLVMX86Disassembler -lLLVMX86AsmParser -lLLVMX86CodeGen -lLLVMSelectionDAG -lLLVMAsmPrinter -lLLVMCodeGen -lLLVMScalarOpts -lLLVMInstCombine -lLLVMInstrumentation -lLLVMProfileData -lLLVMTransformUtils -lLLVMBitWriter -lLLVMX86Desc -lLLVMMCDisassembler -lLLVMX86Info -lLLVMX86AsmPrinter -lLLVMX86Utils -lLLVMMCJIT -lLLVMExecutionEngine -lLLVMTarget -lLLVMAnalysis -lLLVMRuntimeDyld -lLLVMObject -lLLVMMCParser -lLLVMBitReader -lLLVMMC -lLLVMCore -lLLVMSupport\n-lcurses -lpthread -lz -lm";
+				LLVM_PATH = /opt/llvm;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
@@ -240,7 +297,7 @@
 			buildSettings = {
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					/opt/osmesa.os/lib,
+					/opt/osmesa.swrast/lib,
 				);
 				OTHER_CFLAGS = (
 					"-include",
@@ -258,13 +315,37 @@
 			buildSettings = {
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					/opt/osmesa.os/lib,
+					/opt/osmesa.swrast/lib,
 				);
 				OTHER_CFLAGS = (
 					"-include",
 					"$(OSMESA_PATH)/include/GL/gl_mangle.h",
 					"-include",
 					"$(OSMESA_PATH)/include/GL/glu_mangle.h",
+				);
+				OTHER_LDFLAGS = "$(LLVM_LIBS)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		1ED652071CC5068400CD1C8A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					/opt/osmesa.swrast/lib,
+				);
+				OTHER_LDFLAGS = "$(LLVM_LIBS)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		1ED652081CC5068400CD1C8A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					/opt/osmesa.swrast/lib,
 				);
 				OTHER_LDFLAGS = "$(LLVM_LIBS)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -283,11 +364,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1E49E4D91CC2402000E06294 /* Build configuration list for PBXNativeTarget "osdemo32" */ = {
+		1E49E4D91CC2402000E06294 /* Build configuration list for PBXNativeTarget "osdemo32-mangled" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1E49E4DA1CC2402000E06294 /* Debug */,
 				1E49E4DB1CC2402000E06294 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1ED652061CC5068400CD1C8A /* Build configuration list for PBXNativeTarget "osdemo32" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1ED652071CC5068400CD1C8A /* Debug */,
+				1ED652081CC5068400CD1C8A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
