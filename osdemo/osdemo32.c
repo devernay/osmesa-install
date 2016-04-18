@@ -290,12 +290,21 @@ int main( int argc, char *argv[] )
     printf("GL_EXTENSIONS = %s\n", (char *) glGetString(GL_EXTENSIONS));
 
     /* tests */
-    if (!OSMesaGetProcAddress("glCreateShader")) {
-        printf("OSMesaGetProcAddress(\"glCreateShader\") failed!");
+#ifdef MANGLE
+    printf("mangled OSMesa...\n");
+    if (!OSMesaGetProcAddress("mglCreateShader")) {
+        printf("Error: OSMesaGetProcAddress(\"mglCreateShader\") failed!");
         exit(1);
     }
-    if (!OSMesaGetProcAddress("mglCreateShader")) {
-        printf("OSMesaGetProcAddress(\"mglCreateShader\") failed!");
+#else
+    printf("non-mangled OSMesa...\n");
+    if (OSMesaGetProcAddress("mglCreateShader")) {
+        printf("Error: OSMesaGetProcAddress(\"mglCreateShader\") succeeded!");
+        exit(1);
+    }
+#endif
+    if (!OSMesaGetProcAddress("glCreateShader")) {
+        printf("Error: OSMesaGetProcAddress(\"glCreateShader\") failed!");
         exit(1);
     }
     {
@@ -303,7 +312,7 @@ int main( int argc, char *argv[] )
         assert(mesaCreateShader);
         GLuint shader = mesaCreateShader(GL_FRAGMENT_SHADER);
         if (shader == 0) {
-            printf(("Failed to create shader using mesaCreateShader\n"));
+            printf(("Error: Failed to create shader using mesaCreateShader\n"));
             exit(1);
         }
     }
@@ -311,7 +320,7 @@ int main( int argc, char *argv[] )
         assert(glCreateShader);
         GLuint shader = glCreateShader(GL_FRAGMENT_SHADER);
         if (shader == 0) {
-            printf(("Failed to create shader using glCreateShader\n"));
+            printf(("Error: Failed to create shader using glCreateShader\n"));
             exit(1);
         }
     }
