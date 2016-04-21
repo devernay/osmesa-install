@@ -120,6 +120,7 @@ PATCHES="\
 glapi-getproc-mangled.patch \
 mesa-glversion-override.patch \
 gallium-osmesa-threadsafe.patch \
+lp_scene-safe.patch \
 "
 
 if [ `uname` = Darwin ]; then

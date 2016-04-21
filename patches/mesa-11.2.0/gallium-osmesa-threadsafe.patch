@@ -1,5 +1,5 @@
 --- mesa-11.2.0/src/gallium/state_trackers/osmesa/osmesa.c.orig	2016-03-13 19:35:33.000000000 +0100
-+++ mesa-11.2.0/src/gallium/state_trackers/osmesa/osmesa.c	2016-04-21 10:49:51.000000000 +0200
++++ mesa-11.2.0/src/gallium/state_trackers/osmesa/osmesa.c	2016-04-21 17:41:01.000000000 +0200
 @@ -52,6 +52,7 @@
  #include <stdio.h>
  #include "GL/osmesa.h"
@@ -90,7 +90,19 @@
  static inline boolean
  little_endian(void)
  {
-@@ -387,7 +345,8 @@
+@@ -319,6 +277,11 @@
+    unsigned y, bytes, bpp;
+    int dst_stride;
+ 
++   assert(res);
++   if (!res) {
++      return FALSE;
++   }
++   
+    if (osmesa->pp) {
+       struct pipe_resource *zsbuf = NULL;
+       unsigned i;
+@@ -387,7 +350,8 @@
                                 unsigned count,
                                 struct pipe_resource **out)
  {
@@ -100,7 +112,7 @@
     enum st_attachment_type i;
     struct osmesa_buffer *osbuffer = stfbi_to_osbuffer(stfbi);
     struct pipe_resource templat;
-@@ -470,41 +429,12 @@
+@@ -470,45 +434,18 @@
  
        osmesa_init_st_visual(&osbuffer->visual, color_format,
                              ds_format, accum_format);
@@ -142,7 +154,14 @@
  static void
  osmesa_destroy_buffer(struct osmesa_buffer *osbuffer)
  {
-@@ -572,7 +502,6 @@
+-   FREE(osbuffer->stfb);
++   if (osbuffer) {
++      FREE(osbuffer->stfb);
++   }
+    FREE(osbuffer);
+ }
+ 
+@@ -572,7 +509,6 @@
     struct st_context_iface *st_shared;
     enum st_context_error st_error = 0;
     struct st_context_attribs attribs;
@@ -150,7 +169,7 @@
     GLenum format = GL_RGBA;
     int depthBits = 0, stencilBits = 0, accumBits = 0;
     int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
-@@ -685,9 +614,21 @@
+@@ -685,9 +621,21 @@
                           osmesa->depth_stencil_format,
                           osmesa->accum_format);
  
@@ -173,7 +192,7 @@
        FREE(osmesa);
        return NULL;
     }
-@@ -712,7 +653,10 @@
+@@ -712,7 +660,10 @@
  OSMesaDestroyContext(OSMesaContext osmesa)
  {
     if (osmesa) {
@@ -184,7 +203,7 @@
        osmesa->stctx->destroy(osmesa->stctx);
        FREE(osmesa);
     }
-@@ -745,11 +689,12 @@
+@@ -745,14 +696,26 @@
  OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
                    GLsizei width, GLsizei height)
  {
@@ -192,13 +211,28 @@
     struct osmesa_buffer *osbuffer;
     enum pipe_format color_format;
  
-    if (!osmesa || !buffer || width < 1 || height < 1) {
-+      /* make sure the active context (and buffer) is not referenced anymore */
+-   if (!osmesa || !buffer || width < 1 || height < 1) {
++   if (!osmesa) {
++      /* make sure the active context is not referenced anymore */
 +      _mesa_make_current(NULL, NULL, NULL);
        return GL_FALSE;
     }
  
-@@ -763,28 +708,31 @@
++   if (!buffer || width < 1 || height < 1) {
++      osmesa->api->make_current(osmesa->api, osmesa->stctx, NULL, NULL);
++      /* make sure the active buffer is not referenced anymore */
++      if (osmesa->current_buffer) {
++         osmesa_destroy_buffer(osmesa->current_buffer);
++         osmesa->current_buffer = NULL;
++      }
++      osmesa->type = 0;
++      return GL_TRUE;
++   }
++
+    if (osmesa->format == OSMESA_RGB_565 && type != GL_UNSIGNED_SHORT_5_6_5) {
+       return GL_FALSE;
+    }
+@@ -763,28 +726,43 @@
        return GL_FALSE;
     }
  
@@ -226,6 +260,16 @@
 +      osbuffer->width = width;
 +      osbuffer->height = height;
 +      osmesa->current_buffer = osbuffer;
++      {
++         /* st_framebuffer_reuse_or_create() uses pointer comparison to check
++            if it can reuse the framebuffer!
++            Since we are realocating the buffer (osmesa_create_buffer() calls
++            osmesa_create_st_framebuffer()) just after freing it, we may be
++            unlucky. We thus prefer invalidating the framebuffer manually. */
++         struct st_context *st = (struct st_context *)osmesa->stctx;
++         st->ctx->WinSysDrawBuffer = NULL;
++         st->ctx->WinSysReadBuffer = NULL;
++      }
     }
  
 -   osbuffer->width = width;
@@ -240,10 +284,12 @@
  
 -   stapi->make_current(stapi, osmesa->stctx, osbuffer->stfb, osbuffer->stfb);
 +   osmesa->api->make_current(osmesa->api, osmesa->stctx, osbuffer->stfb, osbuffer->stfb);
++   /* front-left buffer should have a valid texture at this point */
++   assert(osbuffer->textures[0]);
  
     if (!osmesa->ever_used) {
        /* one-time init, just postprocessing for now */
-@@ -817,9 +765,8 @@
+@@ -817,9 +795,8 @@
  GLAPI OSMesaContext GLAPIENTRY
  OSMesaGetCurrentContext(void)
  {
@@ -255,7 +301,7 @@
  }
  
  
-@@ -873,7 +820,7 @@
+@@ -873,7 +850,7 @@
        /* fall-through */
     case OSMESA_MAX_HEIGHT:
        {
@@ -264,3 +310,15 @@
           int maxLevels = screen->get_param(screen,
                                             PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
           *value = 1 << (maxLevels - 1);
+@@ -905,6 +882,11 @@
+    struct pipe_transfer *transfer = NULL;
+    struct pipe_box box;
+ 
++   assert(res);
++   if (!res) {
++      return GL_FALSE;
++   }
++
+    /*
+     * Note: we can't really implement this function with gallium as
+     * we did for swrast.  We can't just map the resource and leave it
