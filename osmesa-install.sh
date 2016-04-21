@@ -119,6 +119,7 @@ echo "* applying patches..."
 PATCHES="\
 glapi-getproc-mangled.patch \
 mesa-glversion-override.patch \
+gallium-osmesa-threadsafe.patch \
 "
 
 if [ `uname` = Darwin ]; then
