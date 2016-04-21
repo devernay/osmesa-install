@@ -1,5 +1,5 @@
---- mesa-11.2.0/src/gallium/state_trackers/osmesa/osmesa.c.orig	2016-03-13 19:35:33.000000000 +0100
-+++ mesa-11.2.0/src/gallium/state_trackers/osmesa/osmesa.c	2016-04-21 17:41:01.000000000 +0200
+--- mesa-11.1.2/src/gallium/state_trackers/osmesa/osmesa.c.orig	2016-04-20 21:34:50.000000000 +0200
++++ mesa-11.1.2/src/gallium/state_trackers/osmesa/osmesa.c	2016-04-21 17:43:11.000000000 +0200
 @@ -52,6 +52,7 @@
  #include <stdio.h>
  #include "GL/osmesa.h"
@@ -98,7 +98,7 @@
 +   if (!res) {
 +      return FALSE;
 +   }
-+   
++
     if (osmesa->pp) {
        struct pipe_resource *zsbuf = NULL;
        unsigned i;
@@ -161,15 +161,15 @@
     FREE(osbuffer);
  }
  
-@@ -572,7 +509,6 @@
+@@ -548,7 +485,6 @@
     struct st_context_iface *st_shared;
     enum st_context_error st_error = 0;
     struct st_context_attribs attribs;
 -   struct st_api *stapi = get_st_api();
-    GLenum format = GL_RGBA;
-    int depthBits = 0, stencilBits = 0, accumBits = 0;
-    int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
-@@ -685,9 +621,21 @@
+ 
+    if (sharelist) {
+       st_shared = sharelist->stctx;
+@@ -597,9 +533,21 @@
                           osmesa->depth_stencil_format,
                           osmesa->accum_format);
  
@@ -192,7 +192,7 @@
        FREE(osmesa);
        return NULL;
     }
-@@ -712,7 +660,10 @@
+@@ -623,7 +571,10 @@
  OSMesaDestroyContext(OSMesaContext osmesa)
  {
     if (osmesa) {
@@ -203,7 +203,7 @@
        osmesa->stctx->destroy(osmesa->stctx);
        FREE(osmesa);
     }
-@@ -745,14 +696,26 @@
+@@ -656,14 +607,26 @@
  OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
                    GLsizei width, GLsizei height)
  {
@@ -232,14 +232,10 @@
     if (osmesa->format == OSMESA_RGB_565 && type != GL_UNSIGNED_SHORT_5_6_5) {
        return GL_FALSE;
     }
-@@ -763,28 +726,43 @@
-       return GL_FALSE;
-    }
- 
--   /* See if we already have a buffer that uses these pixel formats */
--   osbuffer = osmesa_find_buffer(color_format,
--                                 osmesa->depth_stencil_format,
--                                 osmesa->accum_format, width, height);
+@@ -678,24 +641,43 @@
+    osbuffer = osmesa_find_buffer(color_format,
+                                  osmesa->depth_stencil_format,
+                                  osmesa->accum_format, width, height);
 -   if (!osbuffer) {
 -      /* Existing buffer found, create new buffer */
 +   osbuffer = osmesa->current_buffer;
@@ -289,7 +285,7 @@
  
     if (!osmesa->ever_used) {
        /* one-time init, just postprocessing for now */
-@@ -817,9 +795,8 @@
+@@ -728,9 +710,8 @@
  GLAPI OSMesaContext GLAPIENTRY
  OSMesaGetCurrentContext(void)
  {
@@ -301,7 +297,7 @@
  }
  
  
-@@ -873,7 +850,7 @@
+@@ -784,7 +765,7 @@
        /* fall-through */
     case OSMESA_MAX_HEIGHT:
        {
@@ -310,7 +306,7 @@
           int maxLevels = screen->get_param(screen,
                                             PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
           *value = 1 << (maxLevels - 1);
-@@ -905,6 +882,11 @@
+@@ -816,6 +797,11 @@
     struct pipe_transfer *transfer = NULL;
     struct pipe_box box;
  
