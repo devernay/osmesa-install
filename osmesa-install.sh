@@ -64,6 +64,20 @@ else
     CXXFLAGS="-O3"
 fi
 
+CC=gcc
+CXX=g++
+
+if [ `uname` = Darwin ]; then
+  if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
+    # On Snow Leopard, build universal, and use clang 3.4
+    archs="-arch i386 -arch x86_64"
+    CFLAGS="$CFLAGS $archs"
+    CXXFLAGS="$CXXFLAGS $archs"
+    CC=clang-mp-3.4
+    CXX=clang++-mp-3.4
+  fi
+fi
+
 
 # On MacPorts, building Mesa requires the following packages:
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
@@ -74,12 +88,6 @@ if [ ! -d "$osmesaprefix" -o ! -w "$osmesaprefix" ]; then
    exit
 fi
 if [ "$osmesadriver" = 3 ]; then
-   if [ ! -x "$llvmprefix/bin/llvm-config" ]; then
-      echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
-      echo " download the LLVM sources from llvm.org, and configure it with:"
-      echo " cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1"
-      exit
-   fi
    if [ "$buildllvm" = 1 ]; then
       if [ ! -d "$llvmprefix" -o ! -w "$llvmprefix" ]; then
         echo "Error: $llvmprefix does not exist or is not user-writable, please create $llvmprefix and make it user-writable"
@@ -96,12 +104,25 @@ if [ "$osmesadriver" = 3 ]; then
           # On Snow Leopard, build universal
           cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
       fi
-      cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 "$cmake_archflags"
+      env CC="$CC" CXX="$CXX" cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 "$cmake_archflags"
       env REQUIRES_RTTI=1 make -j4
       make install
       cd ../..
    fi
-   llvmlibs=`${llvmprefix}/bin/llvm-config --ldflags --libs engine --system-libs`
+   if [ ! -x "$llvmprefix/bin/llvm-config" ]; then
+      echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
+      echo " download the LLVM sources from llvm.org, and configure it with:"
+      echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1"
+      exit
+   fi
+   llvmlibs=`${llvmprefix}/bin/llvm-config --ldflags --libs engine`
+   if /opt/llvm/bin/llvm-config --help 2>&1 | grep -q system-libs; then
+       llvmlibsadd=`${llvmprefix}/bin/llvm-config --system-libs`
+   else
+       # on old llvm, system libs are in the ldflags
+       llvmlibsadd=`${llvmprefix}/bin/llvm-config --ldflags`
+   fi
+   llvmlibs="$llvmlibs $llvmlibsadd"
 fi
 
 if [ "$clean" = 1 ]; then
@@ -144,14 +165,6 @@ done
 
 cd mesa-${mesaversion}
 
-if [ `uname` = Darwin ]; then
-  if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
-    # On Snow Leopard, build universal
-    archs="-arch i386 -arch x86_64"
-    CFLAGS="$CFLAGS $archs"
-    CXXFLAGS="$CXXFLAGS $archs"
-  fi
-fi
 
 echo "* fixing gl_mangle.h..."
 # edit include/GL/gl_mangle.h, add ../GLES/gl.h to the "files" variable and change GLAPI in the grep line to GL_API
@@ -232,7 +245,7 @@ if [ "$mangled" = 1 ]; then
     #rm src/mesa/main/remap_helper.h
 fi
 
-env PKG_CONFIG_PATH= ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 
 make -j4
 
