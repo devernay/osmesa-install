@@ -94,7 +94,14 @@ if [ "$osmesadriver" = 3 ]; then
         exit
       fi
       # LLVM must be compiled with RRTI, see https://bugs.freedesktop.org/show_bug.cgi?id=90032
-      curl $curlopts -O http://www.llvm.org/releases/3.4.2/llvm-3.4.2.src.tar.gz
+      if [ "$clean" = 1 ]; then
+	  rm -rf llvm-3.4.2.src
+      fi
+
+      if [ ! -f llvm-3.4.2.src.tar.gz ]; then
+	  # the llvm we server doesnt' allow continuing partial downloads
+	  curl $curlopts -O http://www.llvm.org/releases/3.4.2/llvm-3.4.2.src.tar.gz
+      fi
       tar zxf llvm-3.4.2.src.tar.gz
       cd llvm-3.4.2.src
       mkdir build
@@ -104,8 +111,8 @@ if [ "$osmesadriver" = 3 ]; then
           # On Snow Leopard, build universal
           cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
       fi
-      env CC="$CC" CXX="$CXX" cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 "$cmake_archflags"
-      env REQUIRES_RTTI=1 make -j4
+      env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 "$cmake_archflags"
+      env REQUIRES_RTTI=1 make -j4 REQUIRES_RTTI=1
       make install
       cd ../..
    fi
