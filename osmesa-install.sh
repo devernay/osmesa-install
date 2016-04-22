@@ -111,15 +111,16 @@ if [ "$osmesadriver" = 3 ]; then
           # On Snow Leopard, build universal
           cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
       fi
-      env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 "$cmake_archflags"
-      env REQUIRES_RTTI=1 make -j4 REQUIRES_RTTI=1
+      env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 "$cmake_archflags"
+      env REQUIRES_RTTI=1 make -j4
       make install
       cd ../..
    fi
    if [ ! -x "$llvmprefix/bin/llvm-config" ]; then
       echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo " download the LLVM sources from llvm.org, and configure it with:"
-      echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1"
+      echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1"
+      echo " env REQUIRES_RTTI=1 make -j4"
       exit
    fi
    llvmlibs=`${llvmprefix}/bin/llvm-config --ldflags --libs engine`
