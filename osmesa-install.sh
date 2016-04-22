@@ -281,7 +281,7 @@ if [ "$mangled" = 1 ]; then
      CPPFLAGS=-DUSE_MGL_NAMESPACE"
 fi
 
-env PKG_CONFIG_PATH==$osmesaprefix/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 make -j4
 make install
 if [ "$mangled" = 1 ]; then
