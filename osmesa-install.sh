@@ -48,7 +48,7 @@ elif [ "$osmesadriver" = 2 ]; then
 elif [ "$osmesadriver" = 3 ]; then
     echo "- llvmpipe Gallium renderer"
     if [ "$buildllvm" = 1 ]; then
-	echo "- also build and install LLVM 3.4.2"
+	echo "- also build and install LLVM $llvmversion in $llvmprefix"
     fi
 else
     echo "Error: osmesadriver must be 1, 2 or 3"
