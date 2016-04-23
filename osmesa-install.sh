@@ -22,6 +22,8 @@ mangled=1
 llvmprefix="/opt/llvm"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
+#llvmversion=3.4.2
+llvmversion=3.8.0
 
 # tell curl to continue downloads
 curlopts="-C -"
@@ -74,8 +76,8 @@ if [ `uname` = Darwin ]; then
     CFLAGS="$CFLAGS $archs"
     CXXFLAGS="$CXXFLAGS $archs"
     ## uncomment to use clang 3.4 (not necessary, as long as llvm is not configured to be pedantic)
-    #CC=clang-mp-3.4
-    #CXX=clang++-mp-3.4
+    CC=clang-mp-3.4
+    CXX=clang++-mp-3.4
   fi
 fi
 
@@ -96,26 +98,58 @@ if [ "$osmesadriver" = 3 ]; then
       fi
       # LLVM must be compiled with RRTI, see https://bugs.freedesktop.org/show_bug.cgi?id=90032
       if [ "$clean" = 1 ]; then
-	  rm -rf llvm-3.4.2.src
+	  rm -rf llvm-${llvmversion}.src
       fi
 
-      if [ ! -f llvm-3.4.2.src.tar.gz ]; then
+      if [ ! -f llvm-${llvmversion}.src.tar.gz ]; then
 	  # the llvm we server doesnt' allow continuing partial downloads
-	  curl $curlopts -O http://www.llvm.org/releases/3.4.2/llvm-3.4.2.src.tar.gz
+	  curl $curlopts -O http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.gz
       fi
-      tar zxf llvm-3.4.2.src.tar.gz
-      cd llvm-3.4.2.src
-      mkdir build
-      cd build
+      tar zxf llvm-${llvmversion}.src.tar.gz
+      cd llvm-${llvmversion}.src
       cmake_archflags=
-      if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+      if [ $llvmversion = 3.4.2 -a `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
           # On Snow Leopard, build universal
-          cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
+	  # and use configure (as macports does)
+	  # workaround a bug in Apple's shipped gcc driver-driver
+          echo "static int ___ignoreme;" > tools/llvm-shlib/ignore.c
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
+	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit \
+              --enable-optimized --disable-profiling --enable-pic \
+              --disable-debug-symbols --disable-debug-runtime \
+              --disable-assertions
+	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j4 install
+      else
+	  if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+              # On Snow Leopard, build universal
+	      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
+	      # Proxy for eliminating the dependency on native TLS
+              # http://trac.macports.org/ticket/46887
+              cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF"
+
+              # https://llvm.org/bugs/show_bug.cgi?id=25680
+              #configure.cxxflags-append -U__STRICT_ANSI__
+	  fi
+          mkdir build
+          cd build
+	  
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+	      -DLLVM_ENABLE_ASSERTIONS=OFF \
+	      -DLLVM_ENABLE_RTTI=ON \
+	      -DLLVM_REQUIRES_RTTI=ON \
+	      -DLLVM_INCLUDE_TESTS=OFF \
+	      -DBUILD_SHARED_LIBS=OFF \
+	      -DBUILD_STATIC_LIBS=ON \
+	      -DLLVM_INCLUDE_EXAMPLES=OFF \
+	      -DLLVM_ENABLE_FFI=ON \
+	      -DLLVM_BINDINGS_LIST=none \
+	      -DLLVM_ENABLE_PEDANTIC=OFF \
+	      -DCMAKE_BUILD_TYPE=Release "$cmake_archflags"
+          env REQUIRES_RTTI=1 make -j4
+          make install
+          cd ..
       fi
-      env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 "$cmake_archflags"
-      env REQUIRES_RTTI=1 make -j4
-      make install
-      cd ../..
+      cd ..
    fi
    if [ ! -x "$llvmprefix/bin/llvm-config" ]; then
       echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
@@ -314,9 +348,12 @@ if [ "$mangled" = 1 ]; then
 else
     LIBS32="-lOSMesa32 -lGLU"
 fi
+echo c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
 c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
 ./osdemo32 image.tga
 # result is in image.tga
+
+exit
 
 # Useful information:
 # Configuring osmesa 9.2.2:
@@ -333,6 +370,3 @@ c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osde
 #env MESA_GL_VERSION_OVERRIDE=3.2 MESA_GLSL_VERSION_OVERRIDE=150 ./osdemo32
 
 
-exit
-problems:
-mesa-11.1.2/src/mapi/glapi/gen/remap_helper.py:52 uses "gl" for the function prefix but OSMesaGetProcAddress uses "mgl"
