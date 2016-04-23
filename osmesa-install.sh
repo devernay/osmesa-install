@@ -69,12 +69,13 @@ CXX=g++
 
 if [ `uname` = Darwin ]; then
   if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
-    # On Snow Leopard, build universal, and use clang 3.4
+    # On Snow Leopard, build universal
     archs="-arch i386 -arch x86_64"
     CFLAGS="$CFLAGS $archs"
     CXXFLAGS="$CXXFLAGS $archs"
-    CC=clang-mp-3.4
-    CXX=clang++-mp-3.4
+    ## uncomment to use clang 3.4 (not necessary, as long as llvm is not configured to be pedantic)
+    #CC=clang-mp-3.4
+    #CXX=clang++-mp-3.4
   fi
 fi
 
@@ -111,7 +112,7 @@ if [ "$osmesadriver" = 3 ]; then
           # On Snow Leopard, build universal
           cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
       fi
-      env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 "$cmake_archflags"
+      env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/llvm -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 "$cmake_archflags"
       env REQUIRES_RTTI=1 make -j4
       make install
       cd ../..
@@ -119,7 +120,7 @@ if [ "$osmesadriver" = 3 ]; then
    if [ ! -x "$llvmprefix/bin/llvm-config" ]; then
       echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo " download the LLVM sources from llvm.org, and configure it with:"
-      echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1"
+      echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
       echo " env REQUIRES_RTTI=1 make -j4"
       exit
    fi
