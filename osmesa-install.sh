@@ -22,8 +22,10 @@ mangled=1
 llvmprefix="/opt/llvm"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
-#llvmversion=3.4.2
 llvmversion=3.8.0
+if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+    llvmversion=3.4.2
+fi
 
 # tell curl to continue downloads
 curlopts="-C -"
@@ -76,8 +78,8 @@ if [ `uname` = Darwin ]; then
     CFLAGS="$CFLAGS $archs"
     CXXFLAGS="$CXXFLAGS $archs"
     ## uncomment to use clang 3.4 (not necessary, as long as llvm is not configured to be pedantic)
-    CC=clang-mp-3.4
-    CXX=clang++-mp-3.4
+    #CC=clang-mp-3.4
+    #CXX=clang++-mp-3.4
   fi
 fi
 
@@ -101,23 +103,35 @@ if [ "$osmesadriver" = 3 ]; then
 	  rm -rf llvm-${llvmversion}.src
       fi
 
-      if [ ! -f llvm-${llvmversion}.src.tar.gz ]; then
-	  # the llvm we server doesnt' allow continuing partial downloads
-	  curl $curlopts -O http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.gz
+      archsuffix=xz
+      xzcat=xzcat
+      if [ $llvmversion = 3.4.2 ]; then
+	  archsuffix=gz
+	  xzcat="gzip -dc"
       fi
-      tar zxf llvm-${llvmversion}.src.tar.gz
+      if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
+	  # the llvm we server doesnt' allow continuing partial downloads
+	  curl $curlopts -O http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix
+      fi
+      $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
       cd llvm-${llvmversion}.src
       cmake_archflags=
       if [ $llvmversion = 3.4.2 -a `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+	  if [ "$debug" = 1 ]; then
+	      debugopts="--disable-optimized --enable-debug-symbols --enable-debug-runtime --enable-assertions"
+	  else
+	      debugopts="--enable-optimized --disable-debug-symbols --disable-debug-runtime --disable-assertions"
+	  fi
           # On Snow Leopard, build universal
 	  # and use configure (as macports does)
 	  # workaround a bug in Apple's shipped gcc driver-driver
-          echo "static int ___ignoreme;" > tools/llvm-shlib/ignore.c
+          if [ "$CXX" != clang-mp-3.4 ]; then
+	      echo "static int ___ignoreme;" > tools/llvm-shlib/ignore.c
+	  fi
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
-	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit \
-              --enable-optimized --disable-profiling --enable-pic \
-              --disable-debug-symbols --disable-debug-runtime \
-              --disable-assertions
+	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
+              --enable-targets=host --disable-profiling \
+	      --disable-backtraces
 	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j4 install
       else
 	  if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
@@ -132,19 +146,22 @@ if [ "$osmesadriver" = 3 ]; then
 	  fi
           mkdir build
           cd build
-	  
+	  if [ "$debug" = 1 ]; then
+	      debugopts="-DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=ON -DLLVM_INCLUDE_EXAMPLES=ON"
+	  else
+	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
+	  fi
+
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
-	      -DLLVM_ENABLE_ASSERTIONS=OFF \
+	      -DLLVM_TARGETS_TO_BUILD="X86" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
-	      -DLLVM_INCLUDE_TESTS=OFF \
 	      -DBUILD_SHARED_LIBS=OFF \
 	      -DBUILD_STATIC_LIBS=ON \
-	      -DLLVM_INCLUDE_EXAMPLES=OFF \
 	      -DLLVM_ENABLE_FFI=ON \
 	      -DLLVM_BINDINGS_LIST=none \
 	      -DLLVM_ENABLE_PEDANTIC=OFF \
-	      -DCMAKE_BUILD_TYPE=Release "$cmake_archflags"
+	      $debugopts $cmake_archflags
           env REQUIRES_RTTI=1 make -j4
           make install
           cd ..
@@ -158,7 +175,11 @@ if [ "$osmesadriver" = 3 ]; then
       echo " env REQUIRES_RTTI=1 make -j4"
       exit
    fi
-   llvmlibs=`${llvmprefix}/bin/llvm-config --ldflags --libs engine`
+   llvmcomponents="engine"
+   if [ "$debug" = 1 ]; then
+       llvmcomponents="$llvmcomponents mcdisassembler"
+   fi
+   llvmlibs=`${llvmprefix}/bin/llvm-config --ldflags --libs $llvmcomponents`
    if /opt/llvm/bin/llvm-config --help 2>&1 | grep -q system-libs; then
        llvmlibsadd=`${llvmprefix}/bin/llvm-config --system-libs`
    else
@@ -369,4 +390,12 @@ exit
 
 #env MESA_GL_VERSION_OVERRIDE=3.2 MESA_GLSL_VERSION_OVERRIDE=150 ./osdemo32
 
+lib//Support/TargetRegistry.cpp
+./lib/ExecutionEngine/TargetSelect.cpp
 
+* thread #1: tid = 0xe3ec4a, 0x0000000101637be7 osdemo32`llvm::TargetRegistry::lookupTarget(TT="x86_64-apple-darwin15.4.0", Error="") + 23 at TargetRegistry.cpp:70, queue = 'com.apple.main-thread', stop reason = breakpoint 1.2
+  * frame #0: 0x0000000101637be7 osdemo32`llvm::TargetRegistry::lookupTarget(TT="x86_64-apple-darwin15.4.0", Error="") + 23 at TargetRegistry.cpp:70
+    frame #1: 0x0000000100be3580 osdemo32`llvm::EngineBuilder::selectTarget(this=0x00007fff5fbfee20, TargetTriple=0x00007fff5fbfe560, MArch=(Data = "", Length = 0), MCPU=(Data = "", Length = 0), MAttrs=0x00007fff5fbfeec0) + 1120 at TargetSelect.cpp:74
+    frame #2: 0x0000000100be30fa osdemo32`llvm::EngineBuilder::selectTarget(this=0x00007fff5fbfee20) + 202 at TargetSelect.cpp:36
+    frame #3: 0x0000000100bdefe9 osdemo32`llvm::EngineBuilder::create(this=0x00007fff5fbfee20) + 25 at ExecutionEngine.h:665
+    frame #4: 0x00000001004edd7f osdemo32`::lp_build_create_jit_compiler_for_module(OutJIT=0x0000000103419488, OutCode=0x00000001034194b8, M=0x00000001034194d0, CMM=0x0000000103419610, OptLevel=2, useMCJIT=0, OutError=0x00007fff5fbfef90) + 4191 at lp_bld_misc.cpp:627
