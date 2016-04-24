@@ -131,7 +131,7 @@ if [ "$osmesadriver" = 3 ]; then
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
 	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
               --enable-targets=host --disable-profiling \
-	      --disable-backtraces
+	      --disable-backtraces $debugopts
 	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j4 install
       else
 	  if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
