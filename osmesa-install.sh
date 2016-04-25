@@ -21,7 +21,7 @@ mangled=1
 # the prefix to the LLVM installation
 llvmprefix="/opt/llvm"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
-buildllvm=0
+buildllvm=1
 llvmversion=3.8.0
 if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
@@ -153,7 +153,7 @@ if [ "$osmesadriver" = 3 ]; then
 	  fi
 
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
-	      -DLLVM_TARGETS_TO_BUILD="X86" \
+	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
 	      -DBUILD_SHARED_LIBS=OFF \
@@ -206,6 +206,7 @@ glapi-getproc-mangled.patch \
 mesa-glversion-override.patch \
 gallium-osmesa-threadsafe.patch \
 lp_scene-safe.patch \
+gallium-once-flag.patch \
 "
 
 if [ `uname` = Darwin ]; then
