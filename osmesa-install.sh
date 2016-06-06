@@ -21,7 +21,7 @@ mangled=1
 # the prefix to the LLVM installation
 llvmprefix="/opt/llvm"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
-buildllvm=1
+buildllvm=0
 llvmversion=3.8.0
 if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
@@ -207,6 +207,7 @@ mesa-glversion-override.patch \
 gallium-osmesa-threadsafe.patch \
 lp_scene-safe.patch \
 gallium-once-flag.patch \
+osmesa-gallium-driver.patch \
 "
 
 if [ `uname` = Darwin ]; then
