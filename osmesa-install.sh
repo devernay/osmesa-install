@@ -14,7 +14,8 @@ clean=1
 # set osmesadriver to:
 # - 1 to use "classic" osmesa resterizer instead of the Gallium driver
 # - 2 to use the "softpipe" Gallium driver
-# - 3 to use the "llvmpipe" Gallium driver
+# - 3 to use the "llvmpipe" Gallium driver (also includes the softpipe driver, which can
+#     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 osmesadriver=3
 # do we want a mangled mesa + GLU ?
 mangled=1
@@ -391,13 +392,3 @@ exit
 # https://cmake.org/pipermail/paraview/2015-December/035807.html
 
 #env MESA_GL_VERSION_OVERRIDE=3.2 MESA_GLSL_VERSION_OVERRIDE=150 ./osdemo32
-
-lib//Support/TargetRegistry.cpp
-./lib/ExecutionEngine/TargetSelect.cpp
-
-* thread #1: tid = 0xe3ec4a, 0x0000000101637be7 osdemo32`llvm::TargetRegistry::lookupTarget(TT="x86_64-apple-darwin15.4.0", Error="") + 23 at TargetRegistry.cpp:70, queue = 'com.apple.main-thread', stop reason = breakpoint 1.2
-  * frame #0: 0x0000000101637be7 osdemo32`llvm::TargetRegistry::lookupTarget(TT="x86_64-apple-darwin15.4.0", Error="") + 23 at TargetRegistry.cpp:70
-    frame #1: 0x0000000100be3580 osdemo32`llvm::EngineBuilder::selectTarget(this=0x00007fff5fbfee20, TargetTriple=0x00007fff5fbfe560, MArch=(Data = "", Length = 0), MCPU=(Data = "", Length = 0), MAttrs=0x00007fff5fbfeec0) + 1120 at TargetSelect.cpp:74
-    frame #2: 0x0000000100be30fa osdemo32`llvm::EngineBuilder::selectTarget(this=0x00007fff5fbfee20) + 202 at TargetSelect.cpp:36
-    frame #3: 0x0000000100bdefe9 osdemo32`llvm::EngineBuilder::create(this=0x00007fff5fbfee20) + 25 at ExecutionEngine.h:665
-    frame #4: 0x00000001004edd7f osdemo32`::lp_build_create_jit_compiler_for_module(OutJIT=0x0000000103419488, OutCode=0x00000001034194b8, M=0x00000001034194d0, CMM=0x0000000103419610, OptLevel=2, useMCJIT=0, OutError=0x00007fff5fbfef90) + 4191 at lp_bld_misc.cpp:627

@@ -112,3 +112,15 @@ diff -ur mesa-11.2.2/src/gallium/targets/osmesa/target.c mesa-11.2.2.new/src/gal
     if (!screen) {
        winsys->destroy(winsys);
        return NULL;
+--- mesa-11.2.2/src/mesa/drivers/osmesa/osmesa.c.orig	2016-06-10 11:06:59.000000000 +0200
++++ mesa-11.2.2/src/mesa/drivers/osmesa/osmesa.c	2016-06-10 11:08:57.000000000 +0200
+@@ -731,6 +731,9 @@
+          if (version_minor < 0)
+             return NULL;
+          break;
++      case OSMESA_GALLIUM_DRIVER:
++         /* ignore */
++         break;
+       case 0:
+          /* end of list */
+          break;
