@@ -23,7 +23,7 @@ mangled=1
 llvmprefix="/opt/llvm"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
-llvmversion=3.8.0
+llvmversion=3.8.1
 if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
 fi
