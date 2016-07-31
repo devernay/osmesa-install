@@ -2,7 +2,7 @@
 # prefix to the osmesa installation
 osmesaprefix="/opt/osmesa"
 # mesa version
-mesaversion=11.2.2
+mesaversion=12.0.1
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -209,15 +209,17 @@ gallium-osmesa-threadsafe.patch \
 lp_scene-safe.patch \
 gallium-once-flag.patch \
 osmesa-gallium-driver.patch \
+install-GL-headers.patch \
 "
 
 if [ `uname` = Darwin ]; then
-    # patches for Mesa 11.1.2 from
-    # https://trac.macports.org/export/146733/trunk/dports/x11/mesa/files/5001-glext.h-Add-missing-include-of-stddef.h-for-ptrdiff_.patch
+    # patches for Mesa 11.2.1 from
+    # https://trac.macports.org/browser/trunk/dports/x11/mesa
     PATCHES="$PATCHES \
-    5001-glext.h-Add-missing-include-of-stddef.h-for-ptrdiff_.patch \
+    0001-mesa-Deal-with-size-differences-between-GLuint-and-G.patch \
+    0002-applegl-Provide-requirements-of-_SET_DrawBuffers.patch \
+    0003-glext.h-Add-missing-include-of-stddef.h-for-ptrdiff_.patch \
     5002-darwin-Suppress-type-conversion-warnings-for-GLhandl.patch \
-    5003-applegl-Provide-requirements-of-_SET_DrawBuffers.patch \
     static-strndup.patch \
     no-missing-prototypes-error.patch \
     "
@@ -312,7 +314,7 @@ if [ "$mangled" = 1 ]; then
     #rm src/mesa/main/remap_helper.h
 fi
 
-env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 
 make -j4
 
