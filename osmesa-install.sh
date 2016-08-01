@@ -176,7 +176,7 @@ if [ "$osmesadriver" = 3 ]; then
       echo " env REQUIRES_RTTI=1 make -j4"
       exit
    fi
-   llvmcomponents="engine"
+   llvmcomponents="engine mcjit"
    if [ "$debug" = 1 ]; then
        llvmcomponents="$llvmcomponents mcdisassembler"
    fi
