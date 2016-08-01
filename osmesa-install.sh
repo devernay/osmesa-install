@@ -210,6 +210,7 @@ lp_scene-safe.patch \
 gallium-once-flag.patch \
 osmesa-gallium-driver.patch \
 install-GL-headers.patch \
+redefinition-of-typedef-nirshader.patch \
 "
 
 if [ `uname` = Darwin ]; then
