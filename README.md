@@ -18,5 +18,4 @@ sh ../osmesa-install.sh
 - there is a test program on the `osdemo` directory, with a few checks
 
 Note that the script fixes the following Mesa bugs related to mangles OSMesa:
-- [OSMesaGetProcAdress always fails on mangled OSMesa](https://bugs.freedesktop.org/show_bug.cgi?id=94994)
 - [GL/gl_mangle.h misses symbols from GLES/gl.h](https://bugs.freedesktop.org/show_bug.cgi?id=91724)
