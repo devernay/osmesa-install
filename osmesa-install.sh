@@ -295,6 +295,7 @@ elif [ "$osmesadriver" = 2 ]; then
 else
     # gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
     confopts="${confopts} \
+     --disable-osmesa \
      --enable-gallium-osmesa \
      --enable-gallium-llvm=yes \
      --with-llvm-prefix=$llvmprefix \
