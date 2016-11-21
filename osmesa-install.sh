@@ -2,7 +2,7 @@
 # prefix to the osmesa installation
 osmesaprefix="/opt/osmesa"
 # mesa version
-mesaversion=12.0.1
+mesaversion=13.0.1
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -23,7 +23,7 @@ mangled=1
 llvmprefix="/opt/llvm"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
-llvmversion=3.8.1
+llvmversion=3.9.0
 if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
 fi
@@ -237,8 +237,14 @@ cd mesa-${mesaversion}
 
 
 echo "* fixing gl_mangle.h..."
-# edit include/GL/gl_mangle.h, add ../GLES/gl.h to the "files" variable and change GLAPI in the grep line to GL_API
-(cd include/GL; sed -e 's@gl.h glext.h@gl.h glext.h ../GLES/gl.h@' -e 's@\^GLAPI@^GL_\\?API@' -i.orig gl_mangle.h)
+# edit include/GL/gl_mangle.h, add ../GLES*/gl[0-9]*.h to the "files" variable and change GLAPI in the grep line to GL_API
+gles=
+for h in GLES/gl.h GLES2/gl2.h GLES3/gl3.h GLES3/gl31.h GLES3/gl32.h; do
+    if [ -f include/$h ]; then
+	gles="$gles ../$h"
+    fi
+done
+(cd include/GL; sed -e 's@gl.h glext.h@gl.h glext.h '"$gles"'@' -e 's@\^GLAPI@^GL_\\?API@' -i.orig gl_mangle.h)
 (cd include/GL; sh ./gl_mangle.h > gl_mangle.h.new && mv gl_mangle.h.new gl_mangle.h)
 
 echo "* fixing src/mapi/glapi/glapi_getproc.c..."
