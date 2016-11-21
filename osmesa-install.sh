@@ -223,6 +223,7 @@ if [ `uname` = Darwin ]; then
     5002-darwin-Suppress-type-conversion-warnings-for-GLhandl.patch \
     static-strndup.patch \
     no-missing-prototypes-error.patch \
+    o-cloexec.patch \
     "
 fi
 

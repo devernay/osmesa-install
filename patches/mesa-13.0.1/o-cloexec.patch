@@ -1,0 +1,29 @@
+--- mesa-13.0.1/src/compiler/glsl/cache.c.orig	2016-11-21 16:37:20.000000000 +0100
++++ mesa-13.0.1/src/compiler/glsl/cache.c	2016-11-21 16:39:04.000000000 +0100
+@@ -222,12 +222,26 @@
+    if (path == NULL)
+       goto fail;
+ 
++#ifdef O_CLOEXEC
+    fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (fd == -1)
+       goto fail;
+ 
+    if (fstat(fd, &sb) == -1)
+       goto fail;
++#else
++   fd = open(path, O_RDWR | O_CREAT, 0644);
++   if (fd == -1)
++      goto fail;
++
++   if (fstat(fd, &sb) == -1)
++      goto fail;
++
++   //Snow Leopard doesn't have O_CLOEXEC
++   int cloexec = fcntl(fd, F_SETFD, FD_CLOEXEC);
++   if (cloexec == -1)
++      goto fail;
++#endif
+ 
+    /* Force the index file to be the expected size. */
+    size = sizeof(*cache->size) + CACHE_INDEX_MAX_KEYS * CACHE_KEY_SIZE;
