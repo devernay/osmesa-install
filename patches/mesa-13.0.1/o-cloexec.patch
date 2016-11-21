@@ -1,5 +1,5 @@
 --- mesa-13.0.1/src/compiler/glsl/cache.c.orig	2016-11-21 16:37:20.000000000 +0100
-+++ mesa-13.0.1/src/compiler/glsl/cache.c	2016-11-21 17:06:27.000000000 +0100
++++ mesa-13.0.1/src/compiler/glsl/cache.c	2016-11-21 17:50:06.000000000 +0100
 @@ -222,7 +222,22 @@
     if (path == NULL)
        goto fail;
@@ -103,7 +103,7 @@
 +      fd = open(filename, O_RDONLY);
 +      if (fd != -1) {
 +         /* Snow Leopard doesn't have O_CLOEXEC */
-+         int cloexec = fcntl(fd_final, F_SETFD, FD_CLOEXEC);
++         int cloexec = fcntl(fd, F_SETFD, FD_CLOEXEC);
 +         if (cloexec == -1) {
 +            close(fd);
 +            fd = -1;
