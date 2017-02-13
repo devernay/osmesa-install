@@ -2,7 +2,7 @@
 # prefix to the osmesa installation
 osmesaprefix="/opt/osmesa"
 # mesa version
-mesaversion=13.0.3
+mesaversion=13.0.4
 # mesa-demos version
 demoversion=8.3.0
 # glu version
