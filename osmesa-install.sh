@@ -2,7 +2,7 @@
 # prefix to the osmesa installation
 osmesaprefix="/opt/osmesa"
 # mesa version
-mesaversion=13.0.5
+mesaversion=17.0.1
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -195,7 +195,11 @@ if [ "$clean" = 1 ]; then
 fi
 
 echo "* downloading Mesa ${mesaversion}..."
-curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz
+if [ "$mesaversion" = 17.0.1 ]; then
+    curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz
+else
+    curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz
+fi
 tar zxf mesa-${mesaversion}.tar.gz
 
 #download and apply patches from MacPorts
