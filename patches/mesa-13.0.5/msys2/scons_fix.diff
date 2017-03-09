@@ -11,3 +11,15 @@
  
  env = env.Clone()
  
+--- src/compiler/SConscript.nir.orig	2017-02-20 12:46:54.000000000 +0100
++++ src/compiler/SConscript.nir	2017-03-09 15:52:19.000000000 +0100
+@@ -2,7 +2,8 @@
+ 
+ Import('*')
+ 
+-from sys import executable as python_cmd
++#from sys import executable as python_cmd
++python_cmd='python2.exe'
+ 
+ env = env.Clone()
+ 
