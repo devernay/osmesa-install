@@ -162,7 +162,6 @@ if [ "$osmesadriver" = 3 ]; then
 	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j4 install
       else
       cmakegenerator="Unix Makefiles"
-      cmakelinkerflags=""
 	  if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
               # On Snow Leopard, build universal
 	      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
@@ -175,7 +174,6 @@ if [ "$osmesadriver" = 3 ]; then
 	  fi
       if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
           cmakegenerator="MSYS Makefiles"
-          cmakelinkerflags="-luuid -lole32"
           cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON"
           patch -p0 < "../patches/llvm/msys2/add_pi.diff" || exit 1
       fi
@@ -190,7 +188,7 @@ if [ "$osmesadriver" = 3 ]; then
 
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -G "$cmakegenerator" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
-          $commonopts $debugopts $cmake_archflags -DCMAKE_LINKER_FLAGS="$cmakelinkerflags"
+          $commonopts $debugopts $cmake_archflags
           env REQUIRES_RTTI=1 make -j${MKJOBS}
           make install
           cd ..
@@ -309,7 +307,7 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     else
         MESAARCH="x86"
     fi
-    LLVM_CONFIG=$llvmprefix/bin/llvm-config.exe LLVM=$llvmprefix CFLAGS="-DUSE_MGL_NAMESPACE" CXXFLAGS="-std=c++11" LDFLAGS="-static -s" scons build=release platform=windows toolchain=mingw machine=$MESAARCH texture_float=yes llvm=yes verbose=yes osmesa || exit 1
+    LLVM_CONFIG=$llvmprefix/bin/llvm-config.exe LLVM=$llvmprefix CFLAGS="-DUSE_MGL_NAMESPACE" CXXFLAGS="-std=c++11" LDFLAGS="-static -s -luuid -lole32" scons build=release platform=windows toolchain=mingw machine=$MESAARCH texture_float=yes llvm=yes verbose=yes osmesa || exit 1
     cp build/windows-$MESAARCH/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/ || exit 1
     cp -a include/GL $osmesaprefix/include/ || exit 1
 else
