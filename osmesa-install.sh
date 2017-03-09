@@ -307,7 +307,7 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     else
         MESAARCH="x86"
     fi
-    LLVM_CONFIG=$llvmprefix/bin/llvm-config.exe LLVM=$llvmprefix CFLAGS="-DUSE_MGL_NAMESPACE" CXXFLAGS="-std=c++11" LDFLAGS="-static -s -luuid -lole32" scons build=release platform=windows toolchain=mingw machine=$MESAARCH texture_float=yes llvm=yes verbose=yes osmesa || exit 1
+    LLVM_CONFIG=$llvmprefix/bin/llvm-config.exe LLVM=$llvmprefix CFLAGS="-DUSE_MGL_NAMESPACE" CXXFLAGS="-std=c++11" LDFLAGS="-static -s" scons build=release platform=windows toolchain=mingw machine=$MESAARCH texture_float=yes llvm=yes verbose=yes osmesa || exit 1
     cp build/windows-$MESAARCH/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/ || exit 1
     cp -a include/GL $osmesaprefix/include/ || exit 1
 else
