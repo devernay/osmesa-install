@@ -36,6 +36,12 @@ mangled=1
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
 
+if [ "$NO_DEMO" = "1" ]; then
+    builddemo=0
+else
+    builddemo=1
+fi
+
 # the prefix to the LLVM installation
 if [ -z "$LLVM_PREFIX" ]; then
     llvmprefix="/opt/llvm"
