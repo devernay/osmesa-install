@@ -272,6 +272,7 @@ confopts="\
     --disable-dri \
     --disable-dri3 \
     --disable-glx \
+    --disable-glx-tls \
     --disable-egl \
     --disable-gbm \
     --disable-xvmc \
