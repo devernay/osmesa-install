@@ -269,7 +269,7 @@ for i in $PATCHES; do
 done
 
 if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-    MSYS_PATCHES="add_pi.diff mgl_export.diff scons_fix.diff"
+    MSYS_PATCHES="add_pi.diff mgl_export.diff scons_fix.diff scons-llvm-3-9-libs.diff"
     for i in $MSYS_PATCHES; do
     if [ -f "$srcdir"/patches/mesa-$mesaversion/msys2/$i ]; then
         echo "* applying patch $i"
