@@ -174,7 +174,7 @@ if [ "$osmesadriver" = 3 ]; then
 	  fi
       if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
           cmakegenerator="MSYS Makefiles"
-          patch -p0 < "$srcdir/patches/llvm/msys2/add_pi.diff" || exit 1
+          patch -p0 < "../patches/llvm/msys2/add_pi.diff" || exit 1
       fi
       mkdir build
       cd build
