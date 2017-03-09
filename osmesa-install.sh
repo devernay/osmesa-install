@@ -167,13 +167,14 @@ if [ "$osmesadriver" = 3 ]; then
 	      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
 	      # Proxy for eliminating the dependency on native TLS
               # http://trac.macports.org/ticket/46887
-              cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF"
+              cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF  -DLLVM_ENABLE_FFI=ON -DLLVM_ENABLE_PEDANTIC=OFF"
 
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
 	  fi
       if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
           cmakegenerator="MSYS Makefiles"
+          cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON"
           patch -p0 < "../patches/llvm/msys2/add_pi.diff" || exit 1
       fi
       mkdir build
@@ -183,17 +184,11 @@ if [ "$osmesadriver" = 3 ]; then
 	  else
 	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
 	  fi
+      commonopts="-DCMAKE_INSTALL_PREFIX=${llvmprefix} -DLLVM_ENABLE_RTTI=ON -DLLVM_REQUIRES_RTTI=ON  -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DLLVM_BINDINGS_LIST=none"
 
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -G "$cmakegenerator" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
-	      -DLLVM_ENABLE_RTTI=ON \
-	      -DLLVM_REQUIRES_RTTI=ON \
-	      -DBUILD_SHARED_LIBS=OFF \
-	      -DBUILD_STATIC_LIBS=ON \
-	      -DLLVM_ENABLE_FFI=ON \
-	      -DLLVM_BINDINGS_LIST=none \
-	      -DLLVM_ENABLE_PEDANTIC=OFF \
-	      $debugopts $cmake_archflags
+          $commonopts $debugopts $cmake_archflags
           env REQUIRES_RTTI=1 make -j${MKJOBS}
           make install
           cd ..
