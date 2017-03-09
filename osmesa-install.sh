@@ -184,7 +184,7 @@ if [ "$osmesadriver" = 3 ]; then
 	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
 	  fi
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -G $cmakegenerator -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -G "$cmakegenerator" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
