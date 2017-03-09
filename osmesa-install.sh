@@ -200,8 +200,16 @@ if [ "$osmesadriver" = 3 ]; then
       fi
       cd ..
    fi
-   if [ ! -x "$llvmprefix/bin/llvm-config*" ]; then
-      echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
+
+
+   llvmconfigbinary=
+   if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+    llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
+   else
+    llvmconfigbinary="$llvmprefix/bin/llvm-config"
+   fi
+   if [ ! -x "$llvmconfigbinary" ]; then
+      echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo " download the LLVM sources from llvm.org, and configure it with:"
       echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
       echo " env REQUIRES_RTTI=1 make -j4"
