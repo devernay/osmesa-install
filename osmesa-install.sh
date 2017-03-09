@@ -269,9 +269,13 @@ for i in $PATCHES; do
 done
 
 if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-    patch -p0 -i "$srcdir"/patches/mesa-$mesaversion/msys2/add_pi.diff || exit 1
-    patch -p0 -i "$srcdir"/patches/mesa-$mesaversion/msys2/mgl_export.diff || exit 1
-    patch -p0 -i "$srcdir"/patches/mesa-$mesaversion/msys2/scons_fix.diff || exit 1
+    MSYS_PATCHES="add_pi.diff mgl_export.diff scons_fix.diff"
+    for i in $MSYS_PATCHES; do
+    if [ -f "$srcdir"/patches/mesa-$mesaversion/msys2/$i ]; then
+        echo "* applying patch $i"
+        patch -p0 -d mesa-${mesaversion} < "$srcdir"/patches/mesa-$mesaversion/msys2/$i || exit 1
+    fi
+    done
     mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
     cat "$srcdir"/patches/mesa-$mesaversion/msys2/osmesa.pc | sed "s#__REPLACE__#${INSTALL_PATH}#" > $osmesaprefix/lib/pkgconfig/osmesa.pc || exit 1
     cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc || exit 1
