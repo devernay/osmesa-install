@@ -1,0 +1,13 @@
+--- src/mesa/SConscript.orig	2017-03-09 12:49:41.000000000 +0100
++++ src/mesa/SConscript	2017-03-09 12:50:10.000000000 +0100
+@@ -3,7 +3,9 @@
+ 
+ 
+ Import('*')
+-from sys import executable as python_cmd
++
++#from sys import executable as python_cmd
++python_cmd='python2.exe'
+ 
+ env = env.Clone()
+ 

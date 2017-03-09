@@ -1,6 +1,19 @@
 #!/bin/sh -e
 # prefix to the osmesa installation
-osmesaprefix="/opt/osmesa"
+if [ -z "$OSMESA_PREFIX" ]; then
+    osmesaprefix="/opt/osmesa"
+else
+    osmesaprefix="$OSMESA_PREFIX"
+    if [ ! -d "$OSMESA_PREFIX" ]; then
+        mkdir -p "$OSMESA_PREFIX"
+    fi
+fi
+
+# set make number of threads to 4 by default
+if [ -z "$MKJOBS" ]; then
+    MKJOBS=4
+fi
+
 # mesa version
 mesaversion=13.0.5
 # mesa-demos version
@@ -19,10 +32,22 @@ clean=1
 osmesadriver=3
 # do we want a mangled mesa + GLU ?
 mangled=1
-# the prefix to the LLVM installation
-llvmprefix="/opt/llvm"
+
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm=0
+
+# the prefix to the LLVM installation
+if [ -z "$LLVM_PREFIX" ]; then
+    llvmprefix="/opt/llvm"
+else
+    llvmprefix="$LLVM_PREFIX"
+    if [ ! -d "$llvmprefix" ]; then
+        mkdir -p "$llvmprefix"
+        buildllvm=1
+    fi
+fi
+
+
 llvmversion=3.9.1
 if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
@@ -72,7 +97,8 @@ fi
 CC=gcc
 CXX=g++
 
-if [ `uname` = Darwin ]; then
+osname=`uname`
+if [ "$osname" = "Darwin" ]; then
   if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
     # On Snow Leopard, build universal
     archs="-arch i386 -arch x86_64"
@@ -135,6 +161,7 @@ if [ "$osmesadriver" = 3 ]; then
 	      --disable-backtraces $debugopts
 	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j4 install
       else
+      cmakegenerator="Unix Makefiles"
 	  if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
               # On Snow Leopard, build universal
 	      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
@@ -145,15 +172,19 @@ if [ "$osmesadriver" = 3 ]; then
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
 	  fi
-          mkdir build
-          cd build
+      if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+          cmakegenerator="MSYS Makefiles"
+          patch -p0 < "$../patches/llvm/msys2/add_pi.diff" || exit 1
+      fi
+      mkdir build
+      cd build
 	  if [ "$debug" = 1 ]; then
 	      debugopts="-DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=ON -DLLVM_INCLUDE_EXAMPLES=ON"
 	  else
 	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
 	  fi
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -G $cmakegenerator -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
@@ -163,13 +194,13 @@ if [ "$osmesadriver" = 3 ]; then
 	      -DLLVM_BINDINGS_LIST=none \
 	      -DLLVM_ENABLE_PEDANTIC=OFF \
 	      $debugopts $cmake_archflags
-          env REQUIRES_RTTI=1 make -j4
+          env REQUIRES_RTTI=1 make -j${MKJOBS}
           make install
           cd ..
       fi
       cd ..
    fi
-   if [ ! -x "$llvmprefix/bin/llvm-config" ]; then
+   if [ ! -x "$llvmprefix/bin/llvm-config*" ]; then
       echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo " download the LLVM sources from llvm.org, and configure it with:"
       echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
@@ -213,7 +244,7 @@ install-GL-headers.patch \
 redefinition-of-typedef-nirshader.patch \
 "
 
-if [ `uname` = Darwin ]; then
+if [ "$osname" = "Darwin" ]; then
     # patches for Mesa 11.2.1 from
     # https://trac.macports.org/browser/trunk/dports/x11/mesa
     PATCHES="$PATCHES \
@@ -234,6 +265,15 @@ for i in $PATCHES; do
     fi
 done
 
+if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+    patch -p0 -i "$srcdir"/patches/mesa-$mesaversion/msys2/add_pi.diff || exit 1
+    patch -p0 -i "$srcdir"/patches/mesa-$mesaversion/msys2/mgl_export.diff || exit 1
+    patch -p0 -i "$srcdir"/patches/mesa-$mesaversion/msys2/scons_fix.diff || exit 1
+    mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
+    cat "$srcdir"/patches/mesa-$mesaversion/msys2/osmesa.pc | sed "s#__REPLACE__#${INSTALL_PATH}#" > $osmesaprefix/lib/pkgconfig/osmesa.pc || exit 1
+    cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc || exit 1
+fi
+
 cd mesa-${mesaversion}
 
 
@@ -253,6 +293,17 @@ echo "* fixing src/mapi/glapi/glapi_getproc.c..."
 sed -i.bak -e 's/MANGLE/MANGLE_disabled/' src/mapi/glapi/glapi_getproc.c
 
 echo "* building Mesa..."
+
+if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+    if [ "$osname" = "MINGW64_NT-6.1" ]; then
+        MESAARCH="x86_64"
+    else
+        MESAARCH="x86"
+    fi
+    LLVM_CONFIG=$llvmprefix/bin/llvm-config.exe LLVM=$llvmprefix CFLAGS="-DUSE_MGL_NAMESPACE" CXXFLAGS="-std=c++11" LDFLAGS="-static -s" scons build=release platform=windows toolchain=mingw machine=$MESAARCH texture_float=yes llvm=yes verbose=yes osmesa || exit 1
+    cp build/windows-$MESAARCH/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/ || exit 1
+    cp -a include/GL $osmesaprefix/include/ || exit 1
+else
 
 test -f Mafefile && make -j4 distclean # if in an existing build
  
@@ -325,7 +376,7 @@ fi
 
 env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 
-make -j4
+make -j${MKJOBS}
 
 echo "* installing Mesa..."
 
@@ -341,6 +392,7 @@ if [ `uname` = Darwin ]; then
     for f in $osmesaprefix/lib/lib*.a; do
 	ranlib -c $f
     done
+fi
 fi
 
 cd ..
@@ -360,7 +412,7 @@ if [ "$mangled" = 1 ]; then
 fi
 
 env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
-make -j4
+make -j${MKJOBS}
 make install
 if [ "$mangled" = 1 ]; then
     mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a" 
