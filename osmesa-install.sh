@@ -153,7 +153,8 @@ if [ "$osmesadriver" = 3 ]; then
 	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
 	  fi
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+	  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
@@ -162,6 +163,7 @@ if [ "$osmesadriver" = 3 ]; then
 	      -DLLVM_ENABLE_FFI=ON \
 	      -DLLVM_BINDINGS_LIST=none \
 	      -DLLVM_ENABLE_PEDANTIC=OFF \
+	      -DLLVM_INCLUDE_TESTS=OFF \
 	      $debugopts $cmake_archflags
           env REQUIRES_RTTI=1 make -j4
           make install
@@ -206,16 +208,34 @@ tar zxf mesa-${mesaversion}.tar.gz
 
 echo "* applying patches..."
 
+#add_pi.patch still valid with Mesa 17.0.1
+#gallium-once-flag.patch only for Mesa < 12.0.1
+#gallium-osmesa-threadsafe.patch still valid with Mesa 17.0.1
+#glapi-getproc-mangled.patch only for Mesa < 11.2.2
+#install-GL-headers.patch still valid with Mesa 17.0.1
+#lp_scene-safe.patch still valid with Mesa 17.0.1
+#mesa-glversion-override.patch
+#mgl_export.patch ONLY for MANGLED Mesa on MinGW still valid with Mesa 17.0.1
+#osmesa-gallium-driver.patch still valid with Mesa 17.0.1
+#redefinition-of-typedef-nirshader.patch only for Mesa 12.0.x
+#scons25.patch only for Mesa < 12.0.1
+#scons_fix.patch ONLY for MinGW works only on Mesa < 13.0.1, should be reworked for later versions
+
 PATCHES="\
-glapi-getproc-mangled.patch \
-mesa-glversion-override.patch \
-gallium-osmesa-threadsafe.patch \
-lp_scene-safe.patch \
+add_pi.patch \
 gallium-once-flag.patch \
-osmesa-gallium-driver.patch \
+gallium-osmesa-threadsafe.patch \
+glapi-getproc-mangled.patch \
 install-GL-headers.patch \
+lp_scene-safe.patch \
+mesa-glversion-override.patch \
+osmesa-gallium-driver.patch \
 redefinition-of-typedef-nirshader.patch \
+scons25.patch \
 "
+
+#if mangled and mingw, add mgl_export
+#if mingw, add scons_fix.patch ??
 
 if [ `uname` = Darwin ]; then
     # patches for Mesa 11.2.1 from
@@ -331,6 +351,11 @@ fi
 env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 
 make -j4
+
+# SCons build on MSYS2:
+#LLVM_CONFIG="$llvmprefix/bin/llvm-config.exe" LLVM="$llvmprefix" CFLAGS="-DUSE_MGL_NAMESPACE" CXXFLAGS="-std=c++11" LDFLAGS="-static -s" scons build=release platform=windows toolchain=mingw machine=$MESAARCH texture_float=yes llvm=yes verbose=yes osmesa
+#cp build/windows-$MESAARCH/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
+#cp -a include/GL $osmesaprefix/include/
 
 echo "* installing Mesa..."
 
