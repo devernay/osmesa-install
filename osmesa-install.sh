@@ -103,6 +103,7 @@ if [ ! -d "$osmesaprefix" -o ! -w "$osmesaprefix" ]; then
    exit
 fi
 if [ "$osmesadriver" = 3 ]; then
+    # see also https://wiki.qt.io/Cross_compiling_Mesa_for_Windows
    if [ "$buildllvm" = 1 ]; then
       if [ ! -d "$llvmprefix" -o ! -w "$llvmprefix" ]; then
         echo "Error: $llvmprefix does not exist or is not user-writable, please create $llvmprefix and make it user-writable"
@@ -145,19 +146,21 @@ if [ "$osmesadriver" = 3 ]; then
 	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
       else
 	  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
+	  cmake_archflags=""
+	  llvm_patches=""
 	  if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
               # On Snow Leopard, build universal
 	      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
 	      # Proxy for eliminating the dependency on native TLS
               # http://trac.macports.org/ticket/46887
-              cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF"
+              #cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF" # flag was added to the common flags below, we don't need backtraces anyway
 
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
 	  fi
           if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
               cmakegen="MSYS Makefiles"
-              cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
+              #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
               llvm_patches="msys2_add_pi.patch"
 	  fi
 	  for i in $llvm_patches; do
@@ -180,10 +183,11 @@ if [ "$osmesadriver" = 3 ]; then
 	      -DLLVM_REQUIRES_RTTI=ON \
 	      -DBUILD_SHARED_LIBS=OFF \
 	      -DBUILD_STATIC_LIBS=ON \
-	      -DLLVM_ENABLE_FFI=ON \
+	      -DLLVM_ENABLE_FFI=OFF \
 	      -DLLVM_BINDINGS_LIST=none \
 	      -DLLVM_ENABLE_PEDANTIC=OFF \
 	      -DLLVM_INCLUDE_TESTS=OFF \
+	      -DLLVM_ENABLE_BACKTRACES=OFF \
 	      $debugopts $cmake_archflags
           env REQUIRES_RTTI=1 make -j${mkjobs}
           make install
