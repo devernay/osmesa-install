@@ -1,6 +1,12 @@
 #!/bin/sh -e
+
+# environment variables used by this script:
+# - OSMESA_PREFIX: where to install osmesa (must be writable)
+# - LLVM_PREFIX: where llvm is / should be installed
+# - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
+
 # prefix to the osmesa installation
-osmesaprefix="/opt/osmesa"
+osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
 mesaversion=17.0.1
 # mesa-demos version
@@ -11,6 +17,8 @@ gluversion=9.0.0
 debug=0
 # set clean to 1 to clean the source directories first (recommended)
 clean=1
+# number of parallel make jobs, set to 4 by default
+mkjobs="${MKJOBS:-4}"
 # set osmesadriver to:
 # - 1 to use "classic" osmesa resterizer instead of the Gallium driver
 # - 2 to use the "softpipe" Gallium driver
@@ -20,11 +28,12 @@ osmesadriver=3
 # do we want a mangled mesa + GLU ?
 mangled=1
 # the prefix to the LLVM installation
-llvmprefix="/opt/llvm"
+llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
-buildllvm=0
+buildllvm="${LLVM_BUILD:0}"
 llvmversion=3.9.1
-if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+osname=`uname`
+if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
 fi
 
@@ -72,7 +81,7 @@ fi
 CC=gcc
 CXX=g++
 
-if [ `uname` = Darwin ]; then
+if [ "$osname" = Darwin ]; then
   if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
     # On Snow Leopard, build universal
     archs="-arch i386 -arch x86_64"
@@ -117,7 +126,7 @@ if [ "$osmesadriver" = 3 ]; then
       $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
       cd llvm-${llvmversion}.src
       cmake_archflags=
-      if [ $llvmversion = 3.4.2 -a `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+      if [ $llvmversion = 3.4.2 -a "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
 	  if [ "$debug" = 1 ]; then
 	      debugopts="--disable-optimized --enable-debug-symbols --enable-debug-runtime --enable-assertions"
 	  else
@@ -133,9 +142,10 @@ if [ "$osmesadriver" = 3 ]; then
 	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
               --enable-targets=host --disable-profiling \
 	      --disable-backtraces $debugopts
-	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j4 install
+	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
       else
-	  if [ `uname` = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+	  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
+	  if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
               # On Snow Leopard, build universal
 	      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
 	      # Proxy for eliminating the dependency on native TLS
@@ -145,7 +155,18 @@ if [ "$osmesadriver" = 3 ]; then
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
 	  fi
-          mkdir build
+          if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+              cmakegen="MSYS Makefiles"
+              cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
+              llvm_patches="msys2_add_pi.patch"
+	  fi
+	  for i in $llvm_patches; do
+	      if [ -f "$srcdir"/patches/llvm-$llvmversion/$i ]; then
+		  echo "* applying patch $i"
+		  patch -p1 -d . < "$srcdir"/patches/llvm-$llvmversion/$i
+	      fi
+	  done
+	  mkdir build
           cd build
 	  if [ "$debug" = 1 ]; then
 	      debugopts="-DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=ON -DLLVM_INCLUDE_EXAMPLES=ON"
@@ -153,7 +174,6 @@ if [ "$osmesadriver" = 3 ]; then
 	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
 	  fi
 
-	  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
@@ -165,17 +185,24 @@ if [ "$osmesadriver" = 3 ]; then
 	      -DLLVM_ENABLE_PEDANTIC=OFF \
 	      -DLLVM_INCLUDE_TESTS=OFF \
 	      $debugopts $cmake_archflags
-          env REQUIRES_RTTI=1 make -j4
+          env REQUIRES_RTTI=1 make -j${mkjobs}
           make install
           cd ..
       fi
       cd ..
    fi
-   if [ ! -x "$llvmprefix/bin/llvm-config" ]; then
+   llvmconfigbinary=
+   if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+       llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
+   else
+       llvmconfigbinary="$llvmprefix/bin/llvm-config"
+   fi
+   if [ ! -x "$llvmconfigbinary" ]; then
+      echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo " download the LLVM sources from llvm.org, and configure it with:"
       echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
-      echo " env REQUIRES_RTTI=1 make -j4"
+      echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
       exit
    fi
    llvmcomponents="engine mcjit"
@@ -215,11 +242,10 @@ echo "* applying patches..."
 #install-GL-headers.patch still valid with Mesa 17.0.1
 #lp_scene-safe.patch still valid with Mesa 17.0.1
 #mesa-glversion-override.patch
-#mgl_export.patch ONLY for MANGLED Mesa on MinGW still valid with Mesa 17.0.1
 #osmesa-gallium-driver.patch still valid with Mesa 17.0.1
 #redefinition-of-typedef-nirshader.patch only for Mesa 12.0.x
 #scons25.patch only for Mesa < 12.0.1
-#scons_fix.patch ONLY for MinGW works only on Mesa < 13.0.1, should be reworked for later versions
+#scons-llvm-3-9-libs.patch only for Mesa < 17.0.0
 
 PATCHES="\
 add_pi.patch \
@@ -232,12 +258,19 @@ mesa-glversion-override.patch \
 osmesa-gallium-driver.patch \
 redefinition-of-typedef-nirshader.patch \
 scons25.patch \
+scons-llvm-3-9-libs.patch \
 "
 
 #if mangled and mingw, add mgl_export
 #if mingw, add scons_fix.patch ??
+if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+    PATCHES="$PATCHES msys2_scons_fix.patch"
+    if [ "$mangled" = 1 ]; then
+	PATCHES="$PATCHES mgl_export.patch"
+    fi
+fi
 
-if [ `uname` = Darwin ]; then
+if [ "$osname" = Darwin ]; then
     # patches for Mesa 11.2.1 from
     # https://trac.macports.org/browser/trunk/dports/x11/mesa
     PATCHES="$PATCHES \
@@ -278,11 +311,63 @@ sed -i.bak -e 's/MANGLE/MANGLE_disabled/' src/mapi/glapi/glapi_getproc.c
 
 echo "* building Mesa..."
 
-test -f Mafefile && make -j4 distclean # if in an existing build
- 
-autoreconf -fi
+if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
 
-confopts="\
+    ####################################################################
+    # Windows build uses scons
+
+    if [ "$osname" = "MINGW64_NT-6.1" ]; then
+        scons_machine="x86_64"
+    else
+        scons_machine="x86"
+    fi
+    scons_cflags="$CFLAGS"
+    scons_cxxflags="$CXXFLAGS -std=c++11"
+    scons_ldflags="-static -s"
+    if [ "$mangled" = 1 ]; then
+	scons_cflags="-DUSE_MGL_NAMESPACE"
+    fi
+    if [ "$debug" = 1 ]; then
+	scons_build="debug"
+    else
+	scons_build="release"
+    fi
+    if [ "$osmesadriver" = 3 ]; then
+	scons_llvm=yes
+    else
+	scons_llvm=no
+    fi
+    mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig    
+    env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" verbose=yes osmesa
+    cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
+    cp -a include/GL $osmesaprefix/include/ || exit 1
+    cat <<EOF F > $osmesaprefix/lib/pkgconfig/osmesa.pc
+prefix=${osmesaprefix}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: osmesa
+Description: Mesa Off-screen Rendering library
+Requires: 
+Version: $mesaversion
+Libs: -L\${libdir} -lOSMesa
+Cflags: -I\${includedir}
+EOF
+    cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc
+
+    # end of SCons build
+    ####################################################################
+else
+
+    ####################################################################
+    # Unix builds use configure
+    
+    test -f Mafefile && make -j${mkjobs} distclean # if in an existing build
+    
+    autoreconf -fi
+
+    confopts="\
     --disable-dependency-tracking \
     --enable-static \
     --disable-shared \
@@ -306,71 +391,70 @@ confopts="\
     --with-osmesa-bits=32 \
     --with-egl-platforms= \
     --prefix=$osmesaprefix \
-"
-
-if [ "$osmesadriver" = 1 ]; then
-    # pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
-    confopts="${confopts} \
-     --enable-osmesa \
-     --disable-gallium-osmesa \
-     --disable-gallium-llvm \
-     --with-gallium-drivers= \
     "
-elif [ "$osmesadriver" = 2 ]; then
-    # gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
-    confopts="${confopts} \
-     --disable-osmesa \
-     --enable-gallium-osmesa \
-     --disable-gallium-llvm \
-     --with-gallium-drivers=swrast \
+
+    if [ "$osmesadriver" = 1 ]; then
+	# pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
+	confopts="${confopts} \
+         --enable-osmesa \
+         --disable-gallium-osmesa \
+         --disable-gallium-llvm \
+         --with-gallium-drivers= \
     "
-else
-    # gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
-    confopts="${confopts} \
-     --disable-osmesa \
-     --enable-gallium-osmesa \
-     --enable-gallium-llvm=yes \
-     --with-llvm-prefix=$llvmprefix \
-     --disable-llvm-shared-libs \
-     --with-gallium-drivers=swrast \
+    elif [ "$osmesadriver" = 2 ]; then
+	# gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
+	confopts="${confopts} \
+         --disable-osmesa \
+         --enable-gallium-osmesa \
+         --disable-gallium-llvm \
+         --with-gallium-drivers=swrast \
     "
-fi
+    else
+	# gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
+	confopts="${confopts} \
+         --disable-osmesa \
+         --enable-gallium-osmesa \
+         --enable-gallium-llvm=yes \
+         --with-llvm-prefix=$llvmprefix \
+         --disable-llvm-shared-libs \
+         --with-gallium-drivers=swrast \
+    "
+    fi
 
-if [ "$debug" = 1 ]; then
-    confopts="${confopts} \
-     --enable-debug"
-fi
+    if [ "$debug" = 1 ]; then
+	confopts="${confopts} \
+         --enable-debug"
+    fi
 
-if [ "$mangled" = 1 ]; then
-    confopts="${confopts} \
-     --enable-mangling"
-    #sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
-    #rm src/mesa/main/remap_helper.h
-fi
+    if [ "$mangled" = 1 ]; then
+	confopts="${confopts} \
+         --enable-mangling"
+	#sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
+	#rm src/mesa/main/remap_helper.h
+    fi
 
-env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+    env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 
-make -j4
+    make -j${mkjobs}
 
-# SCons build on MSYS2:
-#LLVM_CONFIG="$llvmprefix/bin/llvm-config.exe" LLVM="$llvmprefix" CFLAGS="-DUSE_MGL_NAMESPACE" CXXFLAGS="-std=c++11" LDFLAGS="-static -s" scons build=release platform=windows toolchain=mingw machine=$MESAARCH texture_float=yes llvm=yes verbose=yes osmesa
-#cp build/windows-$MESAARCH/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
-#cp -a include/GL $osmesaprefix/include/
+    echo "* installing Mesa..."
 
-echo "* installing Mesa..."
+    make install
+    if [ "$osname" = Darwin ]; then
+	# fix the following error:
+	#Undefined symbols for architecture x86_64:
+	#  "_lp_dummy_tile", referenced from:
+	#      _lp_rast_create in libMangledOSMesa32.a(lp_rast.o)
+	#      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
+	#ld: symbol(s) not found for architecture x86_64
+	#clang: error: linker command failed with exit code 1 (use -v to see invocation)
+	for f in $osmesaprefix/lib/lib*.a; do
+	    ranlib -c $f
+	done
+    fi
 
-make install
-if [ `uname` = Darwin ]; then
-    # fix the following error:
-    #Undefined symbols for architecture x86_64:
-    #  "_lp_dummy_tile", referenced from:
-    #      _lp_rast_create in libMangledOSMesa32.a(lp_rast.o)
-    #      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
-    #ld: symbol(s) not found for architecture x86_64
-    #clang: error: linker command failed with exit code 1 (use -v to see invocation)
-    for f in $osmesaprefix/lib/lib*.a; do
-	ranlib -c $f
-    done
+    # End of configure-based build
+    ####################################################################    
 fi
 
 cd ..
@@ -390,7 +474,7 @@ if [ "$mangled" = 1 ]; then
 fi
 
 env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
-make -j4
+make -j${mkjobs}
 make install
 if [ "$mangled" = 1 ]; then
     mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a" 
