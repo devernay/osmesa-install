@@ -1,0 +1,33 @@
+--- mesa-13.0.5/scons/llvm.py.orig	2017-03-09 15:07:44.000000000 +0100
++++ mesa-13.0.5/scons/llvm.py	2017-03-09 15:09:18.000000000 +0100
+@@ -106,7 +106,18 @@
+         ])
+         env.Prepend(LIBPATH = [os.path.join(llvm_dir, 'lib')])
+         # LIBS should match the output of `llvm-config --libs engine mcjit bitwriter x86asmprinter`
+-        if llvm_version >= distutils.version.LooseVersion('3.7'):
++        if llvm_version >= distutils.version.LooseVersion('3.9'):
++                env.Prepend(LIBS = [
++                        'LLVMX86Disassembler', 'LLVMX86AsmParser', 'LLVMX86CodeGen',
++                        'LLVMSelectionDAG', 'LLVMAsmPrinter', 'LLVMDebugInfoCodeView',
++                        'LLVMCodeGen', 'LLVMScalarOpts', 'LLVMInstCombine',
++                        'LLVMInstrumentation', 'LLVMTransformUtils', 'LLVMBitWriter',
++                        'LLVMX86Desc', 'LLVMMCDisassembler', 'LLVMX86Info', 'LLVMX86AsmPrinter',
++                        'LLVMX86Utils', 'LLVMMCJIT', 'LLVMExecutionEngine', 'LLVMTarget', 'LLVMAnalysis',
++                        'LLVMProfileData', 'LLVMRuntimeDyld', 'LLVMObject', 'LLVMMCParser', 'LLVMBitReader',
++                        'LLVMMC', 'LLVMCore', 'LLVMSupport'
++                    ])
++        elif llvm_version >= distutils.version.LooseVersion('3.7'):
+             env.Prepend(LIBS = [
+                 'LLVMBitWriter', 'LLVMX86Disassembler', 'LLVMX86AsmParser',
+                 'LLVMX86CodeGen', 'LLVMSelectionDAG', 'LLVMAsmPrinter',
+--- scons/llvm.py.orig	2017-03-09 15:07:44.000000000 +0100
++++ scons/llvm.py	2017-03-09 16:53:27.000000000 +0100
+@@ -156,6 +156,8 @@
+                 'LLVMSupport', 'LLVMRuntimeDyld', 'LLVMObject'
+             ])
+         env.Append(LIBS = [
++            'ole32',
++            'uuid',
+             'imagehlp',
+             'psapi',
+             'shell32',
