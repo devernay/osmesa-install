@@ -1,5 +1,5 @@
---- src/gallium/targets/osmesa/osmesa.def.orig	2016-01-29 13:21:30.000000000 +0100
-+++ src/gallium/targets/osmesa/osmesa.def	2016-03-15 15:20:29.830612800 +0100
+--- mesa-13.0.5src/gallium/targets/osmesa/osmesa.def.orig	2016-01-29 13:21:30.000000000 +0100
++++ mesa-13.0.5src/gallium/targets/osmesa/osmesa.def	2016-03-15 15:20:29.830612800 +0100
 @@ -14,340 +14,340 @@
  	OSMesaGetProcAddress
  	OSMesaColorClamp
@@ -678,8 +678,8 @@
 +	mglVertex4sv
 +	mglVertexPointer
 +	mglViewport
---- src/gallium/targets/osmesa/osmesa.mingw.def.orig	2016-01-29 13:21:30.000000000 +0100
-+++ src/gallium/targets/osmesa/osmesa.mingw.def	2016-03-15 15:21:33.799362800 +0100
+--- mesa-13.0.5/src/gallium/targets/osmesa/osmesa.mingw.def.orig	2016-01-29 13:21:30.000000000 +0100
++++ mesa-13.0.5/src/gallium/targets/osmesa/osmesa.mingw.def	2016-03-15 15:21:33.799362800 +0100
 @@ -11,340 +11,340 @@
  	OSMesaGetProcAddress = OSMesaGetProcAddress@4
  	OSMesaColorClamp = OSMesaColorClamp@4
