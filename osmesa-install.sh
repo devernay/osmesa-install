@@ -300,12 +300,6 @@ for i in $PATCHES; do
     fi
 done
 
-if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-    mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
-    cat "$srcdir"/patches/mesa-$mesaversion/msys2-osmesa.pc | sed "s#__REPLACE__#${INSTALL_PATH}#" > $osmesaprefix/lib/pkgconfig/osmesa.pc || exit 1
-    cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc || exit 1
-fi
-
 cd mesa-${mesaversion}
 
 
@@ -356,7 +350,7 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" verbose=yes osmesa
     cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
     cp -a include/GL $osmesaprefix/include/ || exit 1
-    cat <<EOF F > $osmesaprefix/lib/pkgconfig/osmesa.pc
+    cat <<EOF > $osmesaprefix/lib/pkgconfig/osmesa.pc
 prefix=${osmesaprefix}
 exec_prefix=\${prefix}
 libdir=\${exec_prefix}/lib
