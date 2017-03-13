@@ -345,7 +345,7 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" verbose=yes osmesa
     cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
     cp -a include/GL $osmesaprefix/include/ || exit 1
-    cat <<EOF F > $osmesaprefix/lib/pkgconfig/osmesa.pc
+    cat <<EOF > $osmesaprefix/lib/pkgconfig/osmesa.pc
 prefix=${osmesaprefix}
 exec_prefix=\${prefix}
 libdir=\${exec_prefix}/lib
