@@ -207,7 +207,6 @@ if [ "$osmesadriver" = 3 ]; then
    fi
    if [ ! -x "$llvmconfigbinary" ]; then
       echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
-      echo "Error: $llvmprefix/bin/llvm-config does not exist, please install LLVM with RTTI support in $llvmprefix"
       echo " download the LLVM sources from llvm.org, and configure it with:"
       echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
       echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
@@ -217,12 +216,12 @@ if [ "$osmesadriver" = 3 ]; then
    if [ "$debug" = 1 ]; then
        llvmcomponents="$llvmcomponents mcdisassembler"
    fi
-   llvmlibs=`${llvmprefix}/bin/llvm-config --ldflags --libs $llvmcomponents`
-   if /opt/llvm/bin/llvm-config --help 2>&1 | grep -q system-libs; then
-       llvmlibsadd=`${llvmprefix}/bin/llvm-config --system-libs`
+   llvmlibs=`"${llvmconfigbinary}" --ldflags --libs $llvmcomponents`
+   if "${llvmconfigbinary}" --help 2>&1 | grep -q system-libs; then
+       llvmlibsadd=`"${llvmconfigbinary}" --system-libs`
    else
        # on old llvm, system libs are in the ldflags
-       llvmlibsadd=`${llvmprefix}/bin/llvm-config --ldflags`
+       llvmlibsadd=`"${llvmconfigbinary}" --ldflags`
    fi
    llvmlibs="$llvmlibs $llvmlibsadd"
 fi
