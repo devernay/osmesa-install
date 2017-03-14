@@ -72,12 +72,11 @@ if [ "$clean" = 1 ]; then
 fi
 
 if [ "$debug" = 1 ]; then
-    CFLAGS="-g"
-    CXXFLAGS="-g"
+    CFLAGS="${CFLAGS:--g}"
 else
-    CFLAGS="-O3"
-    CXXFLAGS="-O3"
+    CFLAGS="${CFLAGS:--O3}"
 fi
+CXXFLAGS="${CXXFLAGS:-${CFLAGS}}"
 
 CC=gcc
 CXX=g++
