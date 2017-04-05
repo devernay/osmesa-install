@@ -8,7 +8,7 @@
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion=17.0.1
+mesaversion="${OSMESA_VERSION:-17.0.3}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -31,7 +31,7 @@ mangled=1
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm="${LLVM_BUILD:0}"
-llvmversion=3.9.1
+llvmversion=4.0.0
 osname=`uname`
 if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
     llvmversion=3.4.2
@@ -121,7 +121,7 @@ if [ "$osmesadriver" = 3 ]; then
       fi
       if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
 	  # the llvm we server doesnt' allow continuing partial downloads
-	  curl $curlopts -O http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix
+	  curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
       fi
       $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
       cd llvm-${llvmversion}.src
@@ -226,28 +226,24 @@ if [ "$clean" = 1 ]; then
 fi
 
 echo "* downloading Mesa ${mesaversion}..."
-if [ "$mesaversion" = 17.0.1 ]; then
-    curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz
-else
-    curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz
-fi
+curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz"
 tar zxf mesa-${mesaversion}.tar.gz
 
 #download and apply patches from MacPorts
 
 echo "* applying patches..."
 
-#add_pi.patch still valid with Mesa 17.0.1
+#add_pi.patch still valid with Mesa 17.0.3
 #gallium-once-flag.patch only for Mesa < 12.0.1
-#gallium-osmesa-threadsafe.patch still valid with Mesa 17.0.1
+#gallium-osmesa-threadsafe.patch still valid with Mesa 17.0.3
 #glapi-getproc-mangled.patch only for Mesa < 11.2.2
-#install-GL-headers.patch still valid with Mesa 17.0.1
-#lp_scene-safe.patch still valid with Mesa 17.0.1
+#install-GL-headers.patch still valid with Mesa 17.0.3
+#lp_scene-safe.patch still valid with Mesa 17.0.3
 #mesa-glversion-override.patch
-#osmesa-gallium-driver.patch still valid with Mesa 17.0.1
+#osmesa-gallium-driver.patch still valid with Mesa 17.0.3
 #redefinition-of-typedef-nirshader.patch only for Mesa 12.0.x
 #scons25.patch only for Mesa < 12.0.1
-#scons-llvm-3-9-libs.patch only for Mesa < 17.0.0
+#scons-llvm-3-9-libs.patch still valid with Mesa 17.0.3
 
 PATCHES="\
 add_pi.patch \
@@ -461,7 +457,7 @@ fi
 
 cd ..
 
-curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.bz2
+curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.bz2"
 tar jxf glu-${gluversion}.tar.bz2
 cd glu-${gluversion}
 confopts="\
@@ -487,7 +483,7 @@ fi
 
 # build the demo
 cd ..
-curl $curlopts -O ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2
+curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
 tar jxf mesa-demos-${demoversion}.tar.bz2
 cd mesa-demos-${demoversion}/src/osdemos
 # We need to include gl_mangle.h and glu_mangle.h, because osdemo32.c doesn't include them
