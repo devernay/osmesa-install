@@ -23,7 +23,11 @@ mkjobs="${MKJOBS:-4}"
 # - 1 to use "classic" osmesa resterizer instead of the Gallium driver
 # - 2 to use the "softpipe" Gallium driver
 # - 3 to use the "llvmpipe" Gallium driver (also includes the softpipe driver, which can
+# - 4 to use the "swr" Gallium driver (also includes the softpipe driver, which can
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
+#     "swr" (aka OpenSWR) is not supported on macOS,
+#     https://github.com/OpenSWR/openswr/issues/2
+#     https://github.com/OpenSWR/openswr-mesa/issues/11
 osmesadriver=3
 # do we want a mangled mesa + GLU ?
 mangled=1
@@ -62,8 +66,13 @@ elif [ "$osmesadriver" = 3 ]; then
     if [ "$buildllvm" = 1 ]; then
 	echo "- also build and install LLVM $llvmversion in $llvmprefix"
     fi
+elif [ "$osmesadriver" = 4 ]; then
+    echo "- swr Gallium renderer"
+    if [ "$buildllvm" = 1 ]; then
+	echo "- also build and install LLVM $llvmversion in $llvmprefix"
+    fi
 else
-    echo "Error: osmesadriver must be 1, 2 or 3"
+    echo "Error: osmesadriver must be 1, 2, 3 or 4"
     exit
 fi
 if [ "$clean" = 1 ]; then
@@ -101,7 +110,7 @@ if [ ! -d "$osmesaprefix" -o ! -w "$osmesaprefix" ]; then
    echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
    exit
 fi
-if [ "$osmesadriver" = 3 ]; then
+if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     # see also https://wiki.qt.io/Cross_compiling_Mesa_for_Windows
    if [ "$buildllvm" = 1 ]; then
       if [ ! -d "$llvmprefix" -o ! -w "$llvmprefix" ]; then
@@ -160,6 +169,7 @@ if [ "$osmesadriver" = 3 ]; then
           if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
               cmakegen="MSYS Makefiles"
               #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
+	      cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
               llvm_patches="msys2_add_pi.patch"
 	  fi
 	  for i in $llvm_patches; do
@@ -187,6 +197,7 @@ if [ "$osmesadriver" = 3 ]; then
 	      -DLLVM_ENABLE_PEDANTIC=OFF \
 	      -DLLVM_INCLUDE_TESTS=OFF \
 	      -DLLVM_ENABLE_BACKTRACES=OFF \
+	      -DLLVM_ENABLE_TERMINFO=OFF \
 	      $debugopts $cmake_archflags
           env REQUIRES_RTTI=1 make -j${mkjobs}
           make install
@@ -244,6 +255,7 @@ echo "* applying patches..."
 #redefinition-of-typedef-nirshader.patch only for Mesa 12.0.x
 #scons25.patch only for Mesa < 12.0.1
 #scons-llvm-3-9-libs.patch still valid with Mesa 17.0.3
+#swr-sched.patch still valid with Mesa 17.0.3
 
 PATCHES="\
 add_pi.patch \
@@ -257,6 +269,7 @@ osmesa-gallium-driver.patch \
 redefinition-of-typedef-nirshader.patch \
 scons25.patch \
 scons-llvm-3-9-libs.patch \
+swr-sched.patch \
 "
 
 #if mangled and mingw, add mgl_export
@@ -330,13 +343,18 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     else
 	scons_build="release"
     fi
-    if [ "$osmesadriver" = 3 ]; then
+    if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	scons_llvm=yes
     else
 	scons_llvm=no
     fi
+    if [ "$osmesadriver" = 4 ]; then
+	scons_swr=1
+    else
+	scons_swr=0
+    fi
     mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig    
-    env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" verbose=yes osmesa
+    env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
     cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
     cp -a include/GL $osmesaprefix/include/ || exit 1
     cat <<EOF > $osmesaprefix/lib/pkgconfig/osmesa.pc
@@ -407,7 +425,7 @@ else
          --disable-gallium-llvm \
          --with-gallium-drivers=swrast \
     "
-    else
+    elif [ "$osmesadriver" = 3 ]; then
 	# gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
 	confopts="${confopts} \
          --disable-osmesa \
@@ -416,6 +434,15 @@ else
          --with-llvm-prefix=$llvmprefix \
          --disable-llvm-shared-libs \
          --with-gallium-drivers=swrast \
+    "
+    else
+	# gallium osmesa (swr) OpenGL 3.0, GLSL 1.30
+	confopts="${confopts} \
+         --disable-osmesa \
+         --enable-gallium-osmesa \
+         --with-llvm-prefix=$llvmprefix \
+         --disable-llvm-shared-libs \
+         --with-gallium-drivers=swrast,swr \
     "
     fi
 
