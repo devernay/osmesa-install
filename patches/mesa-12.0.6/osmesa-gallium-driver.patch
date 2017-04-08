@@ -54,7 +54,7 @@ diff -ur mesa-11.2.2/src/gallium/state_trackers/osmesa/osmesa.c mesa-11.2.2.new/
  
     if (sharelist) {
        st_shared = sharelist->stctx;
-@@ -570,6 +571,18 @@
+@@ -570,6 +571,21 @@
           if (version_minor < 0)
              return NULL;
           break;
@@ -65,6 +65,9 @@ diff -ur mesa-11.2.2/src/gallium/state_trackers/osmesa/osmesa.c mesa-11.2.2.new/
 +            break;
 +         case 1:
 +            driver = "llvmpipe";
++            break;
++         case 2:
++            driver = "swr";
 +            break;
 +         default:
 +            return NULL;
