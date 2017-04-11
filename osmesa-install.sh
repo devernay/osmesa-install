@@ -8,7 +8,7 @@
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.0.3}"
+mesaversion="${OSMESA_VERSION:-17.0.1}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -150,7 +150,10 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
 	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
               --enable-targets=host --disable-profiling \
-	      --disable-backtraces $debugopts
+	      --disable-backtraces \
+	      --disable-terminfo \
+	      --disable-zlib \
+	      $debugopts
 	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
       else
 	  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
@@ -198,6 +201,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	      -DLLVM_INCLUDE_TESTS=OFF \
 	      -DLLVM_ENABLE_BACKTRACES=OFF \
 	      -DLLVM_ENABLE_TERMINFO=OFF \
+	      -DLLVM_ENABLE_ZLIB=OFF \
 	      $debugopts $cmake_archflags
           env REQUIRES_RTTI=1 make -j${mkjobs}
           make install
