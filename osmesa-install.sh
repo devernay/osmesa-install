@@ -8,7 +8,7 @@
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.0.1}"
+mesaversion="${OSMESA_VERSION:-17.0.5}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
