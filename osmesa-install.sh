@@ -37,15 +37,23 @@ llvmversion="${LLVM_VERSION:-4.0.0}"
 osname=`uname`
 if [ "$osname" = Darwin ]; then
      if [ "$osmesadriver" = 4 ]; then
-	 #     "swr" (aka OpenSWR) is not supported on macOS,
-	 #     https://github.com/OpenSWR/openswr/issues/2
-	 #     https://github.com/OpenSWR/openswr-mesa/issues/11
-	 osmesadriver=3
+         #     "swr" (aka OpenSWR) is not supported on macOS,
+         #     https://github.com/OpenSWR/openswr/issues/2
+         #     https://github.com/OpenSWR/openswr-mesa/issues/11
+         osmesadriver=3
      fi
      osver=`uname -r | awk -F . '{print $1}'`
-     if [ "$osver" = 10 ] && [ -z ${LLVM_VERSION+x} ]; then
-	 # on Snow Leopard, build LLVM 3.4.2 if asked to build LLVM
-	llvmversion=3.4.2
+     if [ "$osver" = 10 ]; then
+         # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
+         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
+         # everything with clang-4.0
+         if grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
+             CC=clang-mp-4.0
+             CXX=clang++-mp-4.0
+             OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
+         elif [ -z ${LLVM_VERSION+x} ]; then
+             llvmversion=3.4.2
+         fi
      fi
 fi
 
@@ -94,8 +102,12 @@ else
 fi
 CXXFLAGS="${CXXFLAGS:-${CFLAGS}}"
 
-CC=gcc
-CXX=g++
+if [ -z "${CC:-}" ]; then
+    CC=gcc
+fi
+if [ -z "${CXX:-}" ]; then
+    CXX=g++
+fi
 
 if [ "$osname" = Darwin ]; then
   if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
@@ -197,7 +209,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
 	  fi
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. CMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
@@ -470,7 +482,7 @@ else
 	#rm src/mesa/main/remap_helper.h
     fi
 
-    env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+    env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
     make -j${mkjobs}
 
@@ -534,8 +546,11 @@ if [ "$mangled" = 1 ]; then
 else
     LIBS32="-lOSMesa32 -lGLU"
 fi
-echo c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
-c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
+if [ -z "${OSDEMO_LD:-}" ]; then
+    OSDEMO_LD="$CXX"
+fi
+echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
+$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
 ./osdemo32 image.tga
 # result is in image.tga
 
@@ -554,3 +569,8 @@ exit
 # https://cmake.org/pipermail/paraview/2015-December/035807.html
 
 #env MESA_GL_VERSION_OVERRIDE=3.2 MESA_GLSL_VERSION_OVERRIDE=150 ./osdemo32
+
+# Local Variables:
+# indent-tabs-mode: nil
+# sh-basic-offset: 4
+# sh-indentation: 4
