@@ -8,7 +8,7 @@
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.0.6}"
+mesaversion="${OSMESA_VERSION:-17.1.1}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -23,22 +23,30 @@ mkjobs="${MKJOBS:-4}"
 # - 1 to use "classic" osmesa resterizer instead of the Gallium driver
 # - 2 to use the "softpipe" Gallium driver
 # - 3 to use the "llvmpipe" Gallium driver (also includes the softpipe driver, which can
+#     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 # - 4 to use the "swr" Gallium driver (also includes the softpipe driver, which can
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
-#     "swr" (aka OpenSWR) is not supported on macOS,
-#     https://github.com/OpenSWR/openswr/issues/2
-#     https://github.com/OpenSWR/openswr-mesa/issues/11
-osmesadriver=3
+osmesadriver=4
 # do we want a mangled mesa + GLU ?
 mangled=1
 # the prefix to the LLVM installation
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
-buildllvm="${LLVM_BUILD:0}"
-llvmversion=4.0.0
+buildllvm="${LLVM_BUILD:-0}"
+llvmversion="${LLVM_VERSION:-4.0.0}"
 osname=`uname`
-if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
-    llvmversion=3.4.2
+if [ "$osname" = Darwin ]; then
+     if [ "$osmesadriver" = 4 ]; then
+	 #     "swr" (aka OpenSWR) is not supported on macOS,
+	 #     https://github.com/OpenSWR/openswr/issues/2
+	 #     https://github.com/OpenSWR/openswr-mesa/issues/11
+	 osmesadriver=3
+     fi
+     osver=`uname -r | awk -F . '{print $1}'`
+     if [ "$osver" = 10 ] && [ -z ${LLVM_VERSION+x} ]; then
+	 # on Snow Leopard, build LLVM 3.4.2 if asked to build LLVM
+	llvmversion=3.4.2
+     fi
 fi
 
 # tell curl to continue downloads and follow redirects
