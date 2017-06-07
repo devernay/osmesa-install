@@ -212,7 +212,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	  fi
       commonopts="-DCMAKE_INSTALL_PREFIX=${llvmprefix} -DLLVM_ENABLE_RTTI=ON -DLLVM_REQUIRES_RTTI=ON  -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DLLVM_BINDINGS_LIST=none"
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. CMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
