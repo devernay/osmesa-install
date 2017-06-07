@@ -8,7 +8,7 @@
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.0.3}"
+mesaversion="${OSMESA_VERSION:-17.1.1}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -23,23 +23,39 @@ mkjobs="${MKJOBS:-4}"
 # - 1 to use "classic" osmesa resterizer instead of the Gallium driver
 # - 2 to use the "softpipe" Gallium driver
 # - 3 to use the "llvmpipe" Gallium driver (also includes the softpipe driver, which can
+#     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 # - 4 to use the "swr" Gallium driver (also includes the softpipe driver, which can
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
-#     "swr" (aka OpenSWR) is not supported on macOS,
-#     https://github.com/OpenSWR/openswr/issues/2
-#     https://github.com/OpenSWR/openswr-mesa/issues/11
-osmesadriver=3
+osmesadriver=4
 # do we want a mangled mesa + GLU ?
 mangled=1
 
 # the prefix to the LLVM installation
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
-buildllvm="${LLVM_BUILD:0}"
-llvmversion=4.0.0
+buildllvm="${LLVM_BUILD:-0}"
+llvmversion="${LLVM_VERSION:-4.0.0}"
 osname=`uname`
-if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
-    llvmversion=3.4.2
+if [ "$osname" = Darwin ]; then
+     if [ "$osmesadriver" = 4 ]; then
+         #     "swr" (aka OpenSWR) is not supported on macOS,
+         #     https://github.com/OpenSWR/openswr/issues/2
+         #     https://github.com/OpenSWR/openswr-mesa/issues/11
+         osmesadriver=3
+     fi
+     osver=`uname -r | awk -F . '{print $1}'`
+     if [ "$osver" = 10 ]; then
+         # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
+         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
+         # everything with clang-4.0
+         if grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
+             CC=clang-mp-4.0
+             CXX=clang++-mp-4.0
+             OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
+         elif [ -z ${LLVM_VERSION+x} ]; then
+             llvmversion=3.4.2
+         fi
+     fi
 fi
 
 # tell curl to continue downloads and follow redirects
@@ -87,8 +103,12 @@ else
 fi
 CXXFLAGS="${CXXFLAGS:-${CFLAGS}}"
 
-CC=gcc
-CXX=g++
+if [ -z "${CC:-}" ]; then
+    CC=gcc
+fi
+if [ -z "${CXX:-}" ]; then
+    CXX=g++
+fi
 
 
 if [ "$osname" = Darwin ]; then
@@ -152,7 +172,10 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
 	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
               --enable-targets=host --disable-profiling \
-	      --disable-backtraces $debugopts
+	      --disable-backtraces \
+	      --disable-terminfo \
+	      --disable-zlib \
+	      $debugopts
 	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
       else
 	  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
@@ -189,7 +212,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	  fi
       commonopts="-DCMAKE_INSTALL_PREFIX=${llvmprefix} -DLLVM_ENABLE_RTTI=ON -DLLVM_REQUIRES_RTTI=ON  -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DLLVM_BINDINGS_LIST=none"
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. CMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
@@ -201,6 +224,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	      -DLLVM_INCLUDE_TESTS=OFF \
 	      -DLLVM_ENABLE_BACKTRACES=OFF \
 	      -DLLVM_ENABLE_TERMINFO=OFF \
+	      -DLLVM_ENABLE_ZLIB=OFF \
 	      $debugopts $cmake_archflags
           env REQUIRES_RTTI=1 make -j${mkjobs}
           make install
@@ -463,7 +487,7 @@ else
 	#rm src/mesa/main/remap_helper.h
     fi
 
-    env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+    env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
 
     make -j${mkjobs}
@@ -529,8 +553,11 @@ if [ "$mangled" = 1 ]; then
 else
     LIBS32="-lOSMesa32 -lGLU"
 fi
-echo c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
-c++ $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
+if [ -z "${OSDEMO_LD:-}" ]; then
+    OSDEMO_LD="$CXX"
+fi
+echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
+$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
 ./osdemo32 image.tga
 # result is in image.tga
 
@@ -549,3 +576,8 @@ exit
 # https://cmake.org/pipermail/paraview/2015-December/035807.html
 
 #env MESA_GL_VERSION_OVERRIDE=3.2 MESA_GLSL_VERSION_OVERRIDE=150 ./osdemo32
+
+# Local Variables:
+# indent-tabs-mode: nil
+# sh-basic-offset: 4
+# sh-indentation: 4
