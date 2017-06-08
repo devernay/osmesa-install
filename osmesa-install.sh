@@ -29,6 +29,7 @@ mkjobs="${MKJOBS:-4}"
 osmesadriver=4
 # do we want a mangled mesa + GLU ?
 mangled=1
+
 # the prefix to the LLVM installation
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
@@ -108,6 +109,7 @@ fi
 if [ -z "${CXX:-}" ]; then
     CXX=g++
 fi
+
 
 if [ "$osname" = Darwin ]; then
   if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
@@ -189,7 +191,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
 	  fi
-          if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+      if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
               cmakegen="MSYS Makefiles"
               #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
 	      cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
@@ -208,6 +210,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	  else
 	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
 	  fi
+      commonopts="-DCMAKE_INSTALL_PREFIX=${llvmprefix} -DLLVM_ENABLE_RTTI=ON -DLLVM_REQUIRES_RTTI=ON  -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DLLVM_BINDINGS_LIST=none"
 
           env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
@@ -229,6 +232,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
       fi
       cd ..
    fi
+
    llvmconfigbinary=
    if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
        llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
@@ -295,6 +299,7 @@ scons25.patch \
 scons-llvm-3-9-libs.patch \
 swr-sched.patch \
 "
+
 
 #if mangled and mingw, add mgl_export
 #if mingw, add scons_fix.patch ??
@@ -484,6 +489,7 @@ else
 
     env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
+
     make -j${mkjobs}
 
     echo "* installing Mesa..."
@@ -505,6 +511,7 @@ else
     # End of configure-based build
     ####################################################################    
 fi
+
 
 cd ..
 

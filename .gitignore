@@ -2,6 +2,7 @@ DerivedData
 build
 project.xcworkspace
 xcuserdata
+glu-*
 *~
 osdemo32
 osdemo32-mangled
