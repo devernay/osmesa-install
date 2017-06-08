@@ -3,8 +3,6 @@ build
 project.xcworkspace
 xcuserdata
 glu-*
-llvm-*.src*
-mesa-*
 *~
 osdemo32
 osdemo32-mangled

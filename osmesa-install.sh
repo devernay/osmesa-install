@@ -304,7 +304,7 @@ swr-sched.patch \
 #if mangled and mingw, add mgl_export
 #if mingw, add scons_fix.patch ??
 if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-    PATCHES="$PATCHES msys2_scons_fix.patch"
+    PATCHES="$PATCHES msys2_scons_fix.patch scons-swr-cc-arch.patch"
     if [ "$mangled" = 1 ]; then
 	PATCHES="$PATCHES mgl_export.patch"
     fi
