@@ -1,11 +1,12 @@
 # osmesa-install
+
 Script and patches to build and install variations of OSMesa http://www.mesa3d.org/osmesa.html:
 - "mangled" or not (in mangled OSMesa, all functions start with `mgl` instead of `gl`)
 - debug or not
 - choice of osmesa driver: `swrast`, `softpipe` or `llvmpipe`
 - possibility to also compile and install LLVM 3.4.2 for the `llvmpipe` driver
 
-## Usage:
+## Usage
 
 - edit variables / paths as the beginning of the `osmesa-install.sh`
   script
@@ -17,5 +18,11 @@ sh ../osmesa-install.sh
 ```
 - there is a test program on the `osdemo` directory, with a few checks
 
-Note that the script fixes the following Mesa bugs related to mangles OSMesa:
+## Notes and caveats
+
+The script fixes the following Mesa bugs related to mangled OSMesa:
 - [GL/gl_mangle.h misses symbols from GLES/gl.h](https://bugs.freedesktop.org/show_bug.cgi?id=91724)
+
+Also note that the latest clang (tested with 4.0.0) does not build on 32 bits mingw64 due to the fillowing gcc bug:
+- http://lists.llvm.org/pipermail/cfe-dev/2016-December/052017.html
+- https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78936
