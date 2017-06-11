@@ -34,6 +34,12 @@ llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm="${LLVM_BUILD:-0}"
 llvmversion="${LLVM_VERSION:-4.0.0}"
+# set the minimum MacOSX SDK version
+osxsdkminver=10.8
+# SDK root - default is 0.
+# set the isysroot full path if it is not automatically detected.
+# e.g. from 0 to -isysroot </path to sdk>
+osxsdkisysroot="${OSX_SDKROOT:-0}"
 osname=`uname`
 if [ "$osname" = Darwin ]; then
      if [ "$osmesadriver" = 4 ]; then
@@ -54,7 +60,7 @@ if [ "$osname" = Darwin ]; then
          elif [ -z ${LLVM_VERSION+x} ]; then
              llvmversion=3.4.2
          fi
-     fi
+     fi	 
 fi
 
 # tell curl to continue downloads and follow redirects
@@ -189,6 +195,12 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
 		  fi
+		  if [ "$osname" = Darwin ] && [ `uname -r | awk -F . '{print $1}'` -gt 11 ]; then
+			  # Redundant - provided for older compilers that do not pass this option to the linker
+			  env MACOSX_DEPLOYMENT_TARGET=$osxsdkminver			  		  
+			  # From Mountain Lion onward. We are only building 64bit arch.
+			  cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$osxsdkminver"
+		  fi		  			  
 	      if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
               cmakegen="MSYS Makefiles"
               #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
@@ -481,7 +493,28 @@ else
 		#sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
 		#rm src/mesa/main/remap_helper.h
     fi
-
+	
+	if [ "$osname" = Darwin ] && [ `uname -r | awk -F . '{print $1}'` -gt 11 ]; then
+		# Try to automatically get the default OSX SDK root path
+		if [ -x "/usr/bin/xcrun" ]; then
+			osxsdkisysroot="-isysroot `/usr/bin/xcrun --show-sdk-path -sdk macosx`"
+		elif [ ! "$osxsdkisysroot" = 0 ]; then
+			echo "Using isysroot SDK path $osxsdkisysroot"
+		else
+			echo "Error: Could not detect isysroot SDK path."
+			echo "Manually update this script at 'osxsdkisysroot'\
+				  or set env variable OSX_SDKROOT before execution.
+			" 
+		fi	
+	    # Redundant - provided for older compilers that do not pass this option to the linker
+	    env MACOSX_DEPLOYMENT_TARGET=$osxsdkminver
+		# From Mountain Lion onward so we are only building 64bit arch.		
+		osxsdkarchs="-arch x86_64"
+		osxsdkversionmin="-mmacosx-version-min=$osxsdkminver"
+		CFLAGS="$CFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
+		CXXFLAGS="$CXXFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
+	fi
+  
     env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
     make -j${mkjobs}
