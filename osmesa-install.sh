@@ -139,77 +139,77 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
       fi
       # LLVM must be compiled with RRTI, see https://bugs.freedesktop.org/show_bug.cgi?id=90032
       if [ "$clean" = 1 ]; then
-	  rm -rf llvm-${llvmversion}.src
+		  rm -rf llvm-${llvmversion}.src
       fi
 
       archsuffix=xz
       xzcat=xzcat
       if [ $llvmversion = 3.4.2 ]; then
-	  archsuffix=gz
-	  xzcat="gzip -dc"
+		  archsuffix=gz
+		  xzcat="gzip -dc"
       fi
       if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
-	  # the llvm we server doesnt' allow continuing partial downloads
-	  curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
+		  # the llvm we server doesnt' allow continuing partial downloads
+		  curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
       fi
       $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
       cd llvm-${llvmversion}.src
       cmake_archflags=
       if [ $llvmversion = 3.4.2 -a "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
-	  if [ "$debug" = 1 ]; then
-	      debugopts="--disable-optimized --enable-debug-symbols --enable-debug-runtime --enable-assertions"
-	  else
-	      debugopts="--enable-optimized --disable-debug-symbols --disable-debug-runtime --disable-assertions"
-	  fi
-          # On Snow Leopard, build universal
-	  # and use configure (as macports does)
-	  # workaround a bug in Apple's shipped gcc driver-driver
-          if [ "$CXX" != clang-mp-3.4 ]; then
-	      echo "static int ___ignoreme;" > tools/llvm-shlib/ignore.c
-	  fi
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
+		  if [ "$debug" = 1 ]; then
+		      debugopts="--disable-optimized --enable-debug-symbols --enable-debug-runtime --enable-assertions"
+		  else
+		      debugopts="--enable-optimized --disable-debug-symbols --disable-debug-runtime --disable-assertions"
+		  fi
+	      # On Snow Leopard, build universal
+		  # and use configure (as macports does)
+		  # workaround a bug in Apple's shipped gcc driver-driver
+	      if [ "$CXX" != clang-mp-3.4 ]; then
+		      echo "static int ___ignoreme;" > tools/llvm-shlib/ignore.c
+		  fi
+	      env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
 	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
-              --enable-targets=host --disable-profiling \
+          --enable-targets=host --disable-profiling \
 	      --disable-backtraces \
 	      --disable-terminfo \
 	      --disable-zlib \
 	      $debugopts
-	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
+		  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
       else
-	  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
-	  cmake_archflags=""
-	  llvm_patches=""
-	  if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+		  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
+		  cmake_archflags=""
+		  llvm_patches=""
+		  if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
               # On Snow Leopard, build universal
-	      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
-	      # Proxy for eliminating the dependency on native TLS
+		      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
+		      # Proxy for eliminating the dependency on native TLS
               # http://trac.macports.org/ticket/46887
               #cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF" # flag was added to the common flags below, we don't need backtraces anyway
 
               # https://llvm.org/bugs/show_bug.cgi?id=25680
               #configure.cxxflags-append -U__STRICT_ANSI__
-	  fi
-          if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+		  fi
+	      if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
               cmakegen="MSYS Makefiles"
               #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
-	      cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
+		      cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
               llvm_patches="msys2_add_pi.patch"
-	  fi
-	  for i in $llvm_patches; do
-	      if [ -f "$srcdir"/patches/llvm-$llvmversion/$i ]; then
-		  echo "* applying patch $i"
-		  patch -p1 -d . < "$srcdir"/patches/llvm-$llvmversion/$i
-	      fi
-	  done
-	  mkdir build
+		  fi
+		  for i in $llvm_patches; do
+		      if [ -f "$srcdir"/patches/llvm-$llvmversion/$i ]; then
+				  echo "* applying patch $i"
+				  patch -p1 -d . < "$srcdir"/patches/llvm-$llvmversion/$i
+		      fi
+		  done
+		  mkdir build
           cd build
-	  if [ "$debug" = 1 ]; then
-	      debugopts="-DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=ON -DLLVM_INCLUDE_EXAMPLES=ON"
-	  else
-	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
-	  fi
+		  if [ "$debug" = 1 ]; then
+		      debugopts="-DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=ON -DLLVM_INCLUDE_EXAMPLES=ON"
+		  else
+		      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
+		  fi
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+	      env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
 	      -DLLVM_TARGETS_TO_BUILD="host" \
 	      -DLLVM_ENABLE_RTTI=ON \
 	      -DLLVM_REQUIRES_RTTI=ON \
@@ -223,9 +223,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	      -DLLVM_ENABLE_TERMINFO=OFF \
 	      -DLLVM_ENABLE_ZLIB=OFF \
 	      $debugopts $cmake_archflags
-          env REQUIRES_RTTI=1 make -j${mkjobs}
-          make install
-          cd ..
+	      env REQUIRES_RTTI=1 make -j${mkjobs}
+	      make install
+	      cd ..
       fi
       cd ..
    fi
@@ -360,22 +360,22 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     scons_cxxflags="$CXXFLAGS -std=c++11"
     scons_ldflags="-static -s"
     if [ "$mangled" = 1 ]; then
-	scons_cflags="-DUSE_MGL_NAMESPACE"
+		scons_cflags="-DUSE_MGL_NAMESPACE"
     fi
     if [ "$debug" = 1 ]; then
-	scons_build="debug"
+		scons_build="debug"
     else
-	scons_build="release"
+		scons_build="release"
     fi
     if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
-	scons_llvm=yes
+		scons_llvm=yes
     else
-	scons_llvm=no
+		scons_llvm=no
     fi
     if [ "$osmesadriver" = 4 ]; then
-	scons_swr=1
+		scons_swr=1
     else
-	scons_swr=0
+		scons_swr=0
     fi
     mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig    
     env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
@@ -434,52 +434,52 @@ else
     "
 
     if [ "$osmesadriver" = 1 ]; then
-	# pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
-	confopts="${confopts} \
-         --enable-osmesa \
-         --disable-gallium-osmesa \
-         --disable-gallium-llvm \
-         --with-gallium-drivers= \
-    "
+		# pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
+		confopts="${confopts} \
+	         --enable-osmesa \
+	         --disable-gallium-osmesa \
+	         --disable-gallium-llvm \
+	         --with-gallium-drivers= \
+	    "
     elif [ "$osmesadriver" = 2 ]; then
-	# gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
-	confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --disable-gallium-llvm \
-         --with-gallium-drivers=swrast \
-    "
+		# gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
+		confopts="${confopts} \
+	         --disable-osmesa \
+	         --enable-gallium-osmesa \
+	         --disable-gallium-llvm \
+	         --with-gallium-drivers=swrast \
+	    "
     elif [ "$osmesadriver" = 3 ]; then
-	# gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
-	confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --enable-gallium-llvm=yes \
-         --with-llvm-prefix=$llvmprefix \
-         --disable-llvm-shared-libs \
-         --with-gallium-drivers=swrast \
-    "
+		# gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
+		confopts="${confopts} \
+	         --disable-osmesa \
+	         --enable-gallium-osmesa \
+	         --enable-gallium-llvm=yes \
+	         --with-llvm-prefix=$llvmprefix \
+	         --disable-llvm-shared-libs \
+	         --with-gallium-drivers=swrast \
+	    "
     else
-	# gallium osmesa (swr) OpenGL 3.0, GLSL 1.30
-	confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --with-llvm-prefix=$llvmprefix \
-         --disable-llvm-shared-libs \
-         --with-gallium-drivers=swrast,swr \
-    "
+		# gallium osmesa (swr) OpenGL 3.0, GLSL 1.30
+		confopts="${confopts} \
+	         --disable-osmesa \
+	         --enable-gallium-osmesa \
+	         --with-llvm-prefix=$llvmprefix \
+	         --disable-llvm-shared-libs \
+	         --with-gallium-drivers=swrast,swr \
+	    "
     fi
 
     if [ "$debug" = 1 ]; then
-	confopts="${confopts} \
-         --enable-debug"
+		confopts="${confopts} \
+	         --enable-debug"
     fi
 
     if [ "$mangled" = 1 ]; then
-	confopts="${confopts} \
-         --enable-mangling"
-	#sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
-	#rm src/mesa/main/remap_helper.h
+		confopts="${confopts} \
+	         --enable-mangling"
+		#sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
+		#rm src/mesa/main/remap_helper.h
     fi
 
     env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
@@ -490,13 +490,13 @@ else
 
     make install
     if [ "$osname" = Darwin ]; then
-	# fix the following error:
-	#Undefined symbols for architecture x86_64:
-	#  "_lp_dummy_tile", referenced from:
-	#      _lp_rast_create in libMangledOSMesa32.a(lp_rast.o)
-	#      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
-	#ld: symbol(s) not found for architecture x86_64
-	#clang: error: linker command failed with exit code 1 (use -v to see invocation)
+		# fix the following error:
+		#Undefined symbols for architecture x86_64:
+		#  "_lp_dummy_tile", referenced from:
+		#      _lp_rast_create in libMangledOSMesa32.a(lp_rast.o)
+		#      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
+		#ld: symbol(s) not found for architecture x86_64
+		#clang: error: linker command failed with exit code 1 (use -v to see invocation)
 	for f in $osmesaprefix/lib/lib*.a; do
 	    ranlib -c $f
 	done
