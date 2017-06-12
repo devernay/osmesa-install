@@ -158,8 +158,12 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 		  # the llvm we server doesnt' allow continuing partial downloads
 		  curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
       fi
+	  # From Yosemite (14) gunzip can decompress xz files - but only if containing a tar archive.
+	  if [ "$osname" = Darwin ] && [ `uname -r | awk -F . '{print $1}'` -gt 13 ]; then
+	  	  xzcat="gunzip -dc"
+	  fi
       $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
-      cd llvm-${llvmversion}.src
+	  cd llvm-${llvmversion}.src
       cmake_archflags=
       if [ $llvmversion = 3.4.2 -a "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
 		  if [ "$debug" = 1 ]; then
