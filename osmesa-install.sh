@@ -127,7 +127,6 @@ if [ "$osname" = Darwin ]; then
   fi
 fi
 
-
 # On MacPorts, building Mesa requires the following packages:
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
 
@@ -251,12 +250,19 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
    else
        llvmconfigbinary="$llvmprefix/bin/llvm-config"
    fi
+   # Check if llvm installed
    if [ ! -x "$llvmconfigbinary" ]; then
-      echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
-      echo " download the LLVM sources from llvm.org, and configure it with:"
-      echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
-      echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
-      exit
+	  # could not find installation. 
+	  if [ "$buildllvm" = 0 ]; then
+		  # advise use to turn on automatic download and install switch
+		  echo "Error: $llvmconfigbinary does not exist, set script variable buildllvm=\${LLVM_BUILD:-0} from 0 to 1 to automatically download and install llvm."
+	  else
+	      echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
+	      echo " download the LLVM sources from llvm.org, and configure it with:"
+	      echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
+	      echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
+	  fi
+	  exit
    fi
    llvmcomponents="engine mcjit"
    if [ "$debug" = 1 ]; then
