@@ -201,8 +201,10 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 		  if [ "$osname" = Darwin ] && [ `uname -r | awk -F . '{print $1}'` -gt 11 ]; then
 			  # Redundant - provided for older compilers that do not pass this option to the linker
 			  env MACOSX_DEPLOYMENT_TARGET=$osxsdkminver			  		  
+			  # Address xcode/cmake error: compiler appears to require libatomic, but cannot find it.
+			  cmake_archflags="-DLLVM_ENABLE_LIBCXX=ON"			  
 			  # From Mountain Lion onward. We are only building 64bit arch.
-			  cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$osxsdkminver"
+			  cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$osxsdkminver"
 		  fi		  			  
 	      if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
               cmakegen="MSYS Makefiles"
