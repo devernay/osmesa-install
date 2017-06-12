@@ -8,7 +8,7 @@
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.1.1}"
+mesaversion="${OSMESA_VERSION:-17.1.2}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -318,20 +318,23 @@ redefinition-of-typedef-nirshader.patch \
 scons25.patch \
 scons-llvm-3-9-libs.patch \
 swr-sched.patch \
+scons-swr-cc-arch.patch \
+msys2_scons_fix.patch \
 "
 
-#if mangled and mingw, add mgl_export
-#if mingw, add scons_fix.patch ??
-if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-    PATCHES="$PATCHES msys2_scons_fix.patch scons-swr-cc-arch.patch"
-    if [ "$mangled" = 1 ]; then
-	PATCHES="$PATCHES mgl_export.patch"
-    fi
+#if mangled, add mgl_export (for mingw)
+if [ "$mangled" = 1 ]; then
+    PATCHES="$PATCHES mgl_export.patch"
 fi
 
+# mingw-specific patches (for maintainability, prefer putting everything in the main patch list)
+#if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+#    PATCHES="$PATCHES "
+#fi
+
 if [ "$osname" = Darwin ]; then
-    # patches for Mesa 11.2.1 from
-    # https://trac.macports.org/browser/trunk/dports/x11/mesa
+    # patches for Mesa 12.0.1 from
+    # https://github.com/macports/macports-ports/tree/master/x11/mesa/files
     PATCHES="$PATCHES \
     0001-mesa-Deal-with-size-differences-between-GLuint-and-G.patch \
     0002-applegl-Provide-requirements-of-_SET_DrawBuffers.patch \
@@ -340,6 +343,7 @@ if [ "$osname" = Darwin ]; then
     static-strndup.patch \
     no-missing-prototypes-error.patch \
     o-cloexec.patch \
+    patch-include-GL-mesa_glinterop_h.diff \
     "
 fi
 
