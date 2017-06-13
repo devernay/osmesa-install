@@ -97,12 +97,12 @@ elif [ "$osmesadriver" = 2 ]; then
 elif [ "$osmesadriver" = 3 ]; then
     echo "- llvmpipe Gallium renderer"
     if [ "$buildllvm" = 1 ]; then
-    echo "- also build and install LLVM $llvmversion in $llvmprefix"
+        echo "- also build and install LLVM $llvmversion in $llvmprefix"
     fi
 elif [ "$osmesadriver" = 4 ]; then
     echo "- swr Gallium renderer"
     if [ "$buildllvm" = 1 ]; then
-    echo "- also build and install LLVM $llvmversion in $llvmprefix"
+        echo "- also build and install LLVM $llvmversion in $llvmprefix"
     fi
 else
     echo "Error: osmesadriver must be 1, 2, 3 or 4"
@@ -198,9 +198,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             --disable-terminfo \
             --disable-zlib \
             $debugopts
-            env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} 
-			echo "* installing LLVM..."
-			make install
+            env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs}
+            echo "* installing LLVM..."
+            make install
          else
             cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
             cmake_archflags=""
