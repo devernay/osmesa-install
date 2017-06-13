@@ -165,6 +165,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             xzcat="gzip -dc"
         fi
         if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
+			echo "* downloading LLVM ${llvmversion}..."
             # the llvm we server doesnt' allow continuing partial downloads
             curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
         fi
@@ -174,6 +175,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         fi
         $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
         cd llvm-${llvmversion}.src
+		
+		echo "* building LLVM..."
+				
         cmake_archflags=
         if [ $llvmversion = 3.4.2 -a "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
             if [ "$debug" = 1 ]; then
@@ -194,7 +198,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             --disable-terminfo \
             --disable-zlib \
             $debugopts
-            env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
+            env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} 
+			echo "* installing LLVM..."
+			make install
          else
             cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
             cmake_archflags=""
@@ -236,7 +242,6 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             else
                 debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
             fi
-
             env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
             -DLLVM_TARGETS_TO_BUILD="host" \
             -DLLVM_ENABLE_RTTI=ON \
@@ -252,6 +257,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             -DLLVM_ENABLE_ZLIB=OFF \
             $debugopts $cmake_archflags
             env REQUIRES_RTTI=1 make -j${mkjobs}
+			echo "* installing LLVM..."
             make install
             cd ..
         fi
@@ -267,8 +273,8 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     if [ ! -x "$llvmconfigbinary" ]; then
         # could not find installation.  
         if [ "$buildllvm" = 0 ]; then
-            # advise use to turn on automatic download and install switch
-            echo "Error: $llvmconfigbinary does not exist, set script variable buildllvm=\${LLVM_BUILD:-0} from 0 to 1 to        automatically download and install llvm."
+            # advise user to turn on automatic download, build and install option
+            echo "Error: $llvmconfigbinary does not exist, set script variable buildllvm=\${LLVM_BUILD:-0} from 0 to 1 to automatically download and install llvm."
         else
             echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
             echo " download the LLVM sources from llvm.org, and configure it with:" 
@@ -295,11 +301,13 @@ if [ "$clean" = 1 ]; then
     rm -rf "mesa-$mesaversion" "mesa-demos-$demoversion" "glu-$gluversion"
 fi
 
-echo "* downloading Mesa ${mesaversion}..."
-curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz"
+if [ ! -f mesa-${mesaversion}.tar.gz ]; then
+    echo "* downloading Mesa ${mesaversion}..."
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz"
+fi
 tar zxf mesa-${mesaversion}.tar.gz
 
-#download and apply patches from MacPorts
+# apply patches from MacPorts
 
 echo "* applying patches..."
 
@@ -366,7 +374,6 @@ for i in $PATCHES; do
 done
 
 cd mesa-${mesaversion}
-
 
 echo "* fixing gl_mangle.h..."
 # edit include/GL/gl_mangle.h, add ../GLES*/gl[0-9]*.h to the "files" variable and change GLAPI in the grep line to GL_API
@@ -530,8 +537,7 @@ else
         else
             echo "Error: Could not detect isysroot SDK path."
             echo "Manually update this script at 'osxsdkisysroot' \
-                  or set env variable OSX_SDKROOT before execution. \
-                 " 
+                  or set env variable OSX_SDKROOT before execution." 
         fi
         # Redundant - provided for older compilers that do not pass this option to the linker
         env MACOSX_DEPLOYMENT_TARGET=$osxsdkminver
@@ -547,8 +553,8 @@ else
     make -j${mkjobs}
 
     echo "* installing Mesa..."
-
     make install
+	
     if [ "$osname" = Darwin ]; then
         # fix the following error:
         #Undefined symbols for architecture x86_64:
@@ -557,9 +563,9 @@ else
         #      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
         #ld: symbol(s) not found for architecture x86_64
         #clang: error: linker command failed with exit code 1 (use -v to see invocation)
-    for f in $osmesaprefix/lib/lib*.a; do
-        ranlib -c $f
-    done
+        for f in $osmesaprefix/lib/lib*.a; do
+            ranlib -c $f
+        done
     fi
 
     # End of configure-based build
@@ -567,10 +573,13 @@ else
 fi
 
 cd ..
-
-curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.bz2"
+if [ ! -f glu-${gluversion}.tar.bz2 ]; then
+    echo "* downloading GLU ${gluversion}..."
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.bz2"
+fi
 tar jxf glu-${gluversion}.tar.bz2
 cd glu-${gluversion}
+echo "* building GLU..."
 confopts="\
     --disable-dependency-tracking \
     --enable-static \
@@ -584,7 +593,10 @@ fi
 
 env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 make -j${mkjobs}
+
+echo "* installing GLU..."
 make install
+
 if [ "$mangled" = 1 ]; then
     mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a" 
     mv "$osmesaprefix/lib/libGLU.la" "$osmesaprefix/lib/libMangledGLU.la"
@@ -594,9 +606,14 @@ fi
 
 # build the demo
 cd ..
-curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
+if [ ! -f glu-${gluversion}.tar.bz2 ]; then
+    echo "* downloading Mesa Demos ${demoversion}..."
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
+fi
 tar jxf mesa-demos-${demoversion}.tar.bz2
+
 cd mesa-demos-${demoversion}/src/osdemos
+echo "* building Mesa Demo..."
 # We need to include gl_mangle.h and glu_mangle.h, because osdemo32.c doesn't include them
 
 INCLUDES="-include $osmesaprefix/include/GL/gl.h -include $osmesaprefix/include/GL/glu.h"
