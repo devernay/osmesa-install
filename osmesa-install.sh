@@ -549,14 +549,14 @@ else
         CFLAGS="$CFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
         CXXFLAGS="$CXXFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
     fi
-  
+
     env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
     make -j${mkjobs}
 
     echo "* installing Mesa..."
     make install
-	
+
     if [ "$osname" = Darwin ]; then
         # fix the following error:
         #Undefined symbols for architecture x86_64:
