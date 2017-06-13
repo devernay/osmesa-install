@@ -138,7 +138,6 @@ if [ "$osname" = Darwin ]; then
     fi
 fi
 
-
 # On MacPorts, building Mesa requires the following packages:
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
 
@@ -272,6 +271,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     else
         llvmconfigbinary="$llvmprefix/bin/llvm-config"
     fi
+    # Check if llvm installed
     if [ ! -x "$llvmconfigbinary" ]; then
         # could not find installation.
         if [ "$buildllvm" = 0 ]; then
@@ -376,7 +376,6 @@ for i in $PATCHES; do
 done
 
 cd mesa-${mesaversion}
-
 
 echo "* fixing gl_mangle.h..."
 # edit include/GL/gl_mangle.h, add ../GLES*/gl[0-9]*.h to the "files" variable and change GLAPI in the grep line to GL_API
@@ -550,14 +549,14 @@ else
         CFLAGS="$CFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
         CXXFLAGS="$CXXFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
     fi
-
+  
     env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
     make -j${mkjobs}
 
     echo "* installing Mesa..."
-
     make install
+	
     if [ "$osname" = Darwin ]; then
         # fix the following error:
         #Undefined symbols for architecture x86_64:
