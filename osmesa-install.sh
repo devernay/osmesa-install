@@ -36,25 +36,25 @@ buildllvm="${LLVM_BUILD:-0}"
 llvmversion="${LLVM_VERSION:-4.0.0}"
 osname=`uname`
 if [ "$osname" = Darwin ]; then
-     if [ "$osmesadriver" = 4 ]; then
-         #     "swr" (aka OpenSWR) is not supported on macOS,
-         #     https://github.com/OpenSWR/openswr/issues/2
-         #     https://github.com/OpenSWR/openswr-mesa/issues/11
-         osmesadriver=3
-     fi
-     osver=`uname -r | awk -F . '{print $1}'`
-     if [ "$osver" = 10 ]; then
-         # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
-         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
-         # everything with clang-4.0
-         if grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
-             CC=clang-mp-4.0
-             CXX=clang++-mp-4.0
-             OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
-         elif [ -z ${LLVM_VERSION+x} ]; then
-             llvmversion=3.4.2
-         fi
-     fi
+    if [ "$osmesadriver" = 4 ]; then
+	#     "swr" (aka OpenSWR) is not supported on macOS,
+	#     https://github.com/OpenSWR/openswr/issues/2
+	#     https://github.com/OpenSWR/openswr-mesa/issues/11
+	osmesadriver=3
+    fi
+    osver=`uname -r | awk -F . '{print $1}'`
+    if [ "$osver" = 10 ]; then
+	# On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
+	# If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
+	# everything with clang-4.0
+	if grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
+	    CC=clang-mp-4.0
+	    CXX=clang++-mp-4.0
+	    OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
+	elif [ -z ${LLVM_VERSION+x} ]; then
+	    llvmversion=3.4.2
+	fi
+    fi
 fi
 
 # tell curl to continue downloads and follow redirects
@@ -110,15 +110,15 @@ if [ -z "${CXX:-}" ]; then
 fi
 
 if [ "$osname" = Darwin ]; then
-  if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
-    # On Snow Leopard, build universal
-    archs="-arch i386 -arch x86_64"
-    CFLAGS="$CFLAGS $archs"
-    CXXFLAGS="$CXXFLAGS $archs"
-    ## uncomment to use clang 3.4 (not necessary, as long as llvm is not configured to be pedantic)
-    #CC=clang-mp-3.4
-    #CXX=clang++-mp-3.4
-  fi
+    if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
+	# On Snow Leopard, build universal
+	archs="-arch i386 -arch x86_64"
+	CFLAGS="$CFLAGS $archs"
+	CXXFLAGS="$CXXFLAGS $archs"
+	## uncomment to use clang 3.4 (not necessary, as long as llvm is not configured to be pedantic)
+	#CC=clang-mp-3.4
+	#CXX=clang++-mp-3.4
+    fi
 fi
 
 
@@ -127,133 +127,133 @@ fi
 
 llvmlibs=
 if [ ! -d "$osmesaprefix" -o ! -w "$osmesaprefix" ]; then
-   echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
-   exit
+    echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
+    exit
 fi
 if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     # see also https://wiki.qt.io/Cross_compiling_Mesa_for_Windows
-   if [ "$buildllvm" = 1 ]; then
-      if [ ! -d "$llvmprefix" -o ! -w "$llvmprefix" ]; then
-        echo "Error: $llvmprefix does not exist or is not user-writable, please create $llvmprefix and make it user-writable"
-        exit
-      fi
-      # LLVM must be compiled with RRTI, see https://bugs.freedesktop.org/show_bug.cgi?id=90032
-      if [ "$clean" = 1 ]; then
-	  rm -rf llvm-${llvmversion}.src
-      fi
+    if [ "$buildllvm" = 1 ]; then
+	if [ ! -d "$llvmprefix" -o ! -w "$llvmprefix" ]; then
+	    echo "Error: $llvmprefix does not exist or is not user-writable, please create $llvmprefix and make it user-writable"
+	    exit
+	fi
+	# LLVM must be compiled with RRTI, see https://bugs.freedesktop.org/show_bug.cgi?id=90032
+	if [ "$clean" = 1 ]; then
+	    rm -rf llvm-${llvmversion}.src
+	fi
 
-      archsuffix=xz
-      xzcat=xzcat
-      if [ $llvmversion = 3.4.2 ]; then
-	  archsuffix=gz
-	  xzcat="gzip -dc"
-      fi
-      if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
-	  # the llvm we server doesnt' allow continuing partial downloads
-	  curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
-      fi
-      $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
-      cd llvm-${llvmversion}.src
-      cmake_archflags=
-      if [ $llvmversion = 3.4.2 -a "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
-	  if [ "$debug" = 1 ]; then
-	      debugopts="--disable-optimized --enable-debug-symbols --enable-debug-runtime --enable-assertions"
-	  else
-	      debugopts="--enable-optimized --disable-debug-symbols --disable-debug-runtime --disable-assertions"
-	  fi
-          # On Snow Leopard, build universal
-	  # and use configure (as macports does)
-	  # workaround a bug in Apple's shipped gcc driver-driver
-          if [ "$CXX" != clang-mp-3.4 ]; then
-	      echo "static int ___ignoreme;" > tools/llvm-shlib/ignore.c
-	  fi
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
-	      --enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
-              --enable-targets=host --disable-profiling \
-	      --disable-backtraces \
-	      --disable-terminfo \
-	      --disable-zlib \
-	      $debugopts
-	  env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
-      else
-	  cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
-	  cmake_archflags=""
-	  llvm_patches=""
-	  if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
-              # On Snow Leopard, build universal
-	      cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
-	      # Proxy for eliminating the dependency on native TLS
-              # http://trac.macports.org/ticket/46887
-              #cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF" # flag was added to the common flags below, we don't need backtraces anyway
+	archsuffix=xz
+	xzcat=xzcat
+	if [ $llvmversion = 3.4.2 ]; then
+	    archsuffix=gz
+	    xzcat="gzip -dc"
+	fi
+	if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
+	    # the llvm we server doesnt' allow continuing partial downloads
+	    curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
+	fi
+	$xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
+	cd llvm-${llvmversion}.src
+	cmake_archflags=
+	if [ $llvmversion = 3.4.2 -a "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+	    if [ "$debug" = 1 ]; then
+		debugopts="--disable-optimized --enable-debug-symbols --enable-debug-runtime --enable-assertions"
+	    else
+		debugopts="--enable-optimized --disable-debug-symbols --disable-debug-runtime --disable-assertions"
+	    fi
+	    # On Snow Leopard, build universal
+	    # and use configure (as macports does)
+	    # workaround a bug in Apple's shipped gcc driver-driver
+	    if [ "$CXX" != clang-mp-3.4 ]; then
+		echo "static int ___ignoreme;" > tools/llvm-shlib/ignore.c
+	    fi
+	    env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
+		--enable-bindings=none --disable-libffi --disable-shared --enable-static --enable-jit --enable-pic \
+		--enable-targets=host --disable-profiling \
+		--disable-backtraces \
+		--disable-terminfo \
+		--disable-zlib \
+		$debugopts
+	    env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
+	else
+	    cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
+	    cmake_archflags=""
+	    llvm_patches=""
+	    if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+		# On Snow Leopard, build universal
+		cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
+		# Proxy for eliminating the dependency on native TLS
+		# http://trac.macports.org/ticket/46887
+		#cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF" # flag was added to the common flags below, we don't need backtraces anyway
 
-              # https://llvm.org/bugs/show_bug.cgi?id=25680
-              #configure.cxxflags-append -U__STRICT_ANSI__
-	  fi
-          if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-              cmakegen="MSYS Makefiles"
-              #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
-	      cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
-              llvm_patches="msys2_add_pi.patch"
-	  fi
-	  for i in $llvm_patches; do
-	      if [ -f "$srcdir"/patches/llvm-$llvmversion/$i ]; then
-		  echo "* applying patch $i"
-		  patch -p1 -d . < "$srcdir"/patches/llvm-$llvmversion/$i
-	      fi
-	  done
-	  mkdir build
-          cd build
-	  if [ "$debug" = 1 ]; then
-	      debugopts="-DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=ON -DLLVM_INCLUDE_EXAMPLES=ON"
-	  else
-	      debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
-	  fi
+		# https://llvm.org/bugs/show_bug.cgi?id=25680
+		#configure.cxxflags-append -U__STRICT_ANSI__
+	    fi
+	    if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+		cmakegen="MSYS Makefiles"
+		#cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
+		cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
+		llvm_patches="msys2_add_pi.patch"
+	    fi
+	    for i in $llvm_patches; do
+		if [ -f "$srcdir"/patches/llvm-$llvmversion/$i ]; then
+		    echo "* applying patch $i"
+		    patch -p1 -d . < "$srcdir"/patches/llvm-$llvmversion/$i
+		fi
+	    done
+	    mkdir build
+	    cd build
+	    if [ "$debug" = 1 ]; then
+		debugopts="-DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=ON -DLLVM_INCLUDE_EXAMPLES=ON"
+	    else
+		debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
+	    fi
 
-          env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
-	      -DLLVM_TARGETS_TO_BUILD="host" \
-	      -DLLVM_ENABLE_RTTI=ON \
-	      -DLLVM_REQUIRES_RTTI=ON \
-	      -DBUILD_SHARED_LIBS=OFF \
-	      -DBUILD_STATIC_LIBS=ON \
-	      -DLLVM_ENABLE_FFI=OFF \
-	      -DLLVM_BINDINGS_LIST=none \
-	      -DLLVM_ENABLE_PEDANTIC=OFF \
-	      -DLLVM_INCLUDE_TESTS=OFF \
-	      -DLLVM_ENABLE_BACKTRACES=OFF \
-	      -DLLVM_ENABLE_TERMINFO=OFF \
-	      -DLLVM_ENABLE_ZLIB=OFF \
-	      $debugopts $cmake_archflags
-          env REQUIRES_RTTI=1 make -j${mkjobs}
-          make install
-          cd ..
-      fi
-      cd ..
-   fi
-   llvmconfigbinary=
-   if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-       llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
-   else
-       llvmconfigbinary="$llvmprefix/bin/llvm-config"
-   fi
-   if [ ! -x "$llvmconfigbinary" ]; then
-      echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
-      echo " download the LLVM sources from llvm.org, and configure it with:"
-      echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
-      echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
-      exit
-   fi
-   llvmcomponents="engine mcjit"
-   if [ "$debug" = 1 ]; then
-       llvmcomponents="$llvmcomponents mcdisassembler"
-   fi
-   llvmlibs=`"${llvmconfigbinary}" --ldflags --libs $llvmcomponents`
-   if "${llvmconfigbinary}" --help 2>&1 | grep -q system-libs; then
-       llvmlibsadd=`"${llvmconfigbinary}" --system-libs`
-   else
-       # on old llvm, system libs are in the ldflags
-       llvmlibsadd=`"${llvmconfigbinary}" --ldflags`
-   fi
-   llvmlibs="$llvmlibs $llvmlibsadd"
+	    env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+		-DLLVM_TARGETS_TO_BUILD="host" \
+		-DLLVM_ENABLE_RTTI=ON \
+		-DLLVM_REQUIRES_RTTI=ON \
+		-DBUILD_SHARED_LIBS=OFF \
+		-DBUILD_STATIC_LIBS=ON \
+		-DLLVM_ENABLE_FFI=OFF \
+		-DLLVM_BINDINGS_LIST=none \
+		-DLLVM_ENABLE_PEDANTIC=OFF \
+		-DLLVM_INCLUDE_TESTS=OFF \
+		-DLLVM_ENABLE_BACKTRACES=OFF \
+		-DLLVM_ENABLE_TERMINFO=OFF \
+		-DLLVM_ENABLE_ZLIB=OFF \
+		$debugopts $cmake_archflags
+	    env REQUIRES_RTTI=1 make -j${mkjobs}
+	    make install
+	    cd ..
+	fi
+	cd ..
+    fi
+    llvmconfigbinary=
+    if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+	llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
+    else
+	llvmconfigbinary="$llvmprefix/bin/llvm-config"
+    fi
+    if [ ! -x "$llvmconfigbinary" ]; then
+	echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
+	echo " download the LLVM sources from llvm.org, and configure it with:"
+	echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
+	echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
+	exit
+    fi
+    llvmcomponents="engine mcjit"
+    if [ "$debug" = 1 ]; then
+	llvmcomponents="$llvmcomponents mcdisassembler"
+    fi
+    llvmlibs=`"${llvmconfigbinary}" --ldflags --libs $llvmcomponents`
+    if "${llvmconfigbinary}" --help 2>&1 | grep -q system-libs; then
+	llvmlibsadd=`"${llvmconfigbinary}" --system-libs`
+    else
+	# on old llvm, system libs are in the ldflags
+	llvmlibsadd=`"${llvmconfigbinary}" --ldflags`
+    fi
+    llvmlibs="$llvmlibs $llvmlibsadd"
 fi
 
 if [ "$clean" = 1 ]; then
@@ -356,9 +356,9 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     # Windows build uses scons
 
     if [ "$osname" = "MINGW64_NT-6.1" ]; then
-        scons_machine="x86_64"
+	scons_machine="x86_64"
     else
-        scons_machine="x86"
+	scons_machine="x86"
     fi
     scons_cflags="$CFLAGS"
     scons_cxxflags="$CXXFLAGS -std=c++11"
@@ -381,7 +381,7 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     else
 	scons_swr=0
     fi
-    mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig    
+    mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
     env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
     cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
     cp -a include/GL $osmesaprefix/include/ || exit 1
@@ -393,7 +393,7 @@ includedir=\${prefix}/include
 
 Name: osmesa
 Description: Mesa Off-screen Rendering library
-Requires: 
+Requires:
 Version: $mesaversion
 Libs: -L\${libdir} -lOSMesa
 Cflags: -I\${includedir}
@@ -406,9 +406,9 @@ else
 
     ####################################################################
     # Unix builds use configure
-    
+
     test -f Mafefile && make -j${mkjobs} distclean # if in an existing build
-    
+
     autoreconf -fi
 
     confopts="\
@@ -440,48 +440,48 @@ else
     if [ "$osmesadriver" = 1 ]; then
 	# pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
 	confopts="${confopts} \
-         --enable-osmesa \
-         --disable-gallium-osmesa \
-         --disable-gallium-llvm \
-         --with-gallium-drivers= \
+	 --enable-osmesa \
+	 --disable-gallium-osmesa \
+	 --disable-gallium-llvm \
+	 --with-gallium-drivers= \
     "
     elif [ "$osmesadriver" = 2 ]; then
 	# gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
 	confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --disable-gallium-llvm \
-         --with-gallium-drivers=swrast \
+	 --disable-osmesa \
+	 --enable-gallium-osmesa \
+	 --disable-gallium-llvm \
+	 --with-gallium-drivers=swrast \
     "
     elif [ "$osmesadriver" = 3 ]; then
 	# gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
 	confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --enable-gallium-llvm=yes \
-         --with-llvm-prefix=$llvmprefix \
-         --disable-llvm-shared-libs \
-         --with-gallium-drivers=swrast \
+	 --disable-osmesa \
+	 --enable-gallium-osmesa \
+	 --enable-gallium-llvm=yes \
+	 --with-llvm-prefix=$llvmprefix \
+	 --disable-llvm-shared-libs \
+	 --with-gallium-drivers=swrast \
     "
     else
 	# gallium osmesa (swr) OpenGL 3.0, GLSL 1.30
 	confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --with-llvm-prefix=$llvmprefix \
-         --disable-llvm-shared-libs \
-         --with-gallium-drivers=swrast,swr \
+	 --disable-osmesa \
+	 --enable-gallium-osmesa \
+	 --with-llvm-prefix=$llvmprefix \
+	 --disable-llvm-shared-libs \
+	 --with-gallium-drivers=swrast,swr \
     "
     fi
 
     if [ "$debug" = 1 ]; then
 	confopts="${confopts} \
-         --enable-debug"
+	 --enable-debug"
     fi
 
     if [ "$mangled" = 1 ]; then
 	confopts="${confopts} \
-         --enable-mangling"
+	 --enable-mangling"
 	#sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
 	#rm src/mesa/main/remap_helper.h
     fi
@@ -507,7 +507,7 @@ else
     fi
 
     # End of configure-based build
-    ####################################################################    
+    ####################################################################
 fi
 
 cd ..
@@ -530,9 +530,9 @@ env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS
 make -j${mkjobs}
 make install
 if [ "$mangled" = 1 ]; then
-    mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a" 
+    mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a"
     mv "$osmesaprefix/lib/libGLU.la" "$osmesaprefix/lib/libMangledGLU.la"
-    sed -e s/libGLU/libMangledGLU/g -i.bak "$osmesaprefix/lib/libMangledGLU.la" 
+    sed -e s/libGLU/libMangledGLU/g -i.bak "$osmesaprefix/lib/libMangledGLU.la"
     sed -e s/-lGLU/-lMangledGLU/g -i.bak "$osmesaprefix/lib/pkgconfig/glu.pc"
 fi
 
