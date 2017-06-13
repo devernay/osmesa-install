@@ -127,7 +127,7 @@ if [ -z "${CXX:-}" ]; then
 fi
 
 if [ "$osname" = Darwin ]; then
-    if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
+    if [ "$osver" = 10 ]; then
        # On Snow Leopard, build universal
        archs="-arch i386 -arch x86_64"
        CFLAGS="$CFLAGS $archs"
@@ -398,9 +398,9 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     # Windows build uses scons
 
     if [ "$osname" = "MINGW64_NT-6.1" ]; then
-        scons_machine="x86_64"
+	scons_machine="x86_64"
     else
-        scons_machine="x86"
+	scons_machine="x86"
     fi
     scons_cflags="$CFLAGS"
     scons_cxxflags="$CXXFLAGS -std=c++11"
@@ -423,7 +423,7 @@ if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "
     else
         scons_swr=0
     fi
-    mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig    
+    mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
     env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
     cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
     cp -a include/GL $osmesaprefix/include/ || exit 1
@@ -435,7 +435,7 @@ includedir=\${prefix}/include
 
 Name: osmesa
 Description: Mesa Off-screen Rendering library
-Requires: 
+Requires:
 Version: $mesaversion
 Libs: -L\${libdir} -lOSMesa
 Cflags: -I\${includedir}
@@ -448,9 +448,9 @@ else
 
     ####################################################################
     # Unix builds use configure
-    
+
     test -f Mafefile && make -j${mkjobs} distclean # if in an existing build
-    
+
     autoreconf -fi
 
     confopts="\
@@ -569,7 +569,7 @@ else
     fi
 
     # End of configure-based build
-    ####################################################################    
+    ####################################################################
 fi
 
 cd ..
@@ -598,9 +598,9 @@ echo "* installing GLU..."
 make install
 
 if [ "$mangled" = 1 ]; then
-    mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a" 
+    mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a"
     mv "$osmesaprefix/lib/libGLU.la" "$osmesaprefix/lib/libMangledGLU.la"
-    sed -e s/libGLU/libMangledGLU/g -i.bak "$osmesaprefix/lib/libMangledGLU.la" 
+    sed -e s/libGLU/libMangledGLU/g -i.bak "$osmesaprefix/lib/libMangledGLU.la"
     sed -e s/-lGLU/-lMangledGLU/g -i.bak "$osmesaprefix/lib/pkgconfig/glu.pc"
 fi
 
