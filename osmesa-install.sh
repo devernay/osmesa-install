@@ -4,6 +4,7 @@
 # - OSMESA_PREFIX: where to install osmesa (must be writable)
 # - LLVM_PREFIX: where llvm is / should be installed
 # - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
+# - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
@@ -34,8 +35,24 @@ llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm="${LLVM_BUILD:-0}"
 llvmversion="${LLVM_VERSION:-4.0.0}"
+# redirect output and error to log file; exit script on error.
+silentlogging="${SILENT_LOG:-0}"
 osname=`uname`
+if [ "$silentlogging" = 1 ]; then
+    # This script
+    scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
+    scriptname=$(basename ${BASH_SOURCE[0]} .sh)
+    # Exit script on error, redirect output and error to log file. Open log for realtime updates.
+    set -e
+    exec </dev/null &>$scriptdir/$scriptname.log
+fi
 if [ "$osname" = Darwin ]; then
+    # set the minimum MacOSX SDK version
+    osxsdkminver=10.8
+    # SDK root - default is 0.
+    # set the isysroot full path if it is not automatically detected.
+    # e.g. from 0 to -isysroot </path to sdk>
+    osxsdkisysroot="${OSX_SDKROOT:-0}"
     if [ "$osmesadriver" = 4 ]; then
 	#     "swr" (aka OpenSWR) is not supported on macOS,
 	#     https://github.com/OpenSWR/openswr/issues/2
@@ -110,7 +127,7 @@ if [ -z "${CXX:-}" ]; then
 fi
 
 if [ "$osname" = Darwin ]; then
-    if [ `uname -r | awk -F . '{print $1}'` = 10 ]; then
+    if [ "$osver" = 10 ]; then
 	# On Snow Leopard, build universal
 	archs="-arch i386 -arch x86_64"
 	CFLAGS="$CFLAGS $archs"
@@ -133,7 +150,7 @@ fi
 if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     # see also https://wiki.qt.io/Cross_compiling_Mesa_for_Windows
     if [ "$buildllvm" = 1 ]; then
-	if [ ! -d "$llvmprefix" -o ! -w "$llvmprefix" ]; then
+	if [ ! -d "$llvmprefix" ] || [ ! -w "$llvmprefix" ]; then
 	    echo "Error: $llvmprefix does not exist or is not user-writable, please create $llvmprefix and make it user-writable"
 	    exit
 	fi
@@ -148,14 +165,20 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    archsuffix=gz
 	    xzcat="gzip -dc"
 	fi
+	# From Yosemite (14) gunzip can decompress xz files - but only if containing a tar archive.
+       if [ "$osname" = Darwin ] && [ "$osver" -ge 14 ]; then
+            xzcat="gzip -dc"
+        fi
 	if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
+	    echo "* downloading LLVM ${llvmversion}..."
 	    # the llvm we server doesnt' allow continuing partial downloads
 	    curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
 	fi
 	$xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
 	cd llvm-${llvmversion}.src
+	echo "* building LLVM..."
 	cmake_archflags=
-	if [ $llvmversion = 3.4.2 -a "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+	if [ $llvmversion = 3.4.2 ] && [ "$osname" = Darwin ] && [ "$osver" = 10 ]; then
 	    if [ "$debug" = 1 ]; then
 		debugopts="--disable-optimized --enable-debug-symbols --enable-debug-runtime --enable-assertions"
 	    else
@@ -175,11 +198,13 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 		--disable-zlib \
 		$debugopts
 	    env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
+	    echo "* installing LLVM..."
+	    env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make install
 	else
 	    cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
 	    cmake_archflags=""
 	    llvm_patches=""
-	    if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
+	    if [ "$osname" = Darwin ] && [ "$osver" = 10 ]; then
 		# On Snow Leopard, build universal
 		cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
 		# Proxy for eliminating the dependency on native TLS
@@ -189,6 +214,17 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 		# https://llvm.org/bugs/show_bug.cgi?id=25680
 		#configure.cxxflags-append -U__STRICT_ANSI__
 	    fi
+	    
+	    if [ "$osname" = Darwin ] && [ "$osver" -ge 12 ]; then
+		# Redundant - provided for older compilers that do not pass this option to the linker
+		MACOSX_DEPLOYMENT_TARGET="$osxsdkminver"
+		export MACOSX_DEPLOYMENT_TARGET		
+		# Address xcode/cmake error: compiler appears to require libatomic, but cannot find it.
+		cmake_archflags="-DLLVM_ENABLE_LIBCXX=ON"
+		# From Mountain Lion onward. We are only building 64bit arch.
+		cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$osxsdkminver"
+	    fi
+
 	    if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
 		cmakegen="MSYS Makefiles"
 		#cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
@@ -224,7 +260,8 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 		-DLLVM_ENABLE_ZLIB=OFF \
 		$debugopts $cmake_archflags
 	    env REQUIRES_RTTI=1 make -j${mkjobs}
-	    make install
+	    echo "* installing LLVM..."
+	    env REQUIRES_RTTI=1 make install
 	    cd ..
 	fi
 	cd ..
@@ -236,10 +273,16 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	llvmconfigbinary="$llvmprefix/bin/llvm-config"
     fi
     if [ ! -x "$llvmconfigbinary" ]; then
-	echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
-	echo " download the LLVM sources from llvm.org, and configure it with:"
-	echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
-	echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
+	# could not find installation. 
+	if [ "$buildllvm" = 0 ]; then
+	    # advise user to turn on automatic download, build and install option
+	    echo "Error: $llvmconfigbinary does not exist, set script variable buildllvm=\${LLVM_BUILD:-0} from 0 to 1 to automatically download and install llvm."
+	else
+	    echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
+	    echo " download the LLVM sources from llvm.org, and configure it with:"
+	    echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
+	    echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
+	fi
 	exit
     fi
     llvmcomponents="engine mcjit"
@@ -260,11 +303,13 @@ if [ "$clean" = 1 ]; then
     rm -rf "mesa-$mesaversion" "mesa-demos-$demoversion" "glu-$gluversion"
 fi
 
-echo "* downloading Mesa ${mesaversion}..."
-curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz"
+if [ ! -f mesa-${mesaversion}.tar.gz ]; then
+    echo "* downloading Mesa ${mesaversion}..."
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz"
+fi
 tar zxf mesa-${mesaversion}.tar.gz
 
-#download and apply patches from MacPorts
+# apply patches from MacPorts
 
 echo "* applying patches..."
 
@@ -486,6 +531,26 @@ else
 	#rm src/mesa/main/remap_helper.h
     fi
 
+    if [ "$osname" = Darwin ] && [ "$osver" -ge 12 ]; then
+	# Try to automatically get the default OSX SDK root path
+	if [ -x "/usr/bin/xcrun" ]; then
+	    osxsdkisysroot="-isysroot `/usr/bin/xcrun --show-sdk-path -sdk macosx`"
+	elif [ ! "$osxsdkisysroot" = 0 ]; then
+	    echo "Using isysroot SDK path $osxsdkisysroot"
+	else
+	    echo "Error: Could not detect isysroot SDK path."
+	    echo "Manually update this script at 'osxsdkisysroot' or set env variable OSX_SDKROOT before execution." 
+	fi	
+	# Redundant - provided for older compilers that do not pass this option to the linker
+	MACOSX_DEPLOYMENT_TARGET="$osxsdkminver"
+	export MACOSX_DEPLOYMENT_TARGET
+	# From Mountain Lion onward so we are only building 64bit arch.		
+	osxsdkarchs="-arch x86_64"
+	osxsdkversionmin="-mmacosx-version-min=$osxsdkminver"
+	CFLAGS="$CFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
+	CXXFLAGS="$CXXFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
+    fi
+
     env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
     make -j${mkjobs}
@@ -512,9 +577,13 @@ fi
 
 cd ..
 
-curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.bz2"
+if [ ! -f glu-${gluversion}.tar.bz2 ]; then
+    echo "* downloading GLU ${gluversion}..."
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.bz2"
+fi
 tar jxf glu-${gluversion}.tar.bz2
 cd glu-${gluversion}
+echo "* building GLU..."
 confopts="\
     --disable-dependency-tracking \
     --enable-static \
@@ -528,7 +597,10 @@ fi
 
 env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 make -j${mkjobs}
+
+echo "* installing GLU..."
 make install
+
 if [ "$mangled" = 1 ]; then
     mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a"
     mv "$osmesaprefix/lib/libGLU.la" "$osmesaprefix/lib/libMangledGLU.la"
@@ -538,9 +610,14 @@ fi
 
 # build the demo
 cd ..
-curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
+if [ ! -f mesa-demos-${demoversion}.tar.bz2 ]; then
+    echo "* downloading Mesa Demos ${demoversion}..."
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
+fi
 tar jxf mesa-demos-${demoversion}.tar.bz2
+
 cd mesa-demos-${demoversion}/src/osdemos
+echo "* building Mesa Demo..."
 # We need to include gl_mangle.h and glu_mangle.h, because osdemo32.c doesn't include them
 
 INCLUDES="-include $osmesaprefix/include/GL/gl.h -include $osmesaprefix/include/GL/glu.h"
@@ -552,6 +629,11 @@ else
 fi
 if [ -z "${OSDEMO_LD:-}" ]; then
     OSDEMO_LD="$CXX"
+fi
+if [ "$osname" = Darwin ]; then
+    # strange, got 'Undefined symbols for architecture x86_64' without zlib for both llvmpipe and softpipe drivers.
+    # missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
+    LIBS32="$LIBS32 -lz"
 fi
 echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
 $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
