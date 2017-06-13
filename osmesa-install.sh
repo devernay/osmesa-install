@@ -606,7 +606,7 @@ fi
 
 # build the demo
 cd ..
-if [ ! -f glu-${gluversion}.tar.bz2 ]; then
+if [ ! -f mesa-demos-${demoversion}.tar.bz2 ]; then
     echo "* downloading Mesa Demos ${demoversion}..."
     curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
 fi
@@ -625,6 +625,11 @@ else
 fi
 if [ -z "${OSDEMO_LD:-}" ]; then
     OSDEMO_LD="$CXX"
+fi
+if [ "$osname" = Darwin ]; then
+	# strange, got 'Undefined symbols for architecture x86_64' without zlib for both llvmpipe and softpipe drivers.
+	# missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
+	LIBS32="$LIBS32 -lz"
 fi
 echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
 $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
