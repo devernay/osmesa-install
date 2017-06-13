@@ -4,6 +4,7 @@
 # - OSMESA_PREFIX: where to install osmesa (must be writable)
 # - LLVM_PREFIX: where llvm is / should be installed
 # - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
+# - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
@@ -34,6 +35,8 @@ llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm="${LLVM_BUILD:-0}"
 llvmversion="${LLVM_VERSION:-4.0.0}"
+# redirect output and error to log file; exit script on error.
+silentlogging="${SILENT_LOG:-0}"
 # set the minimum MacOSX SDK version
 osxsdkminver=10.8
 # SDK root - default is 0.
@@ -41,6 +44,14 @@ osxsdkminver=10.8
 # e.g. from 0 to -isysroot </path to sdk>
 osxsdkisysroot="${OSX_SDKROOT:-0}"
 osname=`uname`
+if [ "$silentlogging" = 1 ]; then
+	# This script
+	scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
+	scriptname=$(basename ${BASH_SOURCE[0]} .sh)
+	# Exit script on error, redirect output and error to log file. Open log for realtime updates.
+	set -e
+	exec </dev/null &>$scriptdir/$scriptname.log
+fi
 if [ "$osname" = Darwin ]; then
     if [ "$osmesadriver" = 4 ]; then
         #     "swr" (aka OpenSWR) is not supported on macOS,
