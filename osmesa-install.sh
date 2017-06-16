@@ -687,9 +687,11 @@ else
     LIBS32="-lOSMesa32 -lGLU"
 fi
 if [ -z "${OSDEMO_LD:-}" ]; then
-    OSDEMO_LD="$CXX"
+    OSDEMO_LD="$CXX -stdlib=libc++"
 fi
 if [ "$osname" = Darwin ]; then
+	# add -stdlib=libc++ to correct llvm generated Undefined sysbols std::__1::<symbol> for architecture link errors.
+	OSDEMO_LD="$OSDEMO_LD -stdlib=libc++"
 	# strange, got 'Undefined symbols for architecture x86_64' without zlib for both llvmpipe and softpipe drivers.
 	# missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
 	LIBS32="$LIBS32 -lz"
