@@ -48,6 +48,7 @@ osxsdkisysroot="${OSX_SDKROOT:-0}"
 # This script
 scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
 scriptname=$(basename ${BASH_SOURCE[0]} .sh)
+
 osname=`uname`
 if [ "$osname" = Darwin ]; then
     if [ "$osmesadriver" = 4 ]; then
@@ -104,29 +105,40 @@ echooptions(){
 			echo "- also build and install LLVM $llvmversion in $llvmprefix"
 		fi
 	else
-	    echo "Error: osmesadriver must be 1, 2, 3 or 4"
-	    exit
+	    echo "WARNING: invalid value detected for osmesadriver [$osmesadriver]"
+		if [ "$osname" = Darwin ]; then
+			osmesadriver=3
+			echo "         using default option - llvmpipe Gallium renderer [$osmesadriver]"
+		else
+			osmesadriver=4
+			echo "         using default option - swr Gallium renderer [$osmesadriver]"
+		fi
 	fi
 	if [ "$clean" = 1 ]; then
-	    echo "- clean sources"
+		echo "- clean source before rebuild"
+	else
+		echo "- reuse built source at rebuild"
 	fi
-	echo "- CC: $CC"
-	echo "- CXX: $CXX"
-	echo "- CFLAGS: $CFLAGS"
-	echo "- CXXFLAGS: $CXXFLAGS"
-	echo "- Mesa version: $mesaversion"
-	echo "- OSMesa prefix: $osmesaprefix"	
 	if [ "$buildllvm" = 1 ]; then
-		echo "- LLVM version: $llvmversion"
-		echo "- LLVM prefix: $llvmprefix"
+		echo "- build llvm: Yes"
+		echo "- llvm version: $llvmversion"
+		echo "- llvm prefix: $llvmprefix"
+	else
+		echo "- build llvm: No"
 	fi
-	echo "- GLU version: $gluversion"
+	echo "- mesa version: $mesaversion"
+	echo "- osmesa prefix: $osmesaprefix"		
+	echo "- glu version: $gluversion"
 	if [ "$osmame" = Darwin ]; then
 		echo "MacOX SDK minimum version: $osxsdkminver"
 		if [ ! "$osxsdkisysroot" = 0 ]; then
 			echo "- MacOSX isysroot: $osxsdkisysroot"
 		fi
 	fi
+	echo "- CC: $CC"
+	echo "- CXX: $CXX"
+	echo "- CFLAGS: $CFLAGS"
+	echo "- CXXFLAGS: $CXXFLAGS"
 	if [ "$silentlogging" = 1 ]; then
 		echo "- silent logging"
 	else
