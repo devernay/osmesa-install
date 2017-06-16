@@ -37,21 +37,18 @@ buildllvm="${LLVM_BUILD:-0}"
 llvmversion="${LLVM_VERSION:-4.0.0}"
 # redirect output and error to log file; exit script on error.
 silentlogging="${SILENT_LOG:-0}"
+# interactively confirm your selections or just execute
+interactive=1
 # set the minimum MacOSX SDK version
 osxsdkminver=10.8
 # SDK root - default is 0.
 # set the isysroot full path if it is not automatically detected.
 # e.g. from 0 to -isysroot </path to sdk>
 osxsdkisysroot="${OSX_SDKROOT:-0}"
+# This script
+scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
+scriptname=$(basename ${BASH_SOURCE[0]} .sh)
 osname=`uname`
-if [ "$silentlogging" = 1 ]; then
-	# This script
-	scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
-	scriptname=$(basename ${BASH_SOURCE[0]} .sh)
-	# Exit script on error, redirect output and error to log file. Open log for realtime updates.
-	set -e
-	exec </dev/null &>$scriptdir/$scriptname.log
-fi
 if [ "$osname" = Darwin ]; then
     if [ "$osmesadriver" = 4 ]; then
         #     "swr" (aka OpenSWR) is not supported on macOS,
@@ -74,43 +71,88 @@ if [ "$osname" = Darwin ]; then
     fi
 fi
 
+# functions
+logquietly(){
+	# Exit script on error, redirect output and error to log file. Open log for realtime updates.
+	set -e
+	exec </dev/null &>$scriptdir/$scriptname.log
+}
+echooptions(){
+	echo "Mesa buid options:"
+	if [ "$debug" = 1 ]; then
+	    echo "- debug build"
+	else
+	    echo "- release, non-debug build"
+	fi
+	if [ "$mangled" = 1 ]; then
+	    echo "- mangled (all function names start with mgl instead of gl)"
+	else
+	    echo "- non-mangled"
+	fi
+	if [ "$osmesadriver" = 1 ]; then
+	    echo "- classic osmesa software renderer"
+	elif [ "$osmesadriver" = 2 ]; then
+		echo "- softpipe Gallium renderer"
+	elif [ "$osmesadriver" = 3 ]; then
+		echo "- llvmpipe Gallium renderer"
+		if [ "$buildllvm" = 1 ]; then
+			echo "- also build and install LLVM $llvmversion in $llvmprefix"
+		fi
+	elif [ "$osmesadriver" = 4 ]; then
+		echo "- swr Gallium renderer"
+		if [ "$buildllvm" = 1 ]; then
+			echo "- also build and install LLVM $llvmversion in $llvmprefix"
+		fi
+	else
+	    echo "Error: osmesadriver must be 1, 2, 3 or 4"
+	    exit
+	fi
+	if [ "$clean" = 1 ]; then
+	    echo "- clean sources"
+	fi
+	echo "- CC: $CC"
+	echo "- CXX: $CXX"
+	echo "- CFLAGS: $CFLAGS"
+	echo "- CXXFLAGS: $CXXFLAGS"
+	echo "- Mesa version: $mesaversion"
+	echo "- OSMesa prefix: $osmesaprefix"	
+	if [ "$buildllvm" = 1 ]; then
+		echo "- LLVM version: $llvmversion"
+		echo "- LLVM prefix: $llvmprefix"
+	fi
+	echo "- GLU version: $gluversion"
+	if [ "$osmame" = Darwin ]; then
+		echo "MacOX SDK minimum version: $osxsdkminver"
+		if [ ! "$osxsdkisysroot" = 0 ]; then
+			echo "- MacOSX isysroot: $osxsdkisysroot"
+		fi
+	fi
+	if [ "$silentlogging" = 1 ]; then
+		echo "- silent logging"
+	else
+		echo "- no logging"
+	fi
+}
+confirmoptions() {
+	echo "Enter n to exit or any key to continue."
+	read -n 1 -p "Do you want to continue with these options? :" "input"
+	if [ "$input" = "n" ] || [ "$input" = "N" ]; then
+		echo "\nYou have exited the script."
+		exit
+	else
+		if [ "$silentlogging" = 1 ]; then
+			clear
+			echo "\nProcessing..."
+			echo "- Log: $scriptdir/$scriptname.log"
+		else
+			echo "\nProcessing..."
+		fi
+	fi
+}
+
 # tell curl to continue downloads and follow redirects
 curlopts="-L -C -"
 srcdir=`dirname $0`
-
-echo "Mesa buid options:"
-if [ "$debug" = 1 ]; then
-    echo "- debug"
-else
-    echo "- release, non-debug"
-fi
-if [ "$mangled" = 1 ]; then
-    echo "- mangled (all function names start with mgl instead of gl)"
-else
-    echo "- non-mangled"
-fi
-
-if [ "$osmesadriver" = 1 ]; then
-    echo "- classic osmesa software renderer"
-elif [ "$osmesadriver" = 2 ]; then
-    echo "- softpipe Gallium renderer"
-elif [ "$osmesadriver" = 3 ]; then
-    echo "- llvmpipe Gallium renderer"
-    if [ "$buildllvm" = 1 ]; then
-        echo "- also build and install LLVM $llvmversion in $llvmprefix"
-    fi
-elif [ "$osmesadriver" = 4 ]; then
-    echo "- swr Gallium renderer"
-    if [ "$buildllvm" = 1 ]; then
-        echo "- also build and install LLVM $llvmversion in $llvmprefix"
-    fi
-else
-    echo "Error: osmesadriver must be 1, 2, 3 or 4"
-    exit
-fi
-if [ "$clean" = 1 ]; then
-    echo "- clean sources"
-fi
 
 if [ "$debug" = 1 ]; then
     CFLAGS="${CFLAGS:--g}"
@@ -126,6 +168,15 @@ if [ -z "${CXX:-}" ]; then
     CXX=g++
 fi
 
+# Confirm your options
+if [ "$interactive" = 1 ]; then
+	echooptions
+	confirmoptions
+fi
+if [ "$silentlogging" = 1 ]; then
+	logquietly
+	echooptions
+fi
 if [ "$osname" = Darwin ]; then
     if [ "$osver" = 10 ]; then
        # On Snow Leopard, build universal
