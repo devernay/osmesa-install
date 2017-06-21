@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
 # environment variables used by this script:
 # - OSMESA_PREFIX: where to install osmesa (must be writable)
