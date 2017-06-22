@@ -45,10 +45,24 @@ osxsdkminver=10.8
 # set the isysroot full path if it is not automatically detected.
 # e.g. from 0 to -isysroot </path to sdk>
 osxsdkisysroot="${OSX_SDKROOT:-0}"
-# This script
+# this script
 scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
 scriptname=$(basename ${BASH_SOURCE[0]} .sh)
+# increment log file name
+f="$scriptdir/$scriptname"
+ext=".log"
+if [[ -e "$f" ]] ; then
+    i=1
+    f="${f%.*}";
+    while [[ -e "${f}_${i}${ext}" ]]; do
+        let i++
+    done
+    f="${f}_${i}${ext}"
+fi
+# output log
+logfile="$f"
 
+# what platform
 osname=`uname`
 if [ "$osname" = Darwin ]; then
     if [ "$osmesadriver" = 4 ]; then
@@ -73,12 +87,12 @@ if [ "$osname" = Darwin ]; then
 fi
 
 # functions
-logquietly(){
+logquietly() {
 	# Exit script on error, redirect output and error to log file. Open log for realtime updates.
 	set -e
-	exec </dev/null &>$scriptdir/$scriptname.log
+	exec </dev/null &>$logfile
 }
-echooptions(){
+echooptions() {
 	echo "Mesa buid options:"
 	if [ "$debug" = 1 ]; then
 	    echo "- debug build"
@@ -141,23 +155,26 @@ echooptions(){
 	echo "- CXXFLAGS: $CXXFLAGS"
 	if [ "$silentlogging" = 1 ]; then
 		echo "- silent logging"
+		echo "- log file: $logfile"
 	else
 		echo "- no logging"
 	fi
 }
 confirmoptions() {
+	echo
 	echo "Enter n to exit or any key to continue."
-	read -n 1 -p "Do you want to continue with these options? :" "input"
+	read -n 1 -p "Do you want to continue with these options? : " input
+	echo
 	if [ "$input" = "n" ] || [ "$input" = "N" ]; then
-		echo "\nYou have exited the script."
+		echo "You have exited the script."
 		exit
 	else
 		if [ "$silentlogging" = 1 ]; then
 			clear
-			echo "\nProcessing..."
-			echo "- Log: $scriptdir/$scriptname.log"
+			echo "Processing..."
+			echo "- Log File: $logfile"
 		else
-			echo "\nProcessing..."
+			echo "Processing..."
 		fi
 	fi
 }
@@ -704,6 +721,9 @@ $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo
 exit
 
 # Useful information:
+#
+# To avoid costly delays, be sure zlib is installed
+# for example on Ubuntu: sudo apt-get install zlib1g-dev
 # Configuring osmesa 9.2.2:
 # http://www.paraview.org/Wiki/ParaView/ParaView_And_Mesa_3D#OSMesa.2C_Mesa_without_graphics_hardware
 
