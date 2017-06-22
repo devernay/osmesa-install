@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+# capture elapsed time - reset BASH time counter
+SECONDS=0
 # this script
 scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
 scriptname=$(basename ${BASH_SOURCE[0]} .sh)
@@ -735,9 +737,11 @@ if [ "$osname" = Darwin ]; then
 fi
 echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
 $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
+# image test result is file image.tga
 ./osdemo32 image.tga
-# result is in image.tga
-
+# elapsed scrpt execution time
+ELAPSED="Elapsed: $(($SECONDS / 3600))hrs $((($SECONDS / 60) % 60))min $(($SECONDS % 60))sec"
+echo "$scriptname ran to completeion. Time $ELAPSED"
 exit
 
 # Useful information:
