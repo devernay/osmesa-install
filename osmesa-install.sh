@@ -1,5 +1,26 @@
 #!/bin/bash -e
 
+# this script
+scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
+scriptname=$(basename ${BASH_SOURCE[0]} .sh)
+# get script path: credit: https://stackoverflow.com/questions/59895/getting-the-source-directory-of-a-bash-script-from-within/179231#179231
+scriptpath="${BASH_SOURCE[0]}";
+if ([ -h "${scriptpath}" ]) then
+  while([ -h "${scriptpath}" ]) do scriptpath=`readlink "${scriptpath}"`; done
+fi
+pushd . > /dev/null
+cd `dirname ${scriptpath}` > /dev/null
+scriptpath=`pwd`;
+popd  > /dev/null
+# confirm if script is being run from its location
+if [ "$scriptpath" == "$PWD" ]; then 
+	echo "CRITICAL: Do not run this script from its location!"
+	echo "          Create and enter a subdirectory, then run."
+	echo "            $ mkdir build; cd build"
+	echo "            $ ../$scriptname.sh"
+	exit
+fi 
+
 # environment variables used by this script:
 # - OSMESA_PREFIX: where to install osmesa (must be writable)
 # - LLVM_PREFIX: where llvm is / should be installed
@@ -45,9 +66,6 @@ osxsdkminver=10.8
 # set the isysroot full path if it is not automatically detected.
 # e.g. from 0 to -isysroot </path to sdk>
 osxsdkisysroot="${OSX_SDKROOT:-0}"
-# this script
-scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
-scriptname=$(basename ${BASH_SOURCE[0]} .sh)
 # increment log file name
 f="$scriptdir/$scriptname"
 ext=".log"
