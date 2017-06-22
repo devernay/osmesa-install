@@ -69,13 +69,15 @@ osxsdkisysroot="${OSX_SDKROOT:-0}"
 # increment log file name
 f="$scriptdir/$scriptname"
 ext=".log"
-if [[ -e "$f" ]] ; then
+if [[ -e "$f$ext" ]] ; then
     i=1
     f="${f%.*}";
     while [[ -e "${f}_${i}${ext}" ]]; do
         let i++
     done
     f="${f}_${i}${ext}"
+else
+   f="${f}${ext}"
 fi
 # output log
 logfile="$f"
