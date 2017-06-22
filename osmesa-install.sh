@@ -722,7 +722,7 @@ else
     LIBS32="-lOSMesa32 -lGLU"
 fi
 if [ -z "${OSDEMO_LD:-}" ]; then
-    OSDEMO_LD="$CXX -stdlib=libc++"
+    OSDEMO_LD="$CXX"
 fi
 if [ "$osname" = Darwin ]; then
 	# add -stdlib=libc++ to correct llvm generated Undefined sysbols std::__1::<symbol> for architecture link errors.
