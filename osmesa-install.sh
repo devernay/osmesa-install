@@ -115,7 +115,7 @@ logquietly() {
 	exec </dev/null &>$logfile
 }
 echooptions() {
-	echo "Mesa buid options:"
+	echo "Mesa build options:"
 	if [ "$debug" = 1 ]; then
 	    echo "- debug build"
 	else
@@ -743,7 +743,7 @@ $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo
 ./osdemo32 image.tga
 # elapsed scrpt execution time
 ELAPSED="Elapsed: $(($SECONDS / 3600))hrs $((($SECONDS / 60) % 60))min $(($SECONDS % 60))sec"
-echo "$scriptname ran to completeion. Time $ELAPSED"
+echo "$scriptname ran to completion. Time $ELAPSED"
 exit
 
 # Useful information:
