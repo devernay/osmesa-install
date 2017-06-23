@@ -27,6 +27,7 @@ fi
 # - OSMESA_PREFIX: where to install osmesa (must be writable)
 # - LLVM_PREFIX: where llvm is / should be installed
 # - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
+# - IGNORE_DEMO: ignore running the MESA demo (0/1, 0 by default)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 
 # prefix to the osmesa installation
@@ -62,6 +63,8 @@ llvmversion="${LLVM_VERSION:-4.0.0}"
 silentlogging="${SILENT_LOG:-0}"
 # interactively confirm your selections or just execute
 interactive=1
+# ignore running the demo - if dev env is just enough to cmpile libraries
+ignoredemo=="${IGNORE_DEMO:-1}"
 # set the minimum MacOSX SDK version
 osxsdkminver=10.8
 # SDK root - default is 0.
@@ -171,6 +174,11 @@ echooptions() {
 			echo "- MacOSX isysroot: $osxsdkisysroot"
 		fi
 	fi
+    if [ "$ignoredemo" = 1 ]; then
+        echo "- exectue osmesa demo: No"
+    else
+        echo "- execute osmesa demo: Yes"
+    fi
 	echo "- CC: $CC"
 	echo "- CXX: $CXX"
 	echo "- CFLAGS: $CFLAGS"
@@ -706,41 +714,46 @@ if [ "$mangled" = 1 ]; then
     sed -e s/-lGLU/-lMangledGLU/g -i.bak "$osmesaprefix/lib/pkgconfig/glu.pc"
 fi
 
-# build the demo
-cd ..
-if [ ! -f mesa-demos-${demoversion}.tar.bz2 ]; then
-    echo "* downloading Mesa Demos ${demoversion}..."
-    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
-fi
-tar jxf mesa-demos-${demoversion}.tar.bz2
 
-cd mesa-demos-${demoversion}/src/osdemos
-echo "* building Mesa Demo..."
-# We need to include gl_mangle.h and glu_mangle.h, because osdemo32.c doesn't include them
+if [ "$ignoredemo" = 0]; then
 
-INCLUDES="-include $osmesaprefix/include/GL/gl.h -include $osmesaprefix/include/GL/glu.h"
-if [ "$mangled" = 1 ]; then
-    INCLUDES="-include $osmesaprefix/include/GL/gl_mangle.h -include $osmesaprefix/include/GL/glu_mangle.h $INCLUDES"
-    LIBS32="-lMangledOSMesa32 -lMangledGLU"
-else
-    LIBS32="-lOSMesa32 -lGLU"
-fi
-if [ -z "${OSDEMO_LD:-}" ]; then
-    OSDEMO_LD="$CXX"
-fi
-if [ "$osname" = Darwin ]; then
-	# add -stdlib=libc++ to correct llvm generated Undefined sysbols std::__1::<symbol> for architecture link errors.
-	OSDEMO_LD="$OSDEMO_LD -stdlib=libc++"
-fi
-# strange, got 'Undefined symbols for architecture x86_64' on MacOSX and without zlib for both llvmpipe and softpipe drivers.
-# also got 'undefined reference' to [the same missing symbols] on Linux - so I moved -lz here from the Darwin condition.
-# missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
-LIBS32="$LIBS32 -lz"
+    # build the demo
+    
+    cd ..
+    if [ ! -f mesa-demos-${demoversion}.tar.bz2 ]; then
+        echo "* downloading Mesa Demos ${demoversion}..."
+        curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
+    fi
+    tar jxf mesa-demos-${demoversion}.tar.bz2
 
-echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
-$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
-# image test result is file image.tga
-./osdemo32 image.tga
+    cd mesa-demos-${demoversion}/src/osdemos
+    echo "* building Mesa Demo..."
+    # We need to include gl_mangle.h and glu_mangle.h, because osdemo32.c doesn't include them
+
+    INCLUDES="-include $osmesaprefix/include/GL/gl.h -include $osmesaprefix/include/GL/glu.h"
+    if [ "$mangled" = 1 ]; then
+        INCLUDES="-include $osmesaprefix/include/GL/gl_mangle.h -include $osmesaprefix/include/GL/glu_mangle.h $INCLUDES"
+        LIBS32="-lMangledOSMesa32 -lMangledGLU"
+    else
+        LIBS32="-lOSMesa32 -lGLU"
+    fi
+    if [ -z "${OSDEMO_LD:-}" ]; then
+        OSDEMO_LD="$CXX"
+    fi
+    if [ "$osname" = Darwin ]; then
+    	# add -stdlib=libc++ to correct llvm generated Undefined sysbols std::__1::<symbol> for architecture link errors.
+    	OSDEMO_LD="$OSDEMO_LD -stdlib=libc++"
+    fi
+    # strange, got 'Undefined symbols for architecture x86_64' on MacOSX and without zlib for both llvmpipe and softpipe drivers.
+    # also got 'undefined reference' to [the same missing symbols] on Linux - so I moved -lz here from the Darwin condition.
+    # missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
+    LIBS32="$LIBS32 -lz"
+
+    echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
+    $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
+    # image test result is file image.tga
+    ./osdemo32 image.tga
+fi
 # elapsed scrpt execution time
 ELAPSED="Elapsed: $(($SECONDS / 3600))hrs $((($SECONDS / 60) % 60))min $(($SECONDS % 60))sec"
 echo "$scriptname ran to completion. Time $ELAPSED"
