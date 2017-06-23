@@ -64,7 +64,7 @@ silentlogging="${SILENT_LOG:-0}"
 # interactively confirm your selections or just execute
 interactive=1
 # ignore running the demo - if dev env is just enough to cmpile libraries
-ignoredemo=="${IGNORE_DEMO:-1}"
+ignoredemo="${IGNORE_DEMO:-1}"
 # set the minimum MacOSX SDK version
 osxsdkminver=10.8
 # SDK root - default is 0.
@@ -191,7 +191,7 @@ echooptions() {
 		fi
 	fi
     if [ "$ignoredemo" = 1 ]; then
-        echo "- exectue osmesa demo: No"
+        echo "- execute osmesa demo: No"
     else
         echo "- execute osmesa demo: Yes"
     fi
