@@ -89,6 +89,7 @@ logfile="$f"
 # which os platform
 osname=`uname`
 # MacOS particulars
+origosmesadriver="$osmesadriver"
 if [ "$osname" = Darwin ]; then
     if [ "$osmesadriver" = 4 ]; then
         #     "swr" (aka OpenSWR) is not supported on macOS,
@@ -145,6 +146,8 @@ echooptions() {
 		echo "- softpipe Gallium renderer"
 	elif [ "$osmesadriver" = 3 ]; then
 		echo "- llvmpipe Gallium renderer"
+        if [ "$osmesadriver" -ne "$origosmesadriver" ]; then
+            echo "- Note: renderer changed; swr is not supported on MacOS"
 		if [ "$buildllvm" = 1 ]; then
 			echo "- also build and install LLVM $llvmversion in $llvmprefix"
 		fi
