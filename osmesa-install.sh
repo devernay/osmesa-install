@@ -205,9 +205,9 @@ echooptions() {
 	else
 		echo "- no logging"
 	fi
-    echo
 }
 confirmoptions() {
+    echo
 	echo "Enter n to exit or any key to continue."
 	read -n 1 -p "Do you want to continue with these options? : " input
 	echo
@@ -299,6 +299,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         if [ "$osname" = Darwin ] && [ `uname -r | awk -F . '{print $1}'` -gt 13 ]; then
             xzcat="gunzip -dc"
         fi
+
+        echo "* extracting LLVM..."
+
         $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
         cd llvm-${llvmversion}.src
 		
@@ -390,6 +393,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             cd ..
         fi
         cd ..
+        # elapsed llvm build time
+        ELAPSED_LLVM="Elapsed: $(($SECONDS / 3600))hrs $((($SECONDS / 60) % 60))min $(($SECONDS % 60))sec"
+        echo "* Library llvm-${llvmversion} build and install completed. Time $ELAPSED_LLVM"
     fi
     llvmconfigbinary=
     if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
@@ -433,6 +439,9 @@ if [ ! -f mesa-${mesaversion}.tar.gz ]; then
     echo "* downloading Mesa ${mesaversion}..."
     curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz"
 fi
+
+echo "* extracting Mesa..."
+
 tar zxf mesa-${mesaversion}.tar.gz
 
 # apply patches from MacPorts
@@ -700,11 +709,22 @@ else
     ####################################################################
 fi
 
+# elapsed mesa build time
+if [ "$buildllvm" = 1 ]; then
+    SECONDS_MESA=$(($SECONDS - $ELAPSED_LLVM))
+    ELAPSED_MESA="Elapsed: $(($SECONDS_MESA / 3600))hrs $((($SECONDS_MESA / 60) % 60))min $(($SECONDS_MESA % 60))sec"
+    echo "* Library mesa-${mesaversion} build and install completed. Time $ELAPSED_MESA"
+else 
+    ELAPSED_MESA="Elapsed: $(($SECONDS / 3600))hrs $((($SECONDS / 60) % 60))min $(($SECONDS % 60))sec"
+    echo "* Library mesa-${mesaversion} build and install completed. Time $ELAPSED_MESA"
+fi
+
 cd ..
 if [ ! -f glu-${gluversion}.tar.bz2 ]; then
     echo "* downloading GLU ${gluversion}..."
     curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.bz2"
 fi
+echo "* extracting GLU..."
 tar jxf glu-${gluversion}.tar.bz2
 cd glu-${gluversion}
 echo "* building GLU..."
@@ -732,6 +752,10 @@ if [ "$mangled" = 1 ]; then
     sed -e s/-lGLU/-lMangledGLU/g -i.bak "$osmesaprefix/lib/pkgconfig/glu.pc"
 fi
 
+# elapsed glu execution time
+SECONDS_GLU=$(($SECONDS - $ELAPSED_MESA))
+ELAPSED_GLU="Elapsed: $(($SECONDS_GLU / 3600))hrs $((($SECONDS_GLU / 60) % 60))min $(($SECONDS_GLU % 60))sec"
+echo "* Library glu-${gluversion} build and install completed. Time $ELAPSED_GLU"
 
 if [ "$ignoredemo" = 0]; then
 
@@ -742,10 +766,11 @@ if [ "$ignoredemo" = 0]; then
         echo "* downloading Mesa Demos ${demoversion}..."
         curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
     fi
+    echo "* extracting Mesa demo..."
     tar jxf mesa-demos-${demoversion}.tar.bz2
 
     cd mesa-demos-${demoversion}/src/osdemos
-    echo "* building Mesa Demo..."
+    echo "* building Mesa demo..."
     # We need to include gl_mangle.h and glu_mangle.h, because osdemo32.c doesn't include them
 
     INCLUDES="-include $osmesaprefix/include/GL/gl.h -include $osmesaprefix/include/GL/glu.h"
@@ -771,10 +796,15 @@ if [ "$ignoredemo" = 0]; then
     $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
     # image test result is file image.tga
     ./osdemo32 image.tga
+
+    # elapsed glu execution time
+    SECONDS_DEMO=$(($SECONDS - $ELAPSED_GLU))
+    ELAPSED_DEMO="Elapsed: $(($SECONDS_DEMO / 3600))hrs $((($SECONDS_DEMO / 60) % 60))min $(($SECONDS_DEMO % 60))sec"
+    echo "* Demo mesa-demos-${demoversion} build and execution completed. Time $ELAPSED_DEMO"
 fi
 # elapsed scrpt execution time
 ELAPSED="Elapsed: $(($SECONDS / 3600))hrs $((($SECONDS / 60) % 60))min $(($SECONDS % 60))sec"
-echo "$scriptname ran to completion. Time $ELAPSED"
+echo "* Done!. $scriptname ran to completion. Time $ELAPSED"
 exit
 
 # Useful information:
