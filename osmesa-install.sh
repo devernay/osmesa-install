@@ -86,9 +86,9 @@ else
 fi
 # output log
 logfile="$f"
-
-# what platform
+# which os platform
 osname=`uname`
+# MacOS particulars
 if [ "$osname" = Darwin ]; then
     if [ "$osmesadriver" = 4 ]; then
         #     "swr" (aka OpenSWR) is not supported on macOS,
@@ -110,6 +110,16 @@ if [ "$osname" = Darwin ]; then
         fi
     fi
 fi
+# MSYS particulars
+osprefix=`echo $osname | cut -c1-5`
+mingwarch=`echo $osname | cut -c6-7`
+# Do not build clang (LLVM) 4.0.0 if platform is 32bit mingw64 due to the following gcc bug
+# http://lists.llvm.org/pipermail/cfe-dev/2016-December/052017.html
+# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78936
+origllvmversion="$llvmversion"
+if [ "$buildllvm" = 1 ] && [ "$llvmversion" = 4.0.0 ] && [ "$osprefix" = MINGW ] && [ "$mingwarch" = 32 ]; then
+    llvmversion=3.9.1
+fi
 
 # functions
 logquietly() {
@@ -118,7 +128,7 @@ logquietly() {
 	exec </dev/null &>$logfile
 }
 echooptions() {
-	echo "Mesa build options:"
+	echo "Mesa build options for platform $osname:"
 	if [ "$debug" = 1 ]; then
 	    echo "- debug build"
 	else
@@ -162,6 +172,9 @@ echooptions() {
 		echo "- build llvm: Yes"
 		echo "- llvm version: $llvmversion"
 		echo "- llvm prefix: $llvmprefix"
+        if [ "$llvmversion" -ne "$origllvmversion" ]; then
+            "- Note: llvm (clang) version changed; version $llvmversion fails to build on $osname"
+        fi
 	else
 		echo "- build llvm: No"
 	fi
@@ -189,9 +202,9 @@ echooptions() {
 	else
 		echo "- no logging"
 	fi
+    echo
 }
 confirmoptions() {
-	echo
 	echo "Enter n to exit or any key to continue."
 	read -n 1 -p "Do you want to continue with these options? : " input
 	echo
@@ -312,7 +325,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             echo "* installing LLVM..."
             make install
          else
-            cmakegen="Unix Makefiles" # can be "MSYS Makefiles" on MSYS
+            cmakegen="Unix Makefiles" # will set to "MSYS Makefiles" on MSYS
             cmake_archflags=""
             llvm_patches=""
             if [ "$osname" = Darwin -a `uname -r | awk -F . '{print $1}'` = 10 ]; then
@@ -333,7 +346,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 # From Mountain Lion onward. We are only building 64bit arch.
                 cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$osxsdkminver"
             fi  
-            if [ "$osname" = "Msys" ] || [ "$osname" = "MSYS_NT-10.0" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+            if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
                 cmakegen="MSYS Makefiles"
                 #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
                 cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
@@ -376,7 +389,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         cd ..
     fi
     llvmconfigbinary=
-    if [ "$osname" = "Msys" ] || [ "$osname" = "MSYS_NT-10.0" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+    if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
         llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
     else
         llvmconfigbinary="$llvmprefix/bin/llvm-config"
@@ -459,7 +472,7 @@ if [ "$mangled" = 1 ]; then
 fi
 
 # mingw-specific patches (for maintainability, prefer putting everything in the main patch list)
-#if [ "$osname" = "Msys" ] || [ "$osname" = "MSYS_NT-10.0" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+#if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
 #    PATCHES="$PATCHES "
 #fi
 
@@ -504,15 +517,15 @@ sed -i.bak -e 's/MANGLE/MANGLE_disabled/' src/mapi/glapi/glapi_getproc.c
 
 echo "* building Mesa..."
 
-if [ "$osname" = "Msys" ] || [ "$osname" = "MSYS_NT-10.0" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
 
     ####################################################################
     # Windows build uses scons
 
-    if [ "$osname" = "MINGW64_NT-6.1" ]; then
-	scons_machine="x86_64"
+    if [ "$mingwarch" = 64 ]; then
+        scons_machine="x86_64"
     else
-	scons_machine="x86"
+        scons_machine="x86"
     fi
     scons_cflags="$CFLAGS"
     scons_cxxflags="$CXXFLAGS -std=c++11"
