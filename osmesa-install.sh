@@ -333,7 +333,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 # From Mountain Lion onward. We are only building 64bit arch.
                 cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$osxsdkminver"
             fi  
-            if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+            if [ "$osname" = "Msys" ] || [ "$osname" = "MSYS_NT-10.0" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
                 cmakegen="MSYS Makefiles"
                 #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
                 cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
@@ -374,7 +374,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         cd ..
     fi
     llvmconfigbinary=
-    if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+    if [ "$osname" = "Msys" ] || [ "$osname" = "MSYS_NT-10.0" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
         llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
     else
         llvmconfigbinary="$llvmprefix/bin/llvm-config"
@@ -457,7 +457,7 @@ if [ "$mangled" = 1 ]; then
 fi
 
 # mingw-specific patches (for maintainability, prefer putting everything in the main patch list)
-#if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+#if [ "$osname" = "Msys" ] || [ "$osname" = "MSYS_NT-10.0" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
 #    PATCHES="$PATCHES "
 #fi
 
@@ -502,7 +502,7 @@ sed -i.bak -e 's/MANGLE/MANGLE_disabled/' src/mapi/glapi/glapi_getproc.c
 
 echo "* building Mesa..."
 
-if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+if [ "$osname" = "Msys" ] || [ "$osname" = "MSYS_NT-10.0" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
 
     ####################################################################
     # Windows build uses scons
