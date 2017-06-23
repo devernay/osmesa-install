@@ -345,7 +345,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 patch -p1 -d . < "$srcdir"/patches/llvm-$llvmversion/$i
                 fi
             done
-            mkdir build
+            if [ ! -d build ]; then
+                mkdir build
+            fi
             cd build
             if [ "$debug" = 1 ]; then
                 debugopts="-DCMAKE_BUILD_TYPE=Debug -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INCLUDE_TESTS=ON -DLLVM_INCLUDE_EXAMPLES=ON"
