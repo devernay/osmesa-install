@@ -146,11 +146,12 @@ echooptions() {
 		echo "- softpipe Gallium renderer"
 	elif [ "$osmesadriver" = 3 ]; then
 		echo "- llvmpipe Gallium renderer"
-        if [ "$osmesadriver" -ne "$origosmesadriver" ]; then
-            echo "- Note: renderer changed; swr is not supported on MacOS"
 		if [ "$buildllvm" = 1 ]; then
 			echo "- also build and install LLVM $llvmversion in $llvmprefix"
 		fi
+        if [ "$osmesadriver" -ne "$origosmesadriver" ]; then
+            echo "- Note: renderer changed; swr is not supported on MacOS"
+        fi        
 	elif [ "$osmesadriver" = 4 ]; then
 		echo "- swr Gallium renderer"
 		if [ "$buildllvm" = 1 ]; then
@@ -175,7 +176,7 @@ echooptions() {
 		echo "- build llvm: Yes"
 		echo "- llvm version: $llvmversion"
 		echo "- llvm prefix: $llvmprefix"
-        if [ "$llvmversion" -ne "$origllvmversion" ]; then
+        if [ "$llvmversion" != "$origllvmversion" ]; then
             "- Note: llvm (clang) version changed; version $llvmversion fails to build on $osname"
         fi
 	else
