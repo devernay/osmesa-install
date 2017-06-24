@@ -71,6 +71,8 @@ osxsdkminver=10.8
 # set the isysroot full path if it is not automatically detected.
 # e.g. from 0 to -isysroot </path to sdk>
 osxsdkisysroot="${OSX_SDKROOT:-0}"
+# build non-native libs - build 32bit libs on 64bit dev env and vice versa (not applicable to MacOS)
+buildnonnativearch=0
 # increment log file name
 f="$scriptdir/$scriptname"
 ext=".log"
@@ -86,8 +88,18 @@ else
 fi
 # output log
 logfile="$f"
-# which os platform
+# which OS platform
 osname=`uname`
+# which OS architecture
+osprefix=`echo $osname | cut -c1-5`
+if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
+    # valid values: 64, 32; not using `uname -m` because it gives x86_64 for both 32 and 64bit mingw dev env
+    nativearch=`echo $osname | cut -c6-7`
+else
+    # valid values: x86_64, i386
+    nativearch=`uname -m`
+fi
+
 # MacOS particulars
 origosmesadriver="$osmesadriver"
 if [ "$osname" = Darwin ]; then
@@ -112,13 +124,11 @@ if [ "$osname" = Darwin ]; then
     fi
 fi
 # MSYS particulars
-osprefix=`echo $osname | cut -c1-5`
-mingwarch=`echo $osname | cut -c6-7`
 # Do not build clang (LLVM) 4.0.0 if platform is 32bit mingw64 due to the following gcc bug
 # http://lists.llvm.org/pipermail/cfe-dev/2016-December/052017.html
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78936
 origllvmversion="$llvmversion"
-if [ "$buildllvm" = 1 ] && [ "$llvmversion" = 4.0.0 ] && [ "$osprefix" = MINGW ] && [ "$mingwarch" = 32 ]; then
+if [ "$buildllvm" = 1 ] && [ "$llvmversion" = 4.0.0 ] && [ "$osprefix" = MINGW ] && [ "$nativearch" = 32 ]; then
     llvmversion=3.9.1
 fi
 
@@ -140,6 +150,13 @@ echooptions() {
 	else
 	    echo "- non-mangled"
 	fi
+    if [ "$buildnonnativearch" = 1 ] && [ "$osname" != Darwin ]; then
+        if [ "$nativearch" = x86_64 ] || [ "$nativearch" = 64 ]; then
+            echo "- build 32bit (non-native) libraries"
+        else
+            echo "- build 64bit (non-native) libraries"
+        fi
+    fi
 	if [ "$osmesadriver" = 1 ]; then
 	    echo "- classic osmesa software renderer"
 	elif [ "$osmesadriver" = 2 ]; then
@@ -243,16 +260,6 @@ fi
 if [ -z "${CXX:-}" ]; then
     CXX=g++
 fi
-
-# Confirm your options
-if [ "$interactive" = 1 ]; then
-	echooptions
-	confirmoptions
-fi
-if [ "$silentlogging" = 1 ]; then
-	logquietly
-	echooptions
-fi
 if [ "$osname" = Darwin ]; then
     if [ "$osver" = 10 ]; then
        # On Snow Leopard, build universal
@@ -263,6 +270,25 @@ if [ "$osname" = Darwin ]; then
        #CC=clang-mp-3.4
        #CXX=clang++-mp-3.4
     fi
+fi
+if [ "$buildnonnativearch" = 1 ] && [ "$osname" != Darwin ]; then
+    if [ "$nativearch" = x86_64 ]; then
+        CFLAGS="$CFLAGS -m32"
+        CXXFLAGS="$CXXFLAGS -m32"
+    else
+        CFLAGS="$CFLAGS -m64"
+        CXXFLAGS="$CXXFLAGS -m64"
+    fi
+fi
+
+# Confirm your options
+if [ "$interactive" = 1 ]; then
+    echooptions
+    confirmoptions
+fi
+if [ "$silentlogging" = 1 ]; then
+    logquietly
+    echooptions
 fi
 
 # On MacPorts, building Mesa requires the following packages:
@@ -535,11 +561,20 @@ if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
     ####################################################################
     # Windows build uses scons
 
-    if [ "$mingwarch" = 64 ]; then
-        scons_machine="x86_64"
-    else
-        scons_machine="x86"
+    if [ "$buildnonnativearch" = 1 ]; then
+        if [ "$nativearch" = 64 ]; then
+            scons_machine="x86"
+        else
+            scons_machine="x86_64"
+        fi
+    else 
+        if [ "$nativearch" = 64 ]; then
+            scons_machine="x86_64"
+        else
+            scons_machine="x86"
+        fi
     fi
+
     scons_cflags="$CFLAGS"
     scons_cxxflags="$CXXFLAGS -std=c++11"
     scons_ldflags="-static -s"
