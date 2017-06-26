@@ -9,7 +9,7 @@
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.1.2}"
+mesaversion="${OSMESA_VERSION:-17.1.3}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -47,12 +47,13 @@ if [ "$silentlogging" = 1 ]; then
     exec </dev/null &>$scriptdir/$scriptname.log
 fi
 if [ "$osname" = Darwin ]; then
-    # set the minimum MacOSX SDK version
-    osxsdkminver=10.8
-    # SDK root - default is 0.
-    # set the isysroot full path if it is not automatically detected.
-    # e.g. from 0 to -isysroot </path to sdk>
-    osxsdkisysroot="${OSX_SDKROOT:-0}"
+    # Note: the macOS deployment target (used eg for option -mmacosx-version-min=10.<X>) is set
+    # in the script from the MACOSX_DEPLOYMENT_TARGET environment variable.
+    # To set it from the command-line, use e.g. "env MACOSX_DEPLOYMENT_TARGET=10.8 ../osmesa-install.sh"
+
+    # Similarly, the SDK root can be set using the SDKROOT environment variable, as in
+    # "env MACOSX_DEPLOYMENT_TARGET=10.8 SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.12.sdk ../osmesa-install.sh"
+
     if [ "$osmesadriver" = 4 ]; then
         #     "swr" (aka OpenSWR) is not supported on macOS,
         #     https://github.com/OpenSWR/openswr/issues/2
@@ -112,6 +113,13 @@ if [ "$clean" = 1 ]; then
     echo "- clean sources"
 fi
 
+if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
+    echo "- compile for deployment on macOS $MACOSX_DEPLOYMENT_TARGET (mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET)"
+fi
+if [ -n "${SDKROOT+x}" ]; then
+    echo "- OSX SDK root is $SDKROOT"
+fi
+
 if [ "$debug" = 1 ]; then
     CFLAGS="${CFLAGS:--g}"
 else
@@ -127,8 +135,19 @@ if [ -z "${CXX:-}" ]; then
 fi
 
 if [ "$osname" = Darwin ]; then
+    # Possible $osver values:
+    # 9: Mac OS X 10.5 Leopard
+    # 10: Mac OS X 10.6 Snow Leopard
+    # 11: Mac OS X 10.7 Lion
+    # 12: OS X 10.8 Mountain Lion
+    # 13: OS X 10.9 Mavericks
+    # 14: OS X 10.10 Yosemite
+    # 15: OS X 10.11 El Capitan
+    # 16: macOS 10.12 Sierra
+    # 17: macOS 10.13 High Sierra
+    
     if [ "$osver" = 10 ]; then
-        # On Snow Leopard, build universal
+        # On Snow Leopard (10.6), build universal
         archs="-arch i386 -arch x86_64"
         CFLAGS="$CFLAGS $archs"
         CXXFLAGS="$CXXFLAGS $archs"
@@ -136,6 +155,14 @@ if [ "$osname" = Darwin ]; then
         #CC=clang-mp-3.4
         #CXX=clang++-mp-3.4
     fi
+    XCODE_VER=$(xcodebuild -version | head -n 1 | sed -e 's/Xcode //')
+    case "$XCODE_VER" in
+	4.2*|5.*|6.*|7.*|8.*)
+            # clang became the default compiler on Xcode 4.2
+	    CC=clang
+	    CXX=clang++
+	    ;;
+    esac
 fi
 
 # On MacPorts, building Mesa requires the following packages:
@@ -186,7 +213,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             # On Snow Leopard, build universal
             # and use configure (as macports does)
             # workaround a bug in Apple's shipped gcc driver-driver
-            if [ "$CXX" != clang-mp-3.4 ]; then
+            if [ "$CXX" = "g++" ]; then
                 echo "static int ___ignoreme;" > tools/llvm-shlib/ignore.c
             fi
             env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" ./configure --prefix="$llvmprefix" \
@@ -214,14 +241,22 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 #configure.cxxflags-append -U__STRICT_ANSI__
             fi
 
-            if [ "$osname" = Darwin ] && [ "$osver" -ge 12 ]; then
+            if [ "$osname" = Darwin ]; then
                 # Redundant - provided for older compilers that do not pass this option to the linker
-                MACOSX_DEPLOYMENT_TARGET="$osxsdkminver"
-                export MACOSX_DEPLOYMENT_TARGET
                 # Address xcode/cmake error: compiler appears to require libatomic, but cannot find it.
                 cmake_archflags="-DLLVM_ENABLE_LIBCXX=ON"
-                # From Mountain Lion onward. We are only building 64bit arch.
-                cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$osxsdkminver"
+		if [ "$osver" -ge 12 ]; then
+                    # From Mountain Lion onward. We are only building 64bit arch.
+                    cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64"
+		fi
+		# https://cmake.org/cmake/help/v3.0/variable/CMAKE_OSX_DEPLOYMENT_TARGET.html
+		if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
+		    cmake_archflags="$cmake_archflags -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
+		fi
+		# https://cmake.org/cmake/help/v3.0/variable/CMAKE_OSX_SYSROOT.html
+		if [ -n "${SDKROOT+x}" ]; then
+		    cmake_archflags="$cmake_archflags -DCMAKE_OSX_SYSROOT=$SDKROOT"
+		fi
             fi
 
             if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
@@ -530,24 +565,23 @@ else
         #rm src/mesa/main/remap_helper.h
     fi
 
-    if [ "$osname" = Darwin ] && [ "$osver" -ge 12 ]; then
-        # Try to automatically get the default OSX SDK root path
-        if [ -x "/usr/bin/xcrun" ]; then
-            osxsdkisysroot="-isysroot `/usr/bin/xcrun --show-sdk-path -sdk macosx`"
-        elif [ ! "$osxsdkisysroot" = 0 ]; then
-            echo "Using isysroot SDK path $osxsdkisysroot"
-        else
-            echo "Error: Could not detect isysroot SDK path."
-            echo "Manually update this script at 'osxsdkisysroot' or set env variable OSX_SDKROOT before execution."
+    if [ "$osname" = Darwin ]; then
+	osxflags=""
+	if [ "$osver" -ge 12 ]; then
+            # From Mountain Lion onward so we are only building 64bit arch.
+            osxflags="$osxflags -arch x86_64"
         fi
-        # Redundant - provided for older compilers that do not pass this option to the linker
-        MACOSX_DEPLOYMENT_TARGET="$osxsdkminver"
-        export MACOSX_DEPLOYMENT_TARGET
-        # From Mountain Lion onward so we are only building 64bit arch.
-        osxsdkarchs="-arch x86_64"
-        osxsdkversionmin="-mmacosx-version-min=$osxsdkminver"
-        CFLAGS="$CFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
-        CXXFLAGS="$CXXFLAGS $osxsdkarchs $osxsdkversionmin $osxsdkisysroot"
+	if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
+	    osxflags="$osxflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+	fi
+	if [ -n "${SDKROOT+x}" ]; then
+	    osxflags="$osxflags -isysroot $SDKROOT"
+	fi
+
+        if [ -n "$osxflags" ]; then
+	    CFLAGS="$CFLAGS $osxflags"
+            CXXFLAGS="$CXXFLAGS $osxflags"
+	fi
     fi
 
     env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
