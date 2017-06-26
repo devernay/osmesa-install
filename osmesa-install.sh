@@ -29,6 +29,8 @@ fi
 # - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
 # - IGNORE_DEMO: ignore running the MESA demo (0/1, 0 by default)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
+# - MACOSX_DEPLOYMENT_TARGET: minimun MacOSX SDK version (10.8 by default)
+# - OSX_SDKSYSROOT: specify the location or name of OSX SDK (0/<user defined>, 0 by default)
 
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
@@ -66,11 +68,11 @@ interactive=1
 # ignore running the demo - if dev env is just enough to cmpile libraries
 ignoredemo="${IGNORE_DEMO:-1}"
 # set the minimum MacOSX SDK version
-osxsdkminver=10.8
+osxsdkminver="${MACOSX_DEPLOYMENT_TARGET:-10.8}"
 # SDK root - default is 0.
 # set the isysroot full path if it is not automatically detected.
 # e.g. from 0 to -isysroot </path to sdk>
-osxsdkisysroot="${OSX_SDKROOT:-0}"
+osxsdkisysroot="${OSX_SDKSYSROOT:-0}"
 # build non-native libs - build 32bit libs on 64bit dev env and vice versa (not applicable to MacOS)
 buildnonnativearch=0
 # increment log file name
@@ -205,8 +207,8 @@ echooptions() {
 	echo "- glu version: $gluversion"
 	if [ "$osmame" = Darwin ]; then
 		echo "MacOX SDK minimum version: $osxsdkminver"
-		if [ ! "$osxsdkisysroot" = 0 ]; then
-			echo "- MacOSX isysroot: $osxsdkisysroot"
+		if [ "$osxsdkisysroot" != 0 ]; then
+			echo "- user defined MacOSX isysroot: $osxsdkisysroot"
 		fi
 	fi
     if [ "$ignoredemo" = 1 ]; then
@@ -406,6 +408,10 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 cmake_archflags="-DLLVM_ENABLE_LIBCXX=ON" 
                 # From Mountain Lion onward. We are only building 64bit arch.
                 cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$osxsdkminver"
+                # User defined SDK sys root
+                if [ "$osxsdkisysroot" != 0 ]; then
+                	cmake_archflags="$cmake_archflags -DCMAKE_OSX_SYSROOT=$osxsdkisysroot"
+                fi
             fi  
             if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
                 cmakegen="MSYS Makefiles"
@@ -730,15 +736,16 @@ else
     fi
 
     if [ "$osname" = Darwin ] && [ `uname -r | awk -F . '{print $1}'` -gt 11 ]; then
-        # Try to automatically get the default OSX SDK root path
-        if [ -x "/usr/bin/xcrun" ]; then
-            osxsdkisysroot="-isysroot `/usr/bin/xcrun --show-sdk-path -sdk macosx`"
-        elif [ ! "$osxsdkisysroot" = 0 ]; then
-            echo "Using isysroot SDK path $osxsdkisysroot"
+    	# First check if user defined OSX SKD root exist
+    	if [ "$osxsdkisysroot" != 0 ]; then
+    		echo "* using user-defined isysroot SDK at $osxsdkisysroot"
+        # If not, try to automatically get the default OSX SDK root path
+        elif [ -x "/usr/bin/xcrun" ]; then
+            osxsdkisysroot="-isysroot `/usr/bin/xcrun --show-sdk-path -sdk macosx`"            
         else
             echo "Error: Could not detect isysroot SDK path."
             echo "Manually update this script at 'osxsdkisysroot' \
-                  or set env variable OSX_SDKROOT before execution." 
+                  or set env variable OSX_SDKSYSROOT before execution." 
         fi
         # Redundant - provided for older compilers that do not pass this option to the linker
         env MACOSX_DEPLOYMENT_TARGET=$osxsdkminver
