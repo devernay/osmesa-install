@@ -157,11 +157,11 @@ if [ "$osname" = Darwin ]; then
     fi
     XCODE_VER=$(xcodebuild -version | head -n 1 | sed -e 's/Xcode //')
     case "$XCODE_VER" in
-	4.2*|5.*|6.*|7.*|8.*)
+        4.2*|5.*|6.*|7.*|8.*)
             # clang became the default compiler on Xcode 4.2
-	    CC=clang
-	    CXX=clang++
-	    ;;
+            CC=clang
+            CXX=clang++
+            ;;
     esac
 fi
 
@@ -245,26 +245,28 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 # Redundant - provided for older compilers that do not pass this option to the linker
                 # Address xcode/cmake error: compiler appears to require libatomic, but cannot find it.
                 cmake_archflags="-DLLVM_ENABLE_LIBCXX=ON"
-		if [ "$osver" -ge 12 ]; then
+                if [ "$osver" -ge 12 ]; then
                     # From Mountain Lion onward. We are only building 64bit arch.
                     cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64"
-		fi
-		# https://cmake.org/cmake/help/v3.0/variable/CMAKE_OSX_DEPLOYMENT_TARGET.html
-		if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
-		    cmake_archflags="$cmake_archflags -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
-		fi
-		# https://cmake.org/cmake/help/v3.0/variable/CMAKE_OSX_SYSROOT.html
-		if [ -n "${SDKROOT+x}" ]; then
-		    cmake_archflags="$cmake_archflags -DCMAKE_OSX_SYSROOT=$SDKROOT"
-		fi
+                fi
+                # https://cmake.org/cmake/help/v3.0/variable/CMAKE_OSX_DEPLOYMENT_TARGET.html
+                if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
+                    cmake_archflags="$cmake_archflags -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
+                fi
+                # https://cmake.org/cmake/help/v3.0/variable/CMAKE_OSX_SYSROOT.html
+                if [ -n "${SDKROOT+x}" ]; then
+                    cmake_archflags="$cmake_archflags -DCMAKE_OSX_SYSROOT=$SDKROOT"
+                fi
             fi
 
-            if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-                cmakegen="MSYS Makefiles"
-                #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
-                cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
-                llvm_patches="msys2_add_pi.patch"
-            fi
+            case "$osname" in
+                 Msys*|MSYS*|MINGW*)
+                     cmakegen="MSYS Makefiles"
+                     #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
+                     cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
+                     llvm_patches="msys2_add_pi.patch"
+                     ;;
+            esac
             for i in $llvm_patches; do
                 if [ -f "$srcdir"/patches/llvm-$llvmversion/$i ]; then
                     echo "* applying patch $i"
@@ -301,11 +303,14 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         cd ..
     fi
     llvmconfigbinary=
-    if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-        llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
-    else
-        llvmconfigbinary="$llvmprefix/bin/llvm-config"
-    fi
+    case "$osname" in
+        Msys*|MSYS*|MINGW*)
+            llvmconfigbinary="$llvmprefix/bin/llvm-config.exe"
+            ;;
+        *)
+            llvmconfigbinary="$llvmprefix/bin/llvm-config"
+            ;;
+    esac
     # Check if llvm installed
     if [ ! -x "$llvmconfigbinary" ]; then
         # could not find installation.
@@ -429,42 +434,43 @@ sed -i.bak -e 's/MANGLE/MANGLE_disabled/' src/mapi/glapi/glapi_getproc.c
 
 echo "* building Mesa..."
 
-if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
+case "$osname" in
+    Msys*|MSYS*|MINGW*)
 
-    ####################################################################
-    # Windows build uses scons
+        ####################################################################
+        # Windows build uses scons
 
-    if [ "$osname" = "MINGW64_NT-6.1" ]; then
-        scons_machine="x86_64"
-    else
-        scons_machine="x86"
-    fi
-    scons_cflags="$CFLAGS"
-    scons_cxxflags="$CXXFLAGS -std=c++11"
-    scons_ldflags="-static -s"
-    if [ "$mangled" = 1 ]; then
-        scons_cflags="-DUSE_MGL_NAMESPACE"
-    fi
-    if [ "$debug" = 1 ]; then
-        scons_build="debug"
-    else
-        scons_build="release"
-    fi
-    if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
-        scons_llvm=yes
-    else
-        scons_llvm=no
-    fi
-    if [ "$osmesadriver" = 4 ]; then
-        scons_swr=1
-    else
-        scons_swr=0
-    fi
-    mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
-    env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
-    cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
-    cp -a include/GL $osmesaprefix/include/ || exit 1
-    cat <<EOF > $osmesaprefix/lib/pkgconfig/osmesa.pc
+        if [ "$osname" = "MINGW64_NT-6.1" ]; then
+            scons_machine="x86_64"
+        else
+            scons_machine="x86"
+        fi
+        scons_cflags="$CFLAGS"
+        scons_cxxflags="$CXXFLAGS -std=c++11"
+        scons_ldflags="-static -s"
+        if [ "$mangled" = 1 ]; then
+            scons_cflags="-DUSE_MGL_NAMESPACE"
+        fi
+        if [ "$debug" = 1 ]; then
+            scons_build="debug"
+        else
+            scons_build="release"
+        fi
+        if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
+            scons_llvm=yes
+        else
+            scons_llvm=no
+        fi
+        if [ "$osmesadriver" = 4 ]; then
+            scons_swr=1
+        else
+            scons_swr=0
+        fi
+        mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
+        env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
+        cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
+        cp -a include/GL $osmesaprefix/include/ || exit 1
+        cat <<EOF > $osmesaprefix/lib/pkgconfig/osmesa.pc
 prefix=${osmesaprefix}
 exec_prefix=\${prefix}
 libdir=\${exec_prefix}/lib
@@ -477,136 +483,138 @@ Version: $mesaversion
 Libs: -L\${libdir} -lOSMesa
 Cflags: -I\${includedir}
 EOF
-    cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc
+        cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc
 
-    # end of SCons build
-    ####################################################################
-else
+        # end of SCons build
+        ####################################################################
+        ;;
+    *)
 
-    ####################################################################
-    # Unix builds use configure
+        ####################################################################
+        # Unix builds use configure
 
-    test -f Mafefile && make -j${mkjobs} distclean # if in an existing build
+        test -f Mafefile && make -j${mkjobs} distclean # if in an existing build
 
-    autoreconf -fi
+        autoreconf -fi
 
-    confopts="\
-    --disable-dependency-tracking \
-    --enable-static \
-    --disable-shared \
-    --enable-texture-float \
-    --disable-gles1 \
-    --disable-gles2 \
-    --disable-dri \
-    --disable-dri3 \
-    --disable-glx \
-    --disable-glx-tls \
-    --disable-egl \
-    --disable-gbm \
-    --disable-xvmc \
-    --disable-vdpau \
-    --disable-omx \
-    --disable-va \
-    --disable-opencl \
-    --disable-shared-glapi \
-    --disable-driglx-direct \
-    --with-dri-drivers= \
-    --with-osmesa-bits=32 \
-    --with-egl-platforms= \
-    --prefix=$osmesaprefix \
-    "
+        confopts="\
+            --disable-dependency-tracking \
+            --enable-static \
+            --disable-shared \
+            --enable-texture-float \
+            --disable-gles1 \
+            --disable-gles2 \
+            --disable-dri \
+            --disable-dri3 \
+            --disable-glx \
+            --disable-glx-tls \
+            --disable-egl \
+            --disable-gbm \
+            --disable-xvmc \
+            --disable-vdpau \
+            --disable-omx \
+            --disable-va \
+            --disable-opencl \
+            --disable-shared-glapi \
+            --disable-driglx-direct \
+            --with-dri-drivers= \
+            --with-osmesa-bits=32 \
+            --with-egl-platforms= \
+            --prefix=$osmesaprefix \
+            "
 
-    if [ "$osmesadriver" = 1 ]; then
-        # pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
-        confopts="${confopts} \
-         --enable-osmesa \
-         --disable-gallium-osmesa \
-         --disable-gallium-llvm \
-         --with-gallium-drivers= \
-    "
-    elif [ "$osmesadriver" = 2 ]; then
-        # gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
-        confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --disable-gallium-llvm \
-         --with-gallium-drivers=swrast \
-    "
-    elif [ "$osmesadriver" = 3 ]; then
-        # gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
-        confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --enable-gallium-llvm=yes \
-         --with-llvm-prefix=$llvmprefix \
-         --disable-llvm-shared-libs \
-         --with-gallium-drivers=swrast \
-    "
-    else
-        # gallium osmesa (swr) OpenGL 3.0, GLSL 1.30
-        confopts="${confopts} \
-         --disable-osmesa \
-         --enable-gallium-osmesa \
-         --with-llvm-prefix=$llvmprefix \
-         --disable-llvm-shared-libs \
-         --with-gallium-drivers=swrast,swr \
-    "
-    fi
-
-    if [ "$debug" = 1 ]; then
-        confopts="${confopts} \
-         --enable-debug"
-    fi
-
-    if [ "$mangled" = 1 ]; then
-        confopts="${confopts} \
-         --enable-mangling"
-        #sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
-        #rm src/mesa/main/remap_helper.h
-    fi
-
-    if [ "$osname" = Darwin ]; then
-	osxflags=""
-	if [ "$osver" -ge 12 ]; then
-            # From Mountain Lion onward so we are only building 64bit arch.
-            osxflags="$osxflags -arch x86_64"
+        if [ "$osmesadriver" = 1 ]; then
+            # pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
+            confopts="${confopts} \
+                 --enable-osmesa \
+                 --disable-gallium-osmesa \
+                 --disable-gallium-llvm \
+                 --with-gallium-drivers= \
+            "
+        elif [ "$osmesadriver" = 2 ]; then
+            # gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
+            confopts="${confopts} \
+                 --disable-osmesa \
+                 --enable-gallium-osmesa \
+                 --disable-gallium-llvm \
+                 --with-gallium-drivers=swrast \
+            "
+        elif [ "$osmesadriver" = 3 ]; then
+            # gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
+            confopts="${confopts} \
+                 --disable-osmesa \
+                 --enable-gallium-osmesa \
+                 --enable-gallium-llvm=yes \
+                 --with-llvm-prefix=$llvmprefix \
+                 --disable-llvm-shared-libs \
+                 --with-gallium-drivers=swrast \
+            "
+        else
+            # gallium osmesa (swr) OpenGL 3.0, GLSL 1.30
+            confopts="${confopts} \
+                 --disable-osmesa \
+                 --enable-gallium-osmesa \
+                 --with-llvm-prefix=$llvmprefix \
+                 --disable-llvm-shared-libs \
+                 --with-gallium-drivers=swrast,swr \
+            "
         fi
-	if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
-	    osxflags="$osxflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
-	fi
-	if [ -n "${SDKROOT+x}" ]; then
-	    osxflags="$osxflags -isysroot $SDKROOT"
-	fi
 
-        if [ -n "$osxflags" ]; then
-	    CFLAGS="$CFLAGS $osxflags"
-            CXXFLAGS="$CXXFLAGS $osxflags"
-	fi
-    fi
+        if [ "$debug" = 1 ]; then
+            confopts="${confopts} \
+                 --enable-debug"
+        fi
 
-    env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
+        if [ "$mangled" = 1 ]; then
+            confopts="${confopts} \
+                 --enable-mangling"
+            #sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
+            #rm src/mesa/main/remap_helper.h
+        fi
 
-    make -j${mkjobs}
+        if [ "$osname" = Darwin ]; then
+            osxflags=""
+            if [ "$osver" -ge 12 ]; then
+                # From Mountain Lion onward so we are only building 64bit arch.
+                osxflags="$osxflags -arch x86_64"
+            fi
+            if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
+                osxflags="$osxflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+            fi
+            if [ -n "${SDKROOT+x}" ]; then
+                osxflags="$osxflags -isysroot $SDKROOT"
+            fi
 
-    echo "* installing Mesa..."
-    make install
+            if [ -n "$osxflags" ]; then
+                CFLAGS="$CFLAGS $osxflags"
+                CXXFLAGS="$CXXFLAGS $osxflags"
+            fi
+        fi
 
-    if [ "$osname" = Darwin ]; then
-        # fix the following error:
-        #Undefined symbols for architecture x86_64:
-        #  "_lp_dummy_tile", referenced from:
-        #      _lp_rast_create in libMangledOSMesa32.a(lp_rast.o)
-        #      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
-        #ld: symbol(s) not found for architecture x86_64
-        #clang: error: linker command failed with exit code 1 (use -v to see invocation)
-        for f in $osmesaprefix/lib/lib*.a; do
-            ranlib -c $f
-        done
-    fi
+        env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
-    # End of configure-based build
-    ####################################################################
-fi
+        make -j${mkjobs}
+
+        echo "* installing Mesa..."
+        make install
+
+        if [ "$osname" = Darwin ]; then
+            # fix the following error:
+            #Undefined symbols for architecture x86_64:
+            #  "_lp_dummy_tile", referenced from:
+            #      _lp_rast_create in libMangledOSMesa32.a(lp_rast.o)
+            #      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
+            #ld: symbol(s) not found for architecture x86_64
+            #clang: error: linker command failed with exit code 1 (use -v to see invocation)
+            for f in $osmesaprefix/lib/lib*.a; do
+                ranlib -c $f
+            done
+        fi
+
+        # End of configure-based build
+        ####################################################################
+        ;;
+esac
 
 cd ..
 
