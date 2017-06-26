@@ -37,14 +37,14 @@ buildllvm="${LLVM_BUILD:-0}"
 llvmversion="${LLVM_VERSION:-4.0.0}"
 # redirect output and error to log file; exit script on error.
 silentlogging="${SILENT_LOG:-0}"
-osname=`uname`
+osname=$(uname)
 if [ "$silentlogging" = 1 ]; then
     # This script
-    scriptdir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
-    scriptname=$(basename ${BASH_SOURCE[0]} .sh)
+    scriptdir=$(cd "$(dirname "${BASH_SOURCE[0]}")"; pwd)
+    scriptname=$(basename "${BASH_SOURCE[0]}" .sh)
     # Exit script on error, redirect output and error to log file. Open log for realtime updates.
     set -e
-    exec </dev/null &>$scriptdir/$scriptname.log
+    exec </dev/null &>"$scriptdir/$scriptname.log"
 fi
 if [ "$osname" = Darwin ]; then
     # Note: the macOS deployment target (used eg for option -mmacosx-version-min=10.<X>) is set
@@ -60,7 +60,7 @@ if [ "$osname" = Darwin ]; then
         #     https://github.com/OpenSWR/openswr-mesa/issues/11
         osmesadriver=3
     fi
-    osver=`uname -r | awk -F . '{print $1}'`
+    osver=$(uname -r | awk -F . '{print $1}')
     if [ "$osver" = 10 ]; then
         # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
@@ -69,7 +69,7 @@ if [ "$osname" = Darwin ]; then
             CC=clang-mp-4.0
             CXX=clang++-mp-4.0
             OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
-        elif [ -z ${LLVM_VERSION+x} ]; then
+        elif [ -z "${LLVM_VERSION+x}" ]; then
             llvmversion=3.4.2
         fi
     fi
@@ -77,7 +77,7 @@ fi
 
 # tell curl to continue downloads and follow redirects
 curlopts="-L -C -"
-srcdir=`dirname $0`
+srcdir="$scriptdir"
 
 echo "Mesa buid options:"
 if [ "$debug" = 1 ]; then
@@ -169,7 +169,7 @@ fi
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
 
 llvmlibs=
-if [ ! -d "$osmesaprefix" -o ! -w "$osmesaprefix" ]; then
+if [ ! -d "$osmesaprefix" ] || [ ! -w "$osmesaprefix" ]; then
     echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
     exit
 fi
@@ -223,7 +223,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 --disable-terminfo \
                 --disable-zlib \
                 $debugopts
-            env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j${mkjobs} install
+            env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make -j"${mkjobs}" install
             echo "* installing LLVM..."
             env REQUIRES_RTTI=1 UNIVERSAL=1 UNIVERSAL_ARCH="i386 x86_64" make install
         else
@@ -281,7 +281,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
             fi
 
-            env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX=${llvmprefix} \
+            env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX="${llvmprefix}" \
                 -DLLVM_TARGETS_TO_BUILD="host" \
                 -DLLVM_ENABLE_RTTI=ON \
                 -DLLVM_REQUIRES_RTTI=ON \
@@ -295,7 +295,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 -DLLVM_ENABLE_TERMINFO=OFF \
                 -DLLVM_ENABLE_ZLIB=OFF \
                 $debugopts $cmake_archflags
-            env REQUIRES_RTTI=1 make -j${mkjobs}
+            env REQUIRES_RTTI=1 make -j"${mkjobs}"
             echo "* installing LLVM..."
             env REQUIRES_RTTI=1 make install
             cd ..
@@ -329,12 +329,12 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     if [ "$debug" = 1 ]; then
         llvmcomponents="$llvmcomponents mcdisassembler"
     fi
-    llvmlibs=`"${llvmconfigbinary}" --ldflags --libs $llvmcomponents`
+    llvmlibs=$("${llvmconfigbinary}" --ldflags --libs $llvmcomponents)
     if "${llvmconfigbinary}" --help 2>&1 | grep -q system-libs; then
-        llvmlibsadd=`"${llvmconfigbinary}" --system-libs`
+        llvmlibsadd=$("${llvmconfigbinary}" --system-libs)
     else
         # on old llvm, system libs are in the ldflags
-        llvmlibsadd=`"${llvmconfigbinary}" --ldflags`
+        llvmlibsadd=$("${llvmconfigbinary}" --ldflags)
     fi
     llvmlibs="$llvmlibs $llvmlibsadd"
 fi
@@ -343,11 +343,11 @@ if [ "$clean" = 1 ]; then
     rm -rf "mesa-$mesaversion" "mesa-demos-$demoversion" "glu-$gluversion"
 fi
 
-if [ ! -f mesa-${mesaversion}.tar.gz ]; then
+if [ ! -f "mesa-${mesaversion}.tar.gz" ]; then
     echo "* downloading Mesa ${mesaversion}..."
     curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz"
 fi
-tar zxf mesa-${mesaversion}.tar.gz
+tar zxf "mesa-${mesaversion}.tar.gz"
 
 # apply patches from MacPorts
 
@@ -409,13 +409,13 @@ if [ "$osname" = Darwin ]; then
 fi
 
 for i in $PATCHES; do
-    if [ -f "$srcdir"/patches/mesa-$mesaversion/$i ]; then
+    if [ -f "$srcdir/patches/mesa-$mesaversion/$i" ]; then
         echo "* applying patch $i"
-        patch -p1 -d mesa-${mesaversion} < "$srcdir"/patches/mesa-$mesaversion/$i
+        patch -p1 -d "mesa-${mesaversion}" < "$srcdir/patches/mesa-$mesaversion/$i"
     fi
 done
 
-cd mesa-${mesaversion}
+cd "mesa-${mesaversion}"
 
 echo "* fixing gl_mangle.h..."
 # edit include/GL/gl_mangle.h, add ../GLES*/gl[0-9]*.h to the "files" variable and change GLAPI in the grep line to GL_API
@@ -466,11 +466,11 @@ case "$osname" in
         else
             scons_swr=0
         fi
-        mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
+        mkdir -p "$osmesaprefix/include" "$osmesaprefix/lib/pkgconfig"
         env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
-        cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
-        cp -a include/GL $osmesaprefix/include/ || exit 1
-        cat <<EOF > $osmesaprefix/lib/pkgconfig/osmesa.pc
+        cp "build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll" "$osmesaprefix/lib/"
+        cp -a "include/GL" "$osmesaprefix/include/" || exit 1
+        cat <<EOF > "$osmesaprefix/lib/pkgconfig/osmesa.pc"
 prefix=${osmesaprefix}
 exec_prefix=\${prefix}
 libdir=\${exec_prefix}/lib
@@ -493,7 +493,7 @@ EOF
         ####################################################################
         # Unix builds use configure
 
-        test -f Mafefile && make -j${mkjobs} distclean # if in an existing build
+        test -f Mafefile && make -j"${mkjobs}" distclean # if in an existing build
 
         autoreconf -fi
 
@@ -593,7 +593,7 @@ EOF
 
         env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
-        make -j${mkjobs}
+        make -j"${mkjobs}"
 
         echo "* installing Mesa..."
         make install
@@ -606,8 +606,8 @@ EOF
             #      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
             #ld: symbol(s) not found for architecture x86_64
             #clang: error: linker command failed with exit code 1 (use -v to see invocation)
-            for f in $osmesaprefix/lib/lib*.a; do
-                ranlib -c $f
+            for f in "$osmesaprefix/lib/"lib*.a; do
+                ranlib -c "$f"
             done
         fi
 
@@ -637,7 +637,7 @@ if [ "$mangled" = 1 ]; then
 fi
 
 env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
-make -j${mkjobs}
+make -j"${mkjobs}"
 
 echo "* installing GLU..."
 make install
