@@ -139,6 +139,7 @@ logquietly() {
 	exec </dev/null &>$logfile
 }
 echooptions() {
+	# Echo and capture useful details about the build - helpful when reviewing the log file.
 	echo "Mesa build options for platform $osname:"
 	if [ "$debug" = 1 ]; then
 	    echo "- debug build"
@@ -217,6 +218,31 @@ echooptions() {
 	echo "- CXX: $CXX"
 	echo "- CFLAGS: $CFLAGS"
 	echo "- CXXFLAGS: $CXXFLAGS"
+	if [ "$osprefix" != MSYS ] && [ "$osprefix" != MINGW ]; then
+		gccversion=`gcc -dumpversion`
+		echo "- gcc version $gccversion"
+		cmakeversion=`cmake --version | sed -n '1p' | cut -d' ' -f 3`
+		echo "- cmake version $cmakeversion"
+		autoconfversion=`autoconf --version | sed -n '1p' | cut -d' ' -f 4`
+		echo "- autoconf version $autoconfversion"	
+	else
+		msysversion=`pacman -Q -s msys | sed -n '1p' | cut -d' ' -f 2`
+		echo "- msys version $msysversion"
+		mingwversion=`pacman -Q -s mingw | sed -n '1p' | cut -d' ' -f 2`
+		echo "- mingw version $mingwversion"
+		gccversion=`pacman -Q -s gcc | sed -n '1p' | cut -d' ' -f 2`
+		echo "- gcc version $gccversion"
+		cmakeversion=`pacman -Q -s cmake | sed -n '1p' | cut -d' ' -f 2`
+		echo "- cmake version $cmakeversion"
+		sconsversion=`pacman -Q -s scons | sed -n '1p' | cut -d' ' -f 2`
+		echo "- scons version $sconsversion"
+		bisonversion=`pacman -Q -s bison | sed -n '1p' | cut -d' ' -f 2`
+		echo "- bison/yacc version $bisonversion"
+		pythonversion=`pacman -Q -s python2 | sed -n '1p' | cut -d' ' -f 2`
+		echo "- python2 version $pythonversion"
+		makoversion=`pacman -Q -s python2-mako | sed -n '1p' | cut -d' ' -f 2`
+		echo "- python2-mako version $makoversion"
+    fi
 	if [ "$silentlogging" = 1 ]; then
 		echo "- silent logging"
 		echo "- log file: $logfile"
@@ -225,6 +251,7 @@ echooptions() {
 	fi
 }
 confirmoptions() {
+	# Review and confirm/cancel continuing the script
     echo
 	echo "Enter n to exit or any key to continue."
 	read -n 1 -p "Do you want to continue with these options? : " input
@@ -281,11 +308,12 @@ if [ "$buildnonnativearch" = 1 ] && [ "$osname" != Darwin ]; then
     fi
 fi
 
-# Confirm your options
+# confirm options
 if [ "$interactive" = 1 ]; then
     echooptions
     confirmoptions
 fi
+# write options to log
 if [ "$silentlogging" = 1 ]; then
     logquietly
     echooptions
