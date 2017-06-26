@@ -14,7 +14,7 @@ pushd . > /dev/null
 cd `dirname ${scriptpath}` > /dev/null
 scriptpath=`pwd`;
 popd  > /dev/null
-# confirm if script is being run from its location
+# confirm is not being run from its location
 if [ "$scriptpath" == "$PWD" ]; then 
 	echo "CRITICAL: Do not run this script from its location!"
 	echo "          Create and enter a subdirectory, then run."
@@ -31,11 +31,28 @@ fi
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 # - MACOSX_DEPLOYMENT_TARGET: minimun MacOSX SDK version (10.8 by default)
 # - OSX_SDKSYSROOT: specify the location or name of OSX SDK (0/<user defined>, 0 by default)
+# - IGNORE_DEMO: do not build the demo (0/1, 0 by default)
 
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
 mesaversion="${OSMESA_VERSION:-17.1.2}"
+# the prefix to the LLVM installation
+llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
+# llvm version
+llvmversion="${LLVM_VERSION:-4.0.0}"
+# do we want to build the proper LLVM static libraries too? or are they already installed ?
+buildllvm="${LLVM_BUILD:-0}"
+# ignore running the demo - if dev env is just enough to cmpile libraries
+ignoredemo="${IGNORE_DEMO:-0}"
+# set the minimum MacOSX SDK version
+osxsdkminver="${MACOSX_DEPLOYMENT_TARGET:-10.8}"
+# set isysroot <full path to sdk>, set to 0 (automatically detected) by default.
+osxsdkisysroot="${OSX_SDKSYSROOT:-0}"
+# number of parallel make jobs, set to 4 by default
+mkjobs="${MKJOBS:-4}"
+# redirect output and error to log file; exit script on error.
+silentlogging="${SILENT_LOG:-0}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -44,8 +61,10 @@ gluversion=9.0.0
 debug=0
 # set clean to 1 to clean the source directories first (recommended)
 clean=1
-# number of parallel make jobs, set to 4 by default
-mkjobs="${MKJOBS:-4}"
+# set interactive to 1 to confirm your selections or just execute
+interactive=0
+# set mangled to 1 to if you want a mangled mesa + GLU ?
+mangled=1
 # set osmesadriver to:
 # - 1 to use "classic" osmesa resterizer instead of the Gallium driver
 # - 2 to use the "softpipe" Gallium driver
@@ -54,27 +73,9 @@ mkjobs="${MKJOBS:-4}"
 # - 4 to use the "swr" Gallium driver (also includes the softpipe driver, which can
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 osmesadriver=4
-# do we want a mangled mesa + GLU ?
-mangled=1
-# the prefix to the LLVM installation
-llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
-# do we want to build the proper LLVM static libraries too? or are they already installed ?
-buildllvm="${LLVM_BUILD:-0}"
-llvmversion="${LLVM_VERSION:-4.0.0}"
-# redirect output and error to log file; exit script on error.
-silentlogging="${SILENT_LOG:-0}"
-# interactively confirm your selections or just execute
-interactive=1
-# ignore running the demo - if dev env is just enough to cmpile libraries
-ignoredemo="${IGNORE_DEMO:-1}"
-# set the minimum MacOSX SDK version
-osxsdkminver="${MACOSX_DEPLOYMENT_TARGET:-10.8}"
-# SDK root - default is 0.
-# set the isysroot full path if it is not automatically detected.
-# e.g. from 0 to -isysroot </path to sdk>
-osxsdkisysroot="${OSX_SDKSYSROOT:-0}"
-# build non-native libs - build 32bit libs on 64bit dev env and vice versa (not applicable to MacOS)
+# set buildnonnativeargh to 1 to build 32bit libs on 64bit dev env and vice versa ( non MacOS)
 buildnonnativearch=0
+
 # increment log file name
 f="$scriptdir/$scriptname"
 ext=".log"
@@ -88,14 +89,14 @@ if [[ -e "$f$ext" ]] ; then
 else
    f="${f}${ext}"
 fi
-# output log
+# output log file
 logfile="$f"
 # which OS platform
 osname=`uname`
 # which OS architecture
 osprefix=`echo $osname | cut -c1-5`
 if [ "$osprefix" = MSYS ] || [ "$osprefix" = MINGW ]; then
-    # valid values: 64, 32; not using `uname -m` because it gives x86_64 for both 32 and 64bit mingw dev env
+    # valid values: 64, 32; `uname -m` gives x86_64 for both 32bit and 64bit mingw options on 64bit machine
     nativearch=`echo $osname | cut -c6-7`
 else
     # valid values: x86_64, i386
@@ -222,28 +223,28 @@ echooptions() {
 	echo "- CXXFLAGS: $CXXFLAGS"
 	if [ "$osprefix" != MSYS ] && [ "$osprefix" != MINGW ]; then
 		gccversion=`gcc -dumpversion`
-		echo "- gcc version $gccversion"
+		echo "- gcc version: $gccversion"
 		cmakeversion=`cmake --version | sed -n '1p' | cut -d' ' -f 3`
-		echo "- cmake version $cmakeversion"
+		echo "- cmake version: $cmakeversion"
 		autoconfversion=`autoconf --version | sed -n '1p' | cut -d' ' -f 4`
-		echo "- autoconf version $autoconfversion"	
+		echo "- autoconf version: $autoconfversion"	
 	else
 		msysversion=`pacman -Q -s msys | sed -n '1p' | cut -d' ' -f 2`
-		echo "- msys version $msysversion"
+		echo "- msys version: $msysversion"
 		mingwversion=`pacman -Q -s mingw | sed -n '1p' | cut -d' ' -f 2`
-		echo "- mingw version $mingwversion"
+		echo "- mingw version: $mingwversion"
 		gccversion=`pacman -Q -s gcc | sed -n '1p' | cut -d' ' -f 2`
-		echo "- gcc version $gccversion"
+		echo "- gcc version: $gccversion"
 		cmakeversion=`pacman -Q -s cmake | sed -n '1p' | cut -d' ' -f 2`
-		echo "- cmake version $cmakeversion"
+		echo "- cmake version: $cmakeversion"
 		sconsversion=`pacman -Q -s scons | sed -n '1p' | cut -d' ' -f 2`
-		echo "- scons version $sconsversion"
+		echo "- scons version: $sconsversion"
 		bisonversion=`pacman -Q -s bison | sed -n '1p' | cut -d' ' -f 2`
-		echo "- bison/yacc version $bisonversion"
+		echo "- bison/yacc version: $bisonversion"
 		pythonversion=`pacman -Q -s python2 | sed -n '1p' | cut -d' ' -f 2`
-		echo "- python2 version $pythonversion"
+		echo "- python2 version: $pythonversion"
 		makoversion=`pacman -Q -s python2-mako | sed -n '1p' | cut -d' ' -f 2`
-		echo "- python2-mako version $makoversion"
+		echo "- python2-mako version: $makoversion"
     fi
 	if [ "$silentlogging" = 1 ]; then
 		echo "- silent logging"
