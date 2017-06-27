@@ -288,7 +288,7 @@ confirmoptions() {
 
 # tell curl to continue downloads and follow redirects
 curlopts="-L -C -"
-srcdir=`dirname $0`
+srcdir="$scriptdir"
 
 if [ "$debug" = 1 ]; then
     CFLAGS="${CFLAGS:--g}"
