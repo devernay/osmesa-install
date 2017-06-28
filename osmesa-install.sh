@@ -258,6 +258,8 @@ echooptions() {
 		echo "- python2 version: $pythonversion"
 		makoversion=`pacman -Q -s python2-mako | sed -n '1p' | cut -d' ' -f 2`
 		echo "- python2-mako version: $makoversion"
+        libxml2version=`pacman -Q -s libxml2 | sed -n '1p' | cut -d' ' -f 2`
+        echo "- libxml2 version: $libxml2version"
     fi
 	if [ "$silentlogging" = 1 ]; then
 		echo "- silent logging"
