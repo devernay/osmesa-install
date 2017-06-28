@@ -708,6 +708,23 @@ if [ "$osnameprefix" = MSYS ] || [ "$osnameprefix" = MINGW ]; then
         scons_swr=0
     fi
     mkdir -p $osmesaprefix/include $osmesaprefix/lib/pkgconfig
+    echo "** Mesa scons command line arguments..."
+    echo "** env "
+    echo "** LLVM_CONFIG=\"$llvmconfigbinary\""
+    echo "** LLVM=\"$llvmprefix\""
+    echo "** CFLAGS=\"$scons_cflags\""
+    echo "** CXXFLAGS=\"$scons_cxxflags\""
+    echo "** LDFLAGS=\"$scons_ldflags\""
+    echo "** scons"
+    echo "** build=\"$scons_build\""
+    echo "** platform=windows"
+    echo "** toolchain=mingw"
+    echo "** machine=\"$scons_machine\""
+    echo "** texture_float=yes"
+    echo "** llvm=\"$scons_llvm\""
+    echo "** swr=\"$scons_swr\""
+    echo "** verbose=yes"
+    echo "** osmesa"
     env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
     cp build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll $osmesaprefix/lib/
     cp -a include/GL $osmesaprefix/include/ || exit 1
@@ -835,6 +852,19 @@ else
         CXXFLAGS="$CXXFLAGS $osxflags"
     fi
   
+    echo "** Mesa autoconf command line arguments..."
+    echo "** env"
+    echo "** PKG_CONFIG_PATH="
+    echo "** CC=\"$CC\""
+    echo "** CXX=\"$CXX\""
+    echo "** PTHREADSTUBS_CFLAGS=\" \""
+    echo "** PTHREADSTUBS_LIBS=\" \""
+    echo "** ./configure"
+    echo "** ${confopts}"
+    echo "** CC=\"$CC\""
+    echo "** CFLAGS=\"$CFLAGS\""
+    echo "** CXX=\"$CXX\""
+    echo "** CXXFLAGS=\"$CXXFLAGS\""
     env PKG_CONFIG_PATH= CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " 
     ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
@@ -891,6 +921,13 @@ if [ "$mangled" = 1 ]; then
      CPPFLAGS=-DUSE_MGL_NAMESPACE"
 fi
 
+echo "** GLU autoconf command line arguments..."
+echo "** env"
+echo "** PKG_CONFIG_PATH=\"$osmesaprefix\"/lib/pkgconfig"
+echo "** ./configure"
+echo "** ${confopts}"
+echo "** CFLAGS=\"$CFLAGS\""
+echo "** CXXFLAGS=\"$CXXFLAGS\""
 env PKG_CONFIG_PATH="$osmesaprefix"/lib/pkgconfig 
 ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 make -j${mkjobs}
