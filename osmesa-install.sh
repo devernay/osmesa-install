@@ -38,10 +38,12 @@ llvmversion="${LLVM_VERSION:-4.0.0}"
 # redirect output and error to log file; exit script on error.
 silentlogging="${SILENT_LOG:-0}"
 osname=$(uname)
+# This script
+scriptdir=$(cd "$(dirname "$0")"; pwd)
+# scriptname is the script name without the suffix (if any)
+scriptname=$(basename "$0")
+scriptname="${scriptname%.*}"
 if [ "$silentlogging" = 1 ]; then
-    # This script
-    scriptdir=$(cd "$(dirname "${BASH_SOURCE[0]}")"; pwd)
-    scriptname=$(basename "${BASH_SOURCE[0]}" .sh)
     # Exit script on error, redirect output and error to log file. Open log for realtime updates.
     set -e
     exec </dev/null &>"$scriptdir/$scriptname.log"
@@ -440,11 +442,14 @@ case "$osname" in
         ####################################################################
         # Windows build uses scons
 
-        if [ "$osname" = "MINGW64_NT-6.1" ]; then
-            scons_machine="x86_64"
-        else
-            scons_machine="x86"
-        fi
+        case "$osname" in
+            MINGW64_NT-*)
+                scons_machine="x86_64"
+                ;;
+            *)
+                scons_machine="x86"
+                ;;
+        esac
         scons_cflags="$CFLAGS"
         scons_cxxflags="$CXXFLAGS -std=c++11"
         scons_ldflags="-static -s"
