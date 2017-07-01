@@ -44,11 +44,11 @@ fi
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version (default is latest version)
-mesaversion="${OSMESA_VERSION:-17.1.3}"
+mesaversion="${OSMESA_VERSION:-17.1.4}"
 # the prefix to the LLVM installation
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # llvm version (default is latest version)
-llvmversion="${LLVM_VERSION:-4.0.0}"
+llvmversion="${LLVM_VERSION:-4.0.1}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ? (default is 0)
 buildllvm="${LLVM_BUILD:-0}"
 # set the minimum MacOSX SDK version (default is 10.8)
@@ -120,7 +120,7 @@ if [ "$osname" = Darwin ]; then
         #     https://github.com/OpenSWR/openswr-mesa/issues/11
         osmesadriver=3
     fi
-    osver=`uname -r | awk -F . '{print $1}'`
+    osver=$(uname -r | awk -F . '{print $1}')
     if [ "$osver" = 10 ]; then
         # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
@@ -129,7 +129,7 @@ if [ "$osname" = Darwin ]; then
             CC=clang-mp-4.0
             CXX=clang++-mp-4.0
             OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
-        elif [ -z ${LLVM_VERSION+x} ]; then
+        elif [ -z "${LLVM_VERSION+x}" ]; then
             llvmversion=3.4.2
         fi
     fi
@@ -360,7 +360,7 @@ fi
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
 
 llvmlibs=
-if [ ! -d "$osmesaprefix" -o ! -w "$osmesaprefix" ]; then
+if [ ! -d "$osmesaprefix" ] || [ ! -w "$osmesaprefix" ]; then
     echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
     exit
 fi
@@ -559,12 +559,12 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     if [ "$debug" = 1 ]; then
         llvmcomponents="$llvmcomponents mcdisassembler"
     fi
-    llvmlibs=`"${llvmconfigbinary}" --ldflags --libs $llvmcomponents`
+    llvmlibs=$("${llvmconfigbinary}" --ldflags --libs $llvmcomponents)
     if "${llvmconfigbinary}" --help 2>&1 | grep -q system-libs; then
-        llvmlibsadd=`"${llvmconfigbinary}" --system-libs`
+        llvmlibsadd=$("${llvmconfigbinary}" --system-libs)
     else
         # on old llvm, system libs are in the ldflags
-        llvmlibsadd=`"${llvmconfigbinary}" --ldflags`
+        llvmlibsadd=$("${llvmconfigbinary}" --ldflags)
     fi
     llvmlibs="$llvmlibs $llvmlibsadd"
 fi
@@ -573,7 +573,7 @@ if [ "$clean" = 1 ]; then
     rm -rf "mesa-$mesaversion" "mesa-demos-$demoversion" "glu-$gluversion"
 fi
 
-if [ ! -f mesa-${mesaversion}.tar.gz ]; then
+if [ ! -f "mesa-${mesaversion}.tar.gz" ]; then
     echo "* downloading Mesa ${mesaversion}..."
     curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/${mesaversion}/mesa-${mesaversion}.tar.gz"
 fi
@@ -648,7 +648,7 @@ for i in $PATCHES; do
     fi
 done
 
-cd mesa-${mesaversion}
+cd "mesa-${mesaversion}"
 
 echo "* fixing gl_mangle.h..."
 # edit include/GL/gl_mangle.h, add ../GLES*/gl[0-9]*.h to the "files" variable and change GLAPI in the grep line to GL_API
