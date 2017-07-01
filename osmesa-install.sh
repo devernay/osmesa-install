@@ -9,7 +9,7 @@
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.1.3}"
+mesaversion="${OSMESA_VERSION:-17.1.4}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -34,7 +34,7 @@ mangled=1
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm="${LLVM_BUILD:-0}"
-llvmversion="${LLVM_VERSION:-4.0.0}"
+llvmversion="${LLVM_VERSION:-4.0.1}"
 # redirect output and error to log file; exit script on error.
 silentlogging="${SILENT_LOG:-0}"
 osname=$(uname)
