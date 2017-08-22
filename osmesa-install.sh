@@ -49,6 +49,32 @@ if [ "$silentlogging" = 1 ]; then
     exec </dev/null &>"$scriptdir/$scriptname.log"
 fi
 if [ "$osname" = Darwin ]; then
+    # Possible $osver values:
+    # 9: Mac OS X 10.5 Leopard
+    # 10: Mac OS X 10.6 Snow Leopard
+    # 11: Mac OS X 10.7 Lion
+    # 12: OS X 10.8 Mountain Lion
+    # 13: OS X 10.9 Mavericks
+    # 14: OS X 10.10 Yosemite
+    # 15: OS X 10.11 El Capitan
+    # 16: macOS 10.12 Sierra
+    # 17: macOS 10.13 High Sierra
+    
+    if [ "$osver" = 10 ]; then
+        # On Snow Leopard (10.6), build universal
+        archs="-arch i386 -arch x86_64"
+        CFLAGS="$CFLAGS $archs"
+        CXXFLAGS="$CXXFLAGS $archs"
+    fi
+    XCODE_VER=$(xcodebuild -version | sed -e 's/Xcode //' | head -n 1)
+    case "$XCODE_VER" in
+        4.2*|5.*|6.*|7.*|8.*)
+            # clang became the default compiler on Xcode 4.2
+            CC=clang
+            CXX=clang++
+            ;;
+    esac
+
     # Note: the macOS deployment target (used eg for option -mmacosx-version-min=10.<X>) is set
     # in the script from the MACOSX_DEPLOYMENT_TARGET environment variable.
     # To set it from the command-line, use e.g. "env MACOSX_DEPLOYMENT_TARGET=10.8 ../osmesa-install.sh"
@@ -142,34 +168,6 @@ if [ -z "${CC:-}" ]; then
 fi
 if [ -z "${CXX:-}" ]; then
     CXX=g++
-fi
-
-if [ "$osname" = Darwin ]; then
-    # Possible $osver values:
-    # 9: Mac OS X 10.5 Leopard
-    # 10: Mac OS X 10.6 Snow Leopard
-    # 11: Mac OS X 10.7 Lion
-    # 12: OS X 10.8 Mountain Lion
-    # 13: OS X 10.9 Mavericks
-    # 14: OS X 10.10 Yosemite
-    # 15: OS X 10.11 El Capitan
-    # 16: macOS 10.12 Sierra
-    # 17: macOS 10.13 High Sierra
-    
-    if [ "$osver" = 10 ]; then
-        # On Snow Leopard (10.6), build universal
-        archs="-arch i386 -arch x86_64"
-        CFLAGS="$CFLAGS $archs"
-        CXXFLAGS="$CXXFLAGS $archs"
-    fi
-    XCODE_VER=$(xcodebuild -version | sed -e 's/Xcode //' | head -n 1)
-    case "$XCODE_VER" in
-        4.2*|5.*|6.*|7.*|8.*)
-            # clang became the default compiler on Xcode 4.2
-            CC=clang
-            CXX=clang++
-            ;;
-    esac
 fi
 
 # On MacPorts, building Mesa requires the following packages:
