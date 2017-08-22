@@ -1,10 +1,14 @@
-#!/bin/bash -e
+#!/bin/bash
 
 # environment variables used by this script:
 # - OSMESA_PREFIX: where to install osmesa (must be writable)
 # - LLVM_PREFIX: where llvm is / should be installed
 # - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
+
+set -e # Exit immediately if a command exits with a non-zero status
+set -u # Treat unset variables as an error when substituting.
+#set -x # Print commands and their arguments as they are executed.
 
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
@@ -48,7 +52,23 @@ if [ "$silentlogging" = 1 ]; then
     set -e
     exec </dev/null &>"$scriptdir/$scriptname.log"
 fi
+
+if [ "$debug" = 1 ]; then
+    CFLAGS="${CFLAGS:--g}"
+else
+    CFLAGS="${CFLAGS:--O3}"
+fi
+CXXFLAGS="${CXXFLAGS:-${CFLAGS}}"
+
+if [ -z "${CC:-}" ]; then
+    CC=gcc
+fi
+if [ -z "${CXX:-}" ]; then
+    CXX=g++
+fi
+
 if [ "$osname" = Darwin ]; then
+    osver=$(uname -r | awk -F . '{print $1}')
     # Possible $osver values:
     # 9: Mac OS X 10.5 Leopard
     # 10: Mac OS X 10.6 Snow Leopard
@@ -88,7 +108,6 @@ if [ "$osname" = Darwin ]; then
         #     https://github.com/OpenSWR/openswr-mesa/issues/11
         osmesadriver=3
     fi
-    osver=$(uname -r | awk -F . '{print $1}')
     if [ "$osver" = 10 ]; then
         # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
@@ -160,19 +179,6 @@ if [ -n "${SDKROOT+x}" ]; then
     echo "- OSX SDK root is $SDKROOT"
 fi
 
-if [ "$debug" = 1 ]; then
-    CFLAGS="${CFLAGS:--g}"
-else
-    CFLAGS="${CFLAGS:--O3}"
-fi
-CXXFLAGS="${CXXFLAGS:-${CFLAGS}}"
-
-if [ -z "${CC:-}" ]; then
-    CC=gcc
-fi
-if [ -z "${CXX:-}" ]; then
-    CXX=g++
-fi
 
 # On MacPorts, building Mesa requires the following packages:
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
