@@ -67,12 +67,20 @@ if [ "$osname" = Darwin ]; then
         # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
         # everything with clang-4.0
-        if grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
+        if [ -f /opt/local/etc/macports/macports.conf ] && grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
             CC=clang-mp-4.0
             CXX=clang++-mp-4.0
             OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
-        elif [ -z "${LLVM_VERSION+x}" ]; then
-            llvmversion=3.4.2
+        else
+	    if [[ -P clang-mp-3.4 ]]; then
+		# MacPorts on Snow Leopard builds with clang 3.4
+		# (not really necessary, as long as llvm is not configured to be pedantic)
+		CC=clang-mp-3.4
+		CXX=clang++-mp-3.4
+	    fi
+	    if [ -z "${LLVM_VERSION+x}" ]; then
+                llvmversion=3.4.2
+	    fi
         fi
     fi
 fi
@@ -153,9 +161,6 @@ if [ "$osname" = Darwin ]; then
         archs="-arch i386 -arch x86_64"
         CFLAGS="$CFLAGS $archs"
         CXXFLAGS="$CXXFLAGS $archs"
-        ## uncomment to use clang 3.4 (not necessary, as long as llvm is not configured to be pedantic)
-        #CC=clang-mp-3.4
-        #CXX=clang++-mp-3.4
     fi
     XCODE_VER=$(xcodebuild -version | sed -e 's/Xcode //' | head -n 1)
     case "$XCODE_VER" in
@@ -367,6 +372,7 @@ echo "* applying patches..."
 #scons25.patch only for Mesa < 12.0.1
 #scons-llvm-3-9-libs.patch still valid with Mesa 17.0.3
 #swr-sched.patch still valid with Mesa 17.0.3
+#disable_shader_cache.patch still valid with Mesa 17.1.6 and should be applied on Mavericks and earlier (may be fixed later, check https://trac.macports.org/ticket/54638#comment:8)
 
 PATCHES="\
 add_pi.patch \
@@ -384,6 +390,12 @@ swr-sched.patch \
 scons-swr-cc-arch.patch \
 msys2_scons_fix.patch \
 "
+
+if [ "$osname" = Darwin ] && [ "$osver" -lt 14 ]; then
+    # See https://trac.macports.org/ticket/54638
+    # See https://trac.macports.org/ticket/54643
+    PATCHES="$PATCHES disable_shader_cache.patch"
+fi
 
 #if mangled, add mgl_export (for mingw)
 if [ "$mangled" = 1 ]; then
