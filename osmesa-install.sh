@@ -98,15 +98,19 @@ if [ "$osname" = Darwin ]; then
             CXX=clang++-mp-4.0
             OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
         else
-	    if [[ $(type -P clang-mp-3.4) ]]; then
-		# MacPorts on Snow Leopard builds with clang 3.4
-		# (not really necessary, as long as llvm is not configured to be pedantic)
-		CC=clang-mp-3.4
-		CXX=clang++-mp-3.4
-	    fi
-	    if [ -z "${LLVM_VERSION+x}" ]; then
+            # This project is affected by a bug in Apple's gcc driver driver that was fixed in the apple-gcc42 port:
+            # https://github.com/macports/macports-ports/blob/master/lang/apple-gcc42/files/driverdriver-num_infiles.patch
+            # Use that or clang.
+            if [[ $(type -P clang-mp-3.4) ]]; then
+                CC=clang-mp-3.4
+                CXX=clang++-mp-3.4
+            elif [[ $(type -P gcc-apple-4.2) ]]; then
+                CC=gcc-apple-4.2
+                CXX=g++-apple-4.2
+            fi
+            if [ -z "${LLVM_VERSION+x}" ]; then
                 llvmversion=3.4.2
-	    fi
+            fi
         fi
     fi
 fi
