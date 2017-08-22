@@ -157,7 +157,7 @@ if [ "$osname" = Darwin ]; then
         #CC=clang-mp-3.4
         #CXX=clang++-mp-3.4
     fi
-    XCODE_VER=$(xcodebuild -version | head -n 1 | sed -e 's/Xcode //')
+    XCODE_VER=$(xcodebuild -version | sed -e 's/Xcode //' | head -n 1)
     case "$XCODE_VER" in
         4.2*|5.*|6.*|7.*|8.*)
             # clang became the default compiler on Xcode 4.2
