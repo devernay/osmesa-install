@@ -13,7 +13,7 @@ set -u # Treat unset variables as an error when substituting.
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.1.6}"
+mesaversion="${OSMESA_VERSION:-17.1.9}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
@@ -111,11 +111,16 @@ if [ "$osname" = Darwin ]; then
     if [ "$osver" = 10 ]; then
         # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
-        # everything with clang-4.0
+        # everything with clang-5.0
         if [ -f /opt/local/etc/macports/macports.conf ] && grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
-            CC=clang-mp-4.0
-            CXX=clang++-mp-4.0
-            OSDEMO_LD="clang++-mp-4.0 -stdlib=libc++"
+            if [[ $(type -P clang-mp-5.0) ]]; then
+		CC=clang-mp-5.0
+		CXX=clang++-mp-5.0
+		OSDEMO_LD="clang++-mp-5.0 -stdlib=libc++"
+	    else
+		echo "Error: Please install clang 5 using the following command:"
+		echo "sudo port install clang-5.0"
+	    fi
         else
             # This project is affected by a bug in Apple's gcc driver driver that was fixed in the apple-gcc42 port:
             # https://github.com/macports/macports-ports/blob/master/lang/apple-gcc42/files/driverdriver-num_infiles.patch
