@@ -261,6 +261,11 @@ echooptions() {
         libxml2version=`pacman -Q -s libxml2 | sed -n '1p' | cut -d' ' -f 2`
         echo "- libxml2 version: $libxml2version"
     fi
+    if [ "$interactive" = 1 ]; then
+        echo "- interactive: Yes"
+    else
+        echo "- interactive: No"
+    fi
 	if [ "$silentlogging" = 1 ]; then
 		echo "- silent logging"
 		echo "- log file: $logfile"
@@ -385,20 +390,21 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         # From Yosemite (14) gunzip can decompress xz files - but only if containing a tar archive.
         if [ "$osname" = Darwin ] && [ `uname -r | awk -F . '{print $1}'` -gt 13 ]; then
             xzcat="gunzip -dc"
-        fi        
+        fi
         if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
 			echo "* downloading LLVM ${llvmversion}..."
             # the llvm we server doesnt' allow continuing partial downloads
             curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
         fi
 
-        echo "* extracting LLVM..."
-
-        $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
+        if [ ! -d llvm-${llvmversion}.src ]; then
+            echo "* extracting LLVM..."
+            $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
+        fi
         cd llvm-${llvmversion}.src
-		
+
 		echo "* building LLVM..."
-				
+
         cmake_archflags=
         if [ $llvmversion = 3.4.2 ] && [ "$osname" = Darwin ] && [ "$osver" = 10 ]; then
             if [ "$debug" = 1 ]; then
