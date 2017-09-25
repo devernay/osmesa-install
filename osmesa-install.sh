@@ -31,7 +31,7 @@ mkjobs="${MKJOBS:-4}"
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 # - 4 to use the "swr" Gallium driver (also includes the softpipe driver, which can
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
-osmesadriver=4
+osmesadriver=${OSMESA_DRIVER:-4}
 # do we want a mangled mesa + GLU ?
 mangled=1
 # the prefix to the LLVM installation
