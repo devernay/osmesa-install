@@ -701,7 +701,7 @@ fi
 if [ -z "${OSDEMO_LD:-}" ]; then
     OSDEMO_LD="$CXX"
 fi
-if [ "$osname" = Darwin ]; then
+if [ "$osname" = Darwin ] || [ "$osname" = Linux ]; then
     # strange, got 'Undefined symbols for architecture x86_64' without zlib for both llvmpipe and softpipe drivers.
     # missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
     LIBS32="$LIBS32 -lz"
