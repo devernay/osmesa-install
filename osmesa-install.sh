@@ -13,7 +13,7 @@ set -u # Treat unset variables as an error when substituting.
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.1.9}"
+mesaversion="${OSMESA_VERSION:-17.1.10}"
 # mesa-demos version
 demoversion=8.3.0
 # glu version
