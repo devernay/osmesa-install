@@ -708,8 +708,18 @@ if [ "$osname" = Darwin ] || [ "$osname" = Linux ]; then
     LIBS32="$LIBS32 -lz"
 fi
 echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
-$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs
-./osdemo32 image.tga
+if [ "$osname" = Darwin ] || [ "$osname" = Linux ]; then
+    allowfail=false
+else
+    # build on windows may fail because osmesa is a dll but glu is not, thus:
+    #G:\msys64\tmp\mingw32\cclAYXEC.o:osdemo32.c:(.text.startup+0x11f): undefined reference to `_imp__mgluNewQuadric@0'
+    #G:\msys64\tmp\mingw32\cclAYXEC.o:osdemo32.c:(.text.startup+0x480): undefined reference to `_imp__mgluCylinder@36'
+    #G:\msys64\tmp\mingw32\cclAYXEC.o:osdemo32.c:(.text.startup+0x4f8): undefined reference to `_imp__mgluSphere@20'
+    #G:\msys64\tmp\mingw32\cclAYXEC.o:osdemo32.c:(.text.startup+0x513): undefined reference to `_imp__mgluDeleteQuadric@4'
+    #collect2.exe: error: ld returned 1 exit status
+    allowfail=true
+fi
+$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || ./osdemo32 image.tga || $allowfail
 # result is in image.tga
 
 exit
