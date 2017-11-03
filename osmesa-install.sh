@@ -498,7 +498,8 @@ case "$osname" in
         fi
         mkdir -p "$osmesaprefix/include" "$osmesaprefix/lib/pkgconfig"
         env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
-        cp "build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll" "$osmesaprefix/lib/"
+        cp "build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll" "$osmesaprefix/lib/osmesa.dll"
+        cp "build/windows-$scons_machine/gallium/targets/osmesa/libosmesa.a" "$osmesaprefix/lib/libMangledOSMesa32.a"
         cp -a "include/GL" "$osmesaprefix/include/" || exit 1
         cat <<EOF > "$osmesaprefix/lib/pkgconfig/osmesa.pc"
 prefix=${osmesaprefix}
@@ -510,7 +511,7 @@ Name: osmesa
 Description: Mesa Off-screen Rendering library
 Requires:
 Version: $mesaversion
-Libs: -L\${libdir} -lOSMesa
+Libs: -L\${libdir} -lMangledOSMesa32
 Cflags: -I\${includedir}
 EOF
         cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc
