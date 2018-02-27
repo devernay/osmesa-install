@@ -387,6 +387,7 @@ echo "* applying patches..."
 #swr-sched.patch still valid with Mesa 17.0.3
 #disable_shader_cache.patch still valid with Mesa 17.1.6 and should be applied on Mavericks and earlier (may be fixed later, check https://trac.macports.org/ticket/54638#comment:8)
 #osmesa-gl-DispatchTSD.patch still valid with Mesa 17.1.10
+#osmesa-configure-ac.patch still valid with Mesa 17.1.10
 
 PATCHES="\
 add_pi.patch \
@@ -404,6 +405,7 @@ swr-sched.patch \
 scons-swr-cc-arch.patch \
 msys2_scons_fix.patch \
 osmesa-gl-DispatchTSD.patch \
+osmesa-configure-ac.patch \
 "
 
 if [ "$osname" = Darwin ] && [ "$osver" -lt 14 ]; then
