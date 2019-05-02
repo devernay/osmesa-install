@@ -287,6 +287,12 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                      llvm_patches="msys2_add_pi.patch"
                      ;;
             esac
+
+            # Apply ORC patch on LLVM 4.x and 5.x
+            if [ ${llvmversion:0:2} = 4. ] || [ ${llvmversion:0:2} = 5. ]; then
+                llvm_patches="0001-Fix-return-type-in-ORC-readMem-client-interface.patch :$llvm_patches"
+            fi
+
             for i in $llvm_patches; do
                 if [ -f "$srcdir"/patches/llvm-$llvmversion/$i ]; then
                     echo "* applying patch $i"
