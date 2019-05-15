@@ -5,6 +5,7 @@
 # - LLVM_PREFIX: where llvm is / should be installed
 # - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
+# - BUILD_OSDEMO: try to compile and run osdemo (0/1, 1 by default)
 
 set -e # Exit immediately if a command exits with a non-zero status
 set -u # Treat unset variables as an error when substituting.
@@ -41,6 +42,7 @@ buildllvm="${LLVM_BUILD:-0}"
 llvmversion="${LLVM_VERSION:-4.0.1}"
 # redirect output and error to log file; exit script on error.
 silentlogging="${SILENT_LOG:-0}"
+buildosdemo="${BUILD_OSDEMO:-1}"
 osname=$(uname)
 # This script
 scriptdir=$(cd "$(dirname "$0")"; pwd)
@@ -690,6 +692,7 @@ if [ "$mangled" = 1 ]; then
     sed -e s/-lGLU/-lMangledGLU/g -i.bak "$osmesaprefix/lib/pkgconfig/glu.pc"
 fi
 
+if [ "$buildosdemo" = 1 ]; then
 # build the demo
 cd ..
 if [ ! -f mesa-demos-${demoversion}.tar.bz2 ]; then
@@ -731,6 +734,7 @@ else
 fi
 $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || ./osdemo32 image.tga || $allowfail
 # result is in image.tga
+fi # buildosdemo == 1
 
 exit
 
