@@ -355,7 +355,8 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         # could not find installation.
         if [ "$buildllvm" = 0 ]; then
             # advise user to turn on automatic download, build and install option
-            echo "Error: $llvmconfigbinary does not exist, set script variable buildllvm=\${LLVM_BUILD:-0} from 0 to 1 to automatically download and install llvm."
+            echo "Error: $llvmconfigbinary does not exist, set environment variable LLVM_BUILD to 1 to automatically download and install llvm, as in:"
+	    echo "  env LLVM_BUILD=1 $0"
         else
             echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
             echo " download the LLVM sources from llvm.org, and configure it with:"
