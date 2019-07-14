@@ -186,6 +186,8 @@ if [ -n "${SDKROOT+x}" ]; then
     echo "- OSX SDK root is $SDKROOT"
 fi
 
+# see https://stackoverflow.com/a/24067243
+function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 
 # On MacPorts, building Mesa requires the following packages:
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
@@ -360,7 +362,14 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             echo " env CC=$CC CXX=$CXX cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$llvmprefix -DBUILD_SHARED_LIBS=OFF -DLLVM_ENABLE_RTTI=1 -DLLVM_REQUIRES_RTTI=1 -DLLVM_ENABLE_PEDANTIC=0 $cmake_archflags"
             echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
         fi
-        exit
+        exit 1
+    else
+	if version_gt $("$llvmconfigbinary" --version) 4.0.2; then
+	    echo "Warning: LLVM version is $($llvmconfigbinary --version), but this script was only tested with versions 3.3 to 4.0.2"
+	    echo "Please modify this script and report if it works with this version."
+	    echo "Continuing anyway after 10s."
+	    sleep 10
+	fi
     fi
     llvmcomponents="engine mcjit"
     if [ "$debug" = 1 ]; then
