@@ -187,7 +187,10 @@ if [ -n "${SDKROOT+x}" ]; then
 fi
 
 # see https://stackoverflow.com/a/24067243
-function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
+function version_gt() {
+    #test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; # requires GNU sort
+    test "$(printf '%s\n' "$@" sed 's/\b\([0-9]\)\b/0\1/g' versions.txt  | sort | sed 's/\b0\([0-9]\)/\1/g' | head -n 1)" != "$1"; # version numbers can have two digits at most (i.e. 0 to 99)
+}
 
 # On MacPorts, building Mesa requires the following packages:
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
@@ -365,9 +368,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         fi
         exit 1
     else
-	if version_gt $("$llvmconfigbinary" --version) 4.0.2; then
-	    echo "Warning: LLVM version is $($llvmconfigbinary --version), but this script was only tested with versions 3.3 to 4.0.2"
-	    echo "Please modify this script and report if it works with this version."
+	if version_gt $("$llvmconfigbinary" --version) 4.0.1; then
+	    echo "Warning: LLVM version is $($llvmconfigbinary --version), but this script was only tested with versions 3.3 to 4.0.1"
+	    echo "Please modify this script and file a github issue if it works with this version."
 	    echo "Continuing anyway after 10s."
 	    sleep 10
 	fi
