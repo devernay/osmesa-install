@@ -273,7 +273,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    "
             if [ "$osname" = Darwin ] && [ "$osver" = 10 ]; then
                 # On Snow Leopard, build universal
-                cmake_archflags="-DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
+                cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=i386;x86_64"
                 # Proxy for eliminating the dependency on native TLS
                 # http://trac.macports.org/ticket/46887
                 #cmake_archflags="$cmake_archflags -DLLVM_ENABLE_BACKTRACES=OFF" # flag was added to the common flags below, we don't need backtraces anyway
@@ -285,7 +285,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             if [ "$osname" = Darwin ]; then
                 # Redundant - provided for older compilers that do not pass this option to the linker
                 # Address xcode/cmake error: compiler appears to require libatomic, but cannot find it.
-                cmake_archflags="-DLLVM_ENABLE_LIBCXX=ON"
+                cmake_archflags="$cmake_archflags -DLLVM_ENABLE_LIBCXX=ON"
                 if [ "$osver" -ge 12 ]; then
                     # From Mountain Lion onward. We are only building 64bit arch.
                     cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64"
