@@ -6,6 +6,8 @@
 # - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 # - BUILD_OSDEMO: try to compile and run osdemo (0/1, 1 by default)
+# - MANGLED: build a mangled OSMesa and GLU (function names are prefixed with "m") (0/1, 1 by default)
+# - SHARED: build shared OSMesa libraries (0/1, 0 by default)
 
 set -e # Exit immediately if a command exits with a non-zero status
 set -u # Treat unset variables as an error when substituting.
@@ -34,7 +36,9 @@ mkjobs="${MKJOBS:-4}"
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 osmesadriver=${OSMESA_DRIVER:-4}
 # do we want a mangled mesa + GLU ?
-mangled=1
+mangled="${MANGLED:-1}"
+# do we want to build shared libs?
+shared="${SHARED:-0}"
 # the prefix to the LLVM installation
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
@@ -511,7 +515,10 @@ case "$osname" in
         esac
         scons_cflags="$CFLAGS"
         scons_cxxflags="$CXXFLAGS -std=c++11"
-        scons_ldflags="-static -s"
+        scons_ldflags="-s"
+        if [ "$shared" = 0 ]; then
+            scons_ldflags="-static $scons_ldflags"
+        fi
         if [ "$mangled" = 1 ]; then
             scons_cflags="-DUSE_MGL_NAMESPACE"
         fi
@@ -564,8 +571,6 @@ EOF
 
         confopts="\
             --disable-dependency-tracking \
-            --enable-static \
-            --disable-shared \
             --enable-texture-float \
             --disable-gles1 \
             --disable-gles2 \
@@ -587,6 +592,11 @@ EOF
             --with-egl-platforms= \
             --prefix=$osmesaprefix \
             "
+        if [ "$shared" = 1 ]; then
+            confopts="$confopts --enable-shared --disable-static"
+        else
+            confopts="$confopts --disable-shared --enable-static"
+        fi
 
         if [ "$osmesadriver" = 1 ]; then
             # pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
@@ -663,7 +673,7 @@ EOF
         echo "* installing Mesa..."
         make install
 
-        if [ "$osname" = Darwin ]; then
+        if [ "$osname" = Darwin ] && [ "$shared" = 0 ]; then
             # fix the following error:
             #Undefined symbols for architecture x86_64:
             #  "_lp_dummy_tile", referenced from:
@@ -672,7 +682,7 @@ EOF
             #ld: symbol(s) not found for architecture x86_64
             #clang: error: linker command failed with exit code 1 (use -v to see invocation)
             for f in "$osmesaprefix/lib/"lib*.a; do
-                ranlib -c "$f"
+                    ranlib -c "$f"
             done
         fi
 
@@ -692,10 +702,13 @@ cd glu-${gluversion}
 echo "* building GLU..."
 confopts="\
     --disable-dependency-tracking \
-    --enable-static \
-    --disable-shared \
     --enable-osmesa \
     --prefix=$osmesaprefix"
+if [ "$shared" = 1 ]; then
+    confopts="${confopts} --disable-static --enable-shared"
+else
+    confopts="${confopts} --enable-static --disable-shared"
+fi
 if [ "$mangled" = 1 ]; then
     confopts="${confopts} \
      CPPFLAGS=-DUSE_MGL_NAMESPACE"
@@ -708,10 +721,12 @@ echo "* installing GLU..."
 make install
 
 if [ "$mangled" = 1 ]; then
-    mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a"
-    mv "$osmesaprefix/lib/libGLU.la" "$osmesaprefix/lib/libMangledGLU.la"
-    sed -e s/libGLU/libMangledGLU/g -i.bak "$osmesaprefix/lib/libMangledGLU.la"
-    sed -e s/-lGLU/-lMangledGLU/g -i.bak "$osmesaprefix/lib/pkgconfig/glu.pc"
+    if [ "$shared" = 0 ]; then
+        mv "$osmesaprefix/lib/libGLU.a" "$osmesaprefix/lib/libMangledGLU.a"
+        mv "$osmesaprefix/lib/libGLU.la" "$osmesaprefix/lib/libMangledGLU.la"
+        sed -e s/libGLU/libMangledGLU/g -i.bak "$osmesaprefix/lib/libMangledGLU.la"
+        sed -e s/-lGLU/-lMangledGLU/g -i.bak "$osmesaprefix/lib/pkgconfig/glu.pc"
+    fi
 fi
 
 if [ "$buildosdemo" = 1 ]; then
