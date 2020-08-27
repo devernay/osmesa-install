@@ -1,25 +1,19 @@
 /*
- * Demo of off-screen Mesa rendering with 32-bit float color channels.
- * This requires the libOSMesa32.so library.
+ * Demo of off-screen Mesa rendering with 16-bit color channels.
+ * This requires the libOSMesa16.so library.
  *
  * Compile with something like this:
  *
- * gcc osdemo32.c -I../../include -L../../lib -lGLU -lOSMesa32 -lm -o osdemo32
+ * gcc osdemo16.c -I../../include -L../../lib -lglut -lGLU -lOSMesa16 -lm -o osdemo16
  */
+
 
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
-
-#define GL_GLEXT_PROTOTYPES
 #include "GL/osmesa.h"
-#include <GL/glext.h>
-#include <GL/glu.h>
-#include "gl_wrap.h"
+#include "glut_wrap.h"
 
-#define STRINGISE_IMPL(x) # x
-#define STRINGISE(x) STRINGISE_IMPL(x)
 
 #define SAVE_TARGA
 
@@ -60,6 +54,15 @@ static void render_image( void )
 
    glPushMatrix();
    glRotatef(20.0, 1.0, 0.0, 0.0);
+
+#if 0
+   glPushMatrix();
+   glTranslatef(-0.75, 0.5, 0.0); 
+   glRotatef(90.0, 1.0, 0.0, 0.0);
+   glMaterialfv( GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, red_mat );
+   glutSolidTorus(0.275, 0.85, 20, 20);
+   glPopMatrix();
+#endif
 
    /* red square */
    glPushMatrix();
@@ -106,11 +109,11 @@ static void render_image( void )
    glEnable(GL_LIGHTING);
    glPopMatrix();
 #endif
-
    glPushMatrix();
    glTranslatef(-0.75, -0.5, 0.0); 
    glRotatef(270.0, 1.0, 0.0, 0.0);
    glMaterialfv( GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, green_mat );
+   glColor4f(0,1,0,0.5);
    glEnable(GL_BLEND);
    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
    gluCylinder(qobj, 1.0, 0.0, 2.0, 16, 1);
@@ -133,26 +136,24 @@ static void render_image( void )
    gluDeleteQuadric(qobj);
 
    {
-      GLint r, g, b, a, d;
+      GLint r, g, b, a;
       glGetIntegerv(GL_RED_BITS, &r);
       glGetIntegerv(GL_GREEN_BITS, &g);
       glGetIntegerv(GL_BLUE_BITS, &b);
       glGetIntegerv(GL_ALPHA_BITS, &a);
-      glGetIntegerv(GL_DEPTH_BITS, &d);
       printf("channel sizes: %d %d %d %d\n", r, g, b, a);
-      printf("depth bits %d\n", d);
    }
 }
 
 
 
 static void
-write_targa(const char *filename, const GLfloat *buffer, int width, int height)
+write_targa(const char *filename, const GLushort *buffer, int width, int height)
 {
    FILE *f = fopen( filename, "w" );
    if (f) {
       int i, x, y;
-      const GLfloat *ptr = buffer;
+      const GLushort *ptr = buffer;
       printf ("osdemo, writing tga file \n");
       fputc (0x00, f);	/* ID Length, 0 => No ID	*/
       fputc (0x00, f);	/* Color Map Type, 0 => No color map included	*/
@@ -176,17 +177,11 @@ write_targa(const char *filename, const GLfloat *buffer, int width, int height)
       f = fopen( filename, "ab" );  /* reopen in binary append mode */
       for (y=height-1; y>=0; y--) {
          for (x=0; x<width; x++) {
-            int r, g, b;
             i = (y*width + x) * 4;
-            r = (int) (ptr[i+0] * 255.0);
-            g = (int) (ptr[i+1] * 255.0);
-            b = (int) (ptr[i+2] * 255.0);
-            if (r > 255) r = 255;
-            if (g > 255) g = 255;
-            if (b > 255) b = 255;
-            fputc(b, f); /* write blue */
-            fputc(g, f); /* write green */
-            fputc(r, f); /* write red */
+            /* just write 8 high bits */
+            fputc(ptr[i+2] >> 8, f); /* write blue */
+            fputc(ptr[i+1] >> 8, f); /* write green */
+            fputc(ptr[i] >> 8, f);   /* write red */
          }
       }
    }
@@ -194,13 +189,13 @@ write_targa(const char *filename, const GLfloat *buffer, int width, int height)
 
 
 static void
-write_ppm(const char *filename, const GLfloat *buffer, int width, int height)
+write_ppm(const char *filename, const GLushort *buffer, int width, int height)
 {
    const int binary = 0;
    FILE *f = fopen( filename, "w" );
    if (f) {
       int i, x, y;
-      const GLfloat *ptr = buffer;
+      const GLushort *ptr = buffer;
       if (binary) {
          fprintf(f,"P6\n");
          fprintf(f,"# ppm-file created by osdemo.c\n");
@@ -210,17 +205,11 @@ write_ppm(const char *filename, const GLfloat *buffer, int width, int height)
          f = fopen( filename, "ab" );  /* reopen in binary append mode */
          for (y=height-1; y>=0; y--) {
             for (x=0; x<width; x++) {
-               int r, g, b;
                i = (y*width + x) * 4;
-               r = (int) (ptr[i+0] * 255.0);
-               g = (int) (ptr[i+1] * 255.0);
-               b = (int) (ptr[i+2] * 255.0);
-               if (r > 255) r = 255;
-               if (g > 255) g = 255;
-               if (b > 255) b = 255;
-               fputc(r, f);   /* write red */
-               fputc(g, f); /* write green */
-               fputc(b, f); /* write blue */
+               /* just write 8 high bits */
+               fputc(ptr[i] >> 8, f);   /* write red */
+               fputc(ptr[i+1] >> 8, f); /* write green */
+               fputc(ptr[i+2] >> 8, f); /* write blue */
             }
          }
       }
@@ -233,15 +222,9 @@ write_ppm(const char *filename, const GLfloat *buffer, int width, int height)
          fprintf(f,"255\n");
          for (y=height-1; y>=0; y--) {
             for (x=0; x<width; x++) {
-               int r, g, b;
                i = (y*width + x) * 4;
-               r = (int) (ptr[i+0] * 255.0);
-               g = (int) (ptr[i+1] * 255.0);
-               b = (int) (ptr[i+2] * 255.0);
-               if (r > 255) r = 255;
-               if (g > 255) g = 255;
-               if (b > 255) b = 255;
-               fprintf(f, " %3d %3d %3d", r, g, b);
+               /* just write 8 high bits */
+               fprintf(f, " %3d %3d %3d", ptr[i] >> 8, ptr[i+1] >> 8, ptr[i+2] >> 8);
                counter++;
                if (counter % 5 == 0)
                   fprintf(f, "\n");
@@ -256,12 +239,12 @@ write_ppm(const char *filename, const GLfloat *buffer, int width, int height)
 
 int main( int argc, char *argv[] )
 {
-   GLfloat *buffer;
+   GLushort *buffer;
 
    /* Create an RGBA-mode context */
 #if OSMESA_MAJOR_VERSION * 100 + OSMESA_MINOR_VERSION >= 305
    /* specify Z, stencil, accum sizes */
-   OSMesaContext ctx = OSMesaCreateContextExt( GL_RGBA, 32, 0, 0, NULL );
+   OSMesaContext ctx = OSMesaCreateContextExt( GL_RGBA, 16, 0, 0, NULL );
 #else
    OSMesaContext ctx = OSMesaCreateContext( GL_RGBA, NULL );
 #endif
@@ -271,63 +254,18 @@ int main( int argc, char *argv[] )
    }
 
    /* Allocate the image buffer */
-   buffer = (GLfloat *) malloc( WIDTH * HEIGHT * 4 * sizeof(GLfloat));
+   buffer = (GLushort *) malloc( WIDTH * HEIGHT * 4 * sizeof(GLushort));
    if (!buffer) {
       printf("Alloc image buffer failed!\n");
       return 0;
    }
 
    /* Bind the buffer to the context and make it current */
-   if (!OSMesaMakeCurrent( ctx, buffer, GL_FLOAT, WIDTH, HEIGHT )) {
+   if (!OSMesaMakeCurrent( ctx, buffer, GL_UNSIGNED_SHORT, WIDTH, HEIGHT )) {
       printf("OSMesaMakeCurrent failed!\n");
       return 0;
    }
-
-   printf("GL_RENDERER   = %s\n", (char *)glGetString(GL_RENDERER));
-   printf("GL_VERSION    = %s\n", (char *)glGetString(GL_VERSION));
-   printf("GL_VENDOR     = %s\n", (char *)glGetString(GL_VENDOR));
-   printf("GL_SHADING_LANGUAGE_VERSION = %s\n",
-          (char *)glGetString(GL_SHADING_LANGUAGE_VERSION));
-   printf("GL_EXTENSIONS = %s\n", (char *)glGetString(GL_EXTENSIONS));
-
-   /* tests */
-#ifdef MANGLE
-   printf("mangled OSMesa...\n");
-   if (!OSMesaGetProcAddress("mglCreateShader")) {
-      printf("Error: OSMesaGetProcAddress(\"mglCreateShader\") failed!");
-      exit(1);
-   }
-#else
-   printf("non-mangled OSMesa...\n");
-   if (OSMesaGetProcAddress("mglCreateShader")) {
-      printf("Error: OSMesaGetProcAddress(\"mglCreateShader\") succeeded!");
-      exit(1);
-   }
-#endif
-   if (!OSMesaGetProcAddress("glCreateShader")) {
-      printf("Error: OSMesaGetProcAddress(\"glCreateShader\") failed!");
-      exit(1);
-   }
-   {
-      PFNGLCREATESHADERPROC mesaCreateShader =
-          (PFNGLCREATESHADERPROC)OSMesaGetProcAddress("glCreateShader");
-      assert(mesaCreateShader);
-      GLuint shader = mesaCreateShader(GL_FRAGMENT_SHADER);
-      if (shader == 0) {
-         printf(("Error: Failed to create shader using mesaCreateShader\n"));
-         exit(1);
-      }
-   }
-   {
-      assert(glCreateShader);
-      GLuint shader = glCreateShader(GL_FRAGMENT_SHADER);
-      if (shader == 0) {
-         printf(("Error: Failed to create shader using glCreateShader\n"));
-         exit(1);
-      }
-   }
-   printf("tests OK!\n");
-
+     
    render_image();
 
    if (argc>1) {
