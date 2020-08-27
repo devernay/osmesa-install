@@ -4,7 +4,7 @@
  *
  * Compile with something like this:
  *
- * gcc osdemo32.c -I../../include -L../../lib -lglut -lGLU -lOSMesa32 -lm -o osdemo32
+ * gcc osdemo32.c -I../../include -L../../lib -lGLU -lOSMesa32 -lm -o osdemo32
  */
 
 
@@ -16,7 +16,7 @@
 #include "GL/osmesa.h"
 #include <GL/glext.h>
 #include <GL/glu.h>
-#include "glut_wrap.h"
+#include "gl_wrap.h"
 
 #define STRINGISE_IMPL(x) # x
 #define STRINGISE(x) STRINGISE_IMPL(x)
@@ -283,49 +283,50 @@ int main( int argc, char *argv[] )
       return 0;
    }
 
-    printf("GL_RENDERER   = %s\n", (char *) glGetString(GL_RENDERER));
-    printf("GL_VERSION    = %s\n", (char *) glGetString(GL_VERSION));
-    printf("GL_VENDOR     = %s\n", (char *) glGetString(GL_VENDOR));
-    printf("GL_SHADING_LANGUAGE_VERSION = %s\n", (char *) glGetString(GL_SHADING_LANGUAGE_VERSION));
-    printf("GL_EXTENSIONS = %s\n", (char *) glGetString(GL_EXTENSIONS));
+   printf("GL_RENDERER   = %s\n", (char *)glGetString(GL_RENDERER));
+   printf("GL_VERSION    = %s\n", (char *)glGetString(GL_VERSION));
+   printf("GL_VENDOR     = %s\n", (char *)glGetString(GL_VENDOR));
+   printf("GL_SHADING_LANGUAGE_VERSION = %s\n",
+          (char *)glGetString(GL_SHADING_LANGUAGE_VERSION));
+   printf("GL_EXTENSIONS = %s\n", (char *)glGetString(GL_EXTENSIONS));
 
-    /* tests */
+   /* tests */
 #ifdef MANGLE
-    printf("mangled OSMesa...\n");
-    if (!OSMesaGetProcAddress("mglCreateShader")) {
-        printf("Error: OSMesaGetProcAddress(\"mglCreateShader\") failed!");
-        exit(1);
-    }
+   printf("mangled OSMesa...\n");
+   if (!OSMesaGetProcAddress("mglCreateShader")) {
+      printf("Error: OSMesaGetProcAddress(\"mglCreateShader\") failed!");
+      exit(1);
+   }
 #else
-    printf("non-mangled OSMesa...\n");
-    if (OSMesaGetProcAddress("mglCreateShader")) {
-        printf("Error: OSMesaGetProcAddress(\"mglCreateShader\") succeeded!");
-        exit(1);
-    }
+   printf("non-mangled OSMesa...\n");
+   if (OSMesaGetProcAddress("mglCreateShader")) {
+      printf("Error: OSMesaGetProcAddress(\"mglCreateShader\") succeeded!");
+      exit(1);
+   }
 #endif
-    if (!OSMesaGetProcAddress("glCreateShader")) {
-        printf("Error: OSMesaGetProcAddress(\"glCreateShader\") failed!");
-        exit(1);
-    }
-    {
-        PFNGLCREATESHADERPROC mesaCreateShader = (PFNGLCREATESHADERPROC)OSMesaGetProcAddress("glCreateShader");
-        assert(mesaCreateShader);
-        GLuint shader = mesaCreateShader(GL_FRAGMENT_SHADER);
-        if (shader == 0) {
-            printf(("Error: Failed to create shader using mesaCreateShader\n"));
-            exit(1);
-        }
-    }
-    {
-        assert(glCreateShader);
-        GLuint shader = glCreateShader(GL_FRAGMENT_SHADER);
-        if (shader == 0) {
-            printf(("Error: Failed to create shader using glCreateShader\n"));
-            exit(1);
-        }
-    }
-    printf("tests OK!\n");
-
+   if (!OSMesaGetProcAddress("glCreateShader")) {
+      printf("Error: OSMesaGetProcAddress(\"glCreateShader\") failed!");
+      exit(1);
+   }
+   {
+      PFNGLCREATESHADERPROC mesaCreateShader =
+          (PFNGLCREATESHADERPROC)OSMesaGetProcAddress("glCreateShader");
+      assert(mesaCreateShader);
+      GLuint shader = mesaCreateShader(GL_FRAGMENT_SHADER);
+      if (shader == 0) {
+         printf(("Error: Failed to create shader using mesaCreateShader\n"));
+         exit(1);
+      }
+   }
+   {
+      assert(glCreateShader);
+      GLuint shader = glCreateShader(GL_FRAGMENT_SHADER);
+      if (shader == 0) {
+         printf(("Error: Failed to create shader using glCreateShader\n"));
+         exit(1);
+      }
+   }
+   printf("tests OK!\n");
 
    render_image();
 
