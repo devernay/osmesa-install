@@ -741,7 +741,7 @@ tar jxf mesa-demos-${demoversion}.tar.bz2
 cd mesa-demos-${demoversion}/src/osdemos
 echo "* building Mesa Demo..."
 # We need to include gl_mangle.h and glu_mangle.h, because osdemo32.c doesn't include them
-
+CFLAGS="$CFLAGS -fpermissive"
 INCLUDES="-include $osmesaprefix/include/GL/gl.h -include $osmesaprefix/include/GL/glu.h"
 if [ "$mangled" = 1 ]; then
     INCLUDES="-include $osmesaprefix/include/GL/gl_mangle.h -include $osmesaprefix/include/GL/glu_mangle.h $INCLUDES"
