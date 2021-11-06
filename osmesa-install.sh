@@ -454,9 +454,15 @@ if [ "$mangled" = 1 ]; then
 fi
 
 # mingw-specific patches (for maintainability, prefer putting everything in the main patch list)
-#if [ "$osname" = "Msys" ] || [ "$osname" = "MINGW64_NT-6.1" ] || [ "$osname" = "MINGW32_NT-6.1" ]; then
-#    PATCHES="$PATCHES "
-#fi
+mingw=0
+case "$osname" in
+    Msys*|MSYS*|MINGW*)
+    mingw=1
+    ;;
+esac
+if [ "$mingw" = 1 ]; then
+    PATCHES="$PATCHES scons31-python39-001.patch scons31-python39-002.patch"
+fi
 
 if [ "$osname" = Darwin ]; then
     # patches for Mesa 12.0.1 from
