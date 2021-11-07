@@ -1,0 +1,230 @@
+--- a/SConstruct
++++ b/SConstruct
+@@ -152,8 +152,7 @@ try:
+ except ImportError:
+     pass
+ else:
+-    aliases = default_ans.keys()
+-    aliases.sort()
++    aliases = sorted(default_ans.keys())
+     env.Help('\n')
+     env.Help('Recognized targets:\n')
+     for alias in aliases:
+diff --git a/SConstruct b/SConstruct
+index 696718c8eb4..0215aa83073 100644
+--- a/SConstruct
++++ b/SConstruct
+@@ -50,10 +50,10 @@ except KeyError:
+     pass
+ else:
+     targets = targets.split(',')
+-    print 'scons: warning: targets option is deprecated; pass the targets on their own such as'
+-    print
+-    print '  scons %s' % ' '.join(targets)
+-    print
++    print('scons: warning: targets option is deprecated; pass the targets on their own such as')
++    print()
++    print('  scons %s' % ' '.join(targets))
++    print()
+     COMMAND_LINE_TARGETS.append(targets)
+ 
+ 
+diff --git a/src/gallium/drivers/llvmpipe/SConscript b/src/gallium/drivers/llvmpipe/SConscript
+index fbbd22a5299..74d7a9e1673 100644
+--- a/src/gallium/drivers/llvmpipe/SConscript
++++ b/src/gallium/drivers/llvmpipe/SConscript
+@@ -4,7 +4,7 @@ import distutils.version
+ Import('*')
+ 
+ if not env['llvm']:
+-    print 'warning: LLVM disabled: not building llvmpipe'
++    print('warning: LLVM disabled: not building llvmpipe')
+     Return()
+ 
+ env = env.Clone()
+diff --git a/src/gallium/drivers/svga/SConscript b/src/gallium/drivers/svga/SConscript
+index 2d60ceb2be5..9c4806c7158 100644
+--- a/src/gallium/drivers/svga/SConscript
++++ b/src/gallium/drivers/svga/SConscript
+@@ -5,7 +5,7 @@ env = env.Clone()
+ env.MSVC2013Compat()
+ 
+ if env['suncc']:
+-	print 'warning: not building svga'
++	print('warning: not building svga')
+ 	Return()
+ 
+ env.Append(CPPDEFINES = [
+diff --git a/src/gallium/drivers/swr/SConscript b/src/gallium/drivers/swr/SConscript
+index b394cbc17e3..fdced66463c 100644
+--- a/src/gallium/drivers/swr/SConscript
++++ b/src/gallium/drivers/swr/SConscript
+@@ -8,12 +8,12 @@ if not env['swr']:
+     Return()
+ 
+ if not env['llvm']:
+-    print 'warning: LLVM disabled: not building swr'
++    print('warning: LLVM disabled: not building swr')
+     env['swr'] = False
+     Return()
+ 
+ if env['LLVM_VERSION'] < distutils.version.LooseVersion('3.9'):
+-    print "warning: swr requires LLVM >= 3.9: not building swr"
++    print("warning: swr requires LLVM >= 3.9: not building swr")
+     env['swr'] = False
+     Return()
+ 
+@@ -28,7 +28,7 @@ if env['platform'] == 'windows':
+ else:
+     llvm_config = os.environ.get('LLVM_CONFIG', 'llvm-config')
+     llvm_includedir = env.backtick('%s --includedir' % llvm_config).rstrip()
+-    print "llvm include dir %s" % llvm_includedir
++    print("llvm include dir %s" % llvm_includedir)
+ 
+ if not env['msvc'] :
+     env.Append(CCFLAGS = [
+diff --git a/src/gallium/targets/dri/SConscript b/src/gallium/targets/dri/SConscript
+index d7a8cbdca5d..f5c2818d04f 100644
+--- a/src/gallium/targets/dri/SConscript
++++ b/src/gallium/targets/dri/SConscript
+@@ -3,7 +3,7 @@ Import('*')
+ env = drienv.Clone()
+ 
+ if env['suncc']:
+-    print 'warning: not building dri-vmwgfx'
++    print('warning: not building dri-vmwgfx')
+     Return()
+ 
+ env.Append(CPPPATH = [
+--- a/src/SConscript      2021-11-06 13:15:10.398154100 +0100
++++ b/src/SConscript      2021-11-06 13:15:27.175421700 +0100
+@@ -26,7 +26,7 @@
+     try:
+         (commit, foo) = subprocess.Popen(args, stdout=subprocess.PIPE).communicate()
+     except:
+-        print "Warning: exception in write_git_sha1_h_file()"
++        print("Warning: exception in write_git_sha1_h_file()")
+         # git log command didn't work
+         if not os.path.exists(filename):
+             dirname = os.path.dirname(filename)
+--- a/scons/gallium.py
++++ b/scons/gallium.py
+@@ -132,7 +132,7 @@ def check_cc(env, cc, expr, cpp_opt = '-E'):
+     sys.stdout.write('Checking for %s ... ' % cc)
+ 
+     source = tempfile.NamedTemporaryFile(suffix='.c', delete=False)
+-    source.write('#if !(%s)\n#error\n#endif\n' % expr)
++    source.write(('#if !(%s)\n#error\n#endif\n' % expr).encode())
+     source.close()
+ 
+     # sys.stderr.write('%r %s %s\n' % (env['CC'], cpp_opt, source.name));
+--- a/src/mapi/glapi/gen/gl_XML.py   2021-11-06 15:10:09.295762400 +0100
++++ b/src/mapi/glapi/gen/gl_XML.py        2021-11-06 15:11:10.056873300 +0100
+@@ -705,7 +705,7 @@
+
+         parameters = []
+         return_type = "void"
+-        for child in element.getchildren():
++        for child in element:
+             if child.tag == "return":
+                 return_type = child.get( "type", "void" )
+             elif child.tag == "param":
+@@ -735,7 +735,7 @@
+                 if param.is_image():
+                     self.images.append( param )
+
+-        if element.getchildren():
++        if list(element):
+             self.initialized = 1
+             self.entry_point_parameters[name] = parameters
+         else:
+@@ -907,7 +907,7 @@
+
+
+     def process_OpenGLAPI(self, file_name, element):
+-        for child in element.getchildren():
++        for child in element:
+             if child.tag == "category":
+                 self.process_category( child )
+             elif child.tag == "OpenGLAPI":
+@@ -927,7 +927,7 @@
+         [cat_type, key] = classify_category(cat_name, cat_number)
+         self.categories[cat_type][key] = [cat_name, cat_number]
+
+-        for child in cat.getchildren():
++        for child in cat:
+             if child.tag == "function":
+                 func_name = real_function_name( child )
+
+
+--- a/src/mapi/glapi/gen/gl_XML.py   2021-11-06 15:48:11.564583800 +0100
++++ b/mapi/glapi/gen/gl_XML.py        2021-11-06 15:48:57.416514700 +0100
+@@ -317,7 +317,7 @@
+
+     if len(list) == 0: list = ["void"]
+
+-    return string.join(list, ", ")
++    return ",".join(list)
+
+
+ class gl_item(object):
+
+
+--- a/src/mapi/glapi/gen/typeexpr.py 2021-11-06 15:16:08.660980300 +0100
++++ b/src/mapi/glapi/gen/typeexpr.py      2021-11-06 15:18:11.644076000 +0100
+@@ -124,7 +124,7 @@
+
+         # Replace '*' with ' * ' in type_string.  Then, split the string
+         # into tokens, separated by spaces.
+-        tokens = string.split( string.replace( type_string, "*", " * " ) )
++        tokens = type_string.replace( "*", " * " ).split()
+
+         const = 0
+         t = None
+
+--- a/src/gallium/auxiliary/util/u_format_parse.py   2021-11-06 17:06:10.126736600 +0100
++++ b/src/gallium/auxiliary/util/u_format_parse.py        2021-11-06 17:06:28.586891400 +0100
+@@ -69,6 +69,9 @@
+         return s
+
+     def __eq__(self, other):
++        if other is None:
++            return False
++
+         return self.type == other.type and self.norm == other.norm and self.pure == other.pure and self.size == other.size
+
+     def max(self):
+
+--- a/src/gallium/auxiliary/util/u_format_parse.py   2021-11-06 17:19:54.797902700 +0100
++++ b/src/gallium/auxiliary/util/u_format_parse.py        2021-11-06 17:20:31.231904400 +0100
+@@ -79,7 +79,7 @@
+         if self.type == FLOAT:
+             return VERY_LARGE
+         if self.type == FIXED:
+-            return (1 << (self.size/2)) - 1
++            return (1 << (self.size//2)) - 1
+         if self.norm:
+             return 1
+         if self.type == UNSIGNED:
+@@ -93,7 +93,7 @@
+         if self.type == FLOAT:
+             return -VERY_LARGE
+         if self.type == FIXED:
+-            return -(1 << (self.size/2))
++            return -(1 << (self.size//2))
+         if self.type == UNSIGNED:
+             return 0
+         if self.norm:
+
+--- a/src/gallium/auxiliary/util/u_format_pack.py    2021-11-06 17:31:59.016007700 +0100
++++ b/src/gallium/auxiliary/util/u_format_pack.py 2021-11-06 17:32:43.419846800 +0100
+@@ -238,7 +238,7 @@
+             return truncate_mantissa(value, 23)
+         return value
+     if type.type == FIXED:
+-        return int(value * (1 << (type.size/2)))
++        return int(value * (1 << (type.size//2)))
+     if not type.norm:
+         return int(value)
+     if type.type == UNSIGNED:
+
