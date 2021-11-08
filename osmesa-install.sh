@@ -16,7 +16,7 @@ set -u # Treat unset variables as an error when substituting.
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.3.9}"
+mesaversion="${OSMESA_VERSION:-18.3.6}"
 # mesa-demos version
 demoversion=8.4.0
 # glu version
@@ -271,6 +271,10 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    # https://github.com/macports/macports-ports/tree/b34bfd6652fad3994effcb1f14486c8ab5431a3b/lang/llvm-5.0
 	    # ORC patch to fix building with GCC 8.x, see:
 	    # https://bugzilla.redhat.com/show_bug.cgi?id=1540620
+        # llvm 6.0.1 patches from:
+        # https://github.com/macports/macports-ports/tree/b3959e9bbcef4d6b7adffe779ec116dd832972a9/lang/llvm-6.0
+        # llvm 9.0.1 patches from:
+        # https://github.com/macports/macports-ports/tree/b3959e9bbcef4d6b7adffe779ec116dd832972a9/lang/llvm-9.0
             llvm_patches="\
 	    0001-Fix-return-type-in-ORC-readMem-client-interface.patch \
 	    0001-Set-the-Mach-O-CPU-Subtype-to-ppc7400-when-targeting.patch \
@@ -279,6 +283,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    0004-Fix-build-issues-pre-Lion-due-to-missing-a-strnlen-d.patch \
 	    0005-Dont-build-LibFuzzer-pre-Lion-due-to-missing-__threa.patch \
 	    0005-Threading-Only-call-pthread_setname_np-on-SnowLeopar.patch \
+        0006-Only-call-setpriority-PRIO_DARWIN_THREAD-0-PRIO_DARW.patch \
 	    "
             if [ "$osname" = Darwin ] && [ "$osver" = 10 ]; then
                 # On Snow Leopard, build universal
@@ -379,7 +384,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     else
 	if version_gt $("$llvmconfigbinary" --version) 6.0.1; then
 	    echo "Warning: LLVM version is $($llvmconfigbinary --version), but this script was only tested with versions 3.3 to 6.0.1"
-	    echo "LLVM 6.0.1 seems to work, LLVM 9.0.1 hangs on osdemo16, at least up to Mesa 17.3.9."
+	    echo "LLVM 4.0.1 is the best option for Mesa 17.x."
+        echo "LLVM 6.0.1 works with Mesa 18.x."
+        echo "LLVM 9.0.1 hangs on osdemo16, at least up to Mesa 18.2.8, but may work with Mesa 18.3.6 and later."
 	    echo "Please modify this script and file a github issue if it works with this version."
 	    echo "Continuing anyway after 10s."
 	    sleep 10
@@ -397,6 +404,21 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         llvmlibsadd=$("${llvmconfigbinary}" --ldflags)
     fi
     llvmlibs="$llvmlibs $llvmlibsadd"
+fi
+
+if version_gt $("$llvmconfigbinary" --version) 4.0.1 && version_gt 18.0.0 "$mesaversion"; then
+    echo "Building for an unsupported combination of Mesa/LLVM."
+    echo "LLVM 4.0.1 is the best option for Mesa 17.x."
+    echo "Continuing anyway after 10s."
+    sleep 10
+fi
+
+if version_gt $("$llvmconfigbinary" --version) 6.0.1 && version_gt 19.0.0 "$mesaversion"; then
+    echo "Building for an unsupported combination of Mesa/LLVM."
+    echo "LLVM 6.0.1 is the best option for Mesa 18.x."
+    echo "LLVM 9.0.1 and later hang when running osdemo16 with Mesa up to 18.1.8."
+    echo "Continuing anyway after 10s."
+    sleep 10
 fi
 
 if [ "$clean" = 1 ]; then
@@ -753,7 +775,7 @@ fi # if [ "$buildosmesa" = 1 ];
 
 if [ "$buildglu" = 1 ]; then
 
-if [ ! -f glu-${gluversion}.tar.bz2 ]; then
+if [ ! -f glu-${gluversion}.tar.gz ]; then
     echo "* downloading GLU ${gluversion}..."
     curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.gz"
 fi
