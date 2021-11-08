@@ -1,0 +1,85 @@
+--- mesa-17.1.10/src/gallium/auxiliary/gallivm/lp_bld_init.c.orig	2021-11-07 17:57:12.000000000 -0800
++++ mesa-17.1.10/src/gallium/auxiliary/gallivm/lp_bld_init.c	2021-11-07 20:15:49.000000000 -0800
+@@ -40,6 +40,9 @@
+ 
+ #include <llvm-c/Analysis.h>
+ #include <llvm-c/Transforms/Scalar.h>
++#if LLVM_VERSION_MAJOR >= 7
++#include <llvm-c/Transforms/Utils.h>
++#endif
+ #include <llvm-c/BitWriter.h>
+ 
+ 
+@@ -143,7 +146,11 @@
+       LLVMAddCFGSimplificationPass(gallivm->passmgr);
+       LLVMAddReassociatePass(gallivm->passmgr);
+       LLVMAddPromoteMemoryToRegisterPass(gallivm->passmgr);
++#if LLVM_VERSION_MAJOR <= 11
+       LLVMAddConstantPropagationPass(gallivm->passmgr);
++#else
++      LLVMAddInstructionSimplifyPass(gallivm->passmgr);
++#endif
+       LLVMAddInstructionCombiningPass(gallivm->passmgr);
+       LLVMAddGVNPass(gallivm->passmgr);
+    }
+--- mesa-17.1.10/src/gallium/auxiliary/gallivm/lp_bld_misc.cpp.orig	2021-11-07 17:46:59.000000000 -0800
++++ mesa-17.1.10/src/gallium/auxiliary/gallivm/lp_bld_misc.cpp	2021-11-07 20:20:53.000000000 -0800
+@@ -42,11 +42,13 @@
+ 
+ #include <stddef.h>
+ 
++#if LLVM_VERSION_MAJOR < 7
+ // Workaround http://llvm.org/PR23628
+ #if HAVE_LLVM >= 0x0307
+ #  pragma push_macro("DEBUG")
+ #  undef DEBUG
+ #endif
++#endif
+ 
+ #include <llvm-c/Core.h>
+ #include <llvm-c/ExecutionEngine.h>
+@@ -69,9 +71,11 @@
+ 
+ #include <llvm/Support/TargetSelect.h>
+ 
++#if LLVM_VERSION_MAJOR < 11
+ #if HAVE_LLVM >= 0x0305
+ #include <llvm/IR/CallSite.h>
+ #endif
++#endif
+ #include <llvm/IR/IRBuilder.h>
+ #include <llvm/IR/Module.h>
+ #include <llvm/Support/CBindingWrapping.h>
+@@ -81,10 +85,12 @@
+ #include <llvm/ExecutionEngine/JITEventListener.h>
+ #endif
+ 
++#if LLVM_VERSION_MAJOR < 7
+ // Workaround http://llvm.org/PR23628
+ #if HAVE_LLVM >= 0x0307
+ #  pragma pop_macro("DEBUG")
+ #endif
++#endif
+ 
+ #include "c11/threads.h"
+ #include "os/os_thread.h"
+@@ -338,6 +344,11 @@
+ #endif
+                                            IsReadOnly);
+       }
++#if LLVM_VERSION_MAJOR >= 5
++      virtual void deregisterEHFrames() {
++         mgr()->deregisterEHFrames();
++      }
++#else
+ #if HAVE_LLVM >= 0x0304
+       virtual void registerEHFrames(uint8_t *Addr, uint64_t LoadAddr, size_t Size) {
+          mgr()->registerEHFrames(Addr, LoadAddr, Size);
+@@ -350,6 +361,7 @@
+          mgr()->registerEHFrames(SectionData);
+       }
+ #endif
++#endif
+       virtual void *getPointerToNamedFunction(const std::string &Name,
+                                               bool AbortOnFailure=true) {
+          return mgr()->getPointerToNamedFunction(Name, AbortOnFailure);
