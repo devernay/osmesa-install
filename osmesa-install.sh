@@ -810,9 +810,12 @@ else
     #collect2.exe: error: ld returned 1 exit status
     allowfail=true
 fi
-$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || ./osdemo32 image32.tga || $allowfail
-$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo16 osdemo16.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || ./osdemo16 image16.tga || $allowfail
-$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo osdemo.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || ./osdemo image.tga || $allowfail
+$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
+./osdemo32 image32.tga || $allowfail
+$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo16 osdemo16.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
+./osdemo16 image16.tga || $allowfail
+$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo osdemo.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
+./osdemo image.tga || $allowfail
 # results are in image32.tga image16.tga image.tga
 fi # buildosdemo == 1
 
