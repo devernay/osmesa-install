@@ -18,9 +18,9 @@ osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
 mesaversion="${OSMESA_VERSION:-17.1.10}"
 # mesa-demos version
-demoversion=8.3.0
+demoversion=8.4.0
 # glu version
-gluversion=9.0.0
+gluversion=9.0.1 # 9.0.2 doesn't support mangled GL, but supports building with meson
 # set debug to 1 to compile a version with debugging symbols
 debug=0
 # set clean to 1 to clean the source directories first (recommended)
@@ -94,7 +94,7 @@ if [ "$osname" = Darwin ]; then
     fi
     XCODE_VER=$(xcodebuild -version | sed -e 's/Xcode //' | head -n 1)
     case "$XCODE_VER" in
-        4.2*|5.*|6.*|7.*|8.*)
+        4.2*|[5-9].*|1[0-9].*)
             # clang became the default compiler on Xcode 4.2
             CC=clang
             CXX=clang++
@@ -119,14 +119,14 @@ if [ "$osname" = Darwin ]; then
         # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
         # everything with clang-5.0
         if [ -f /opt/local/etc/macports/macports.conf ] && grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
-            if [[ $(type -P clang-mp-8.0) ]]; then
-		CC=clang-mp-8.0
-		CXX=clang++-mp-8.0
-		OSDEMO_LD="clang++-mp-8.0 -stdlib=libc++"
-	    else
-		echo "Error: Please install clang 8 using the following command:"
-		echo "sudo port install clang-8.0"
-	    fi
+            if [[ $(type -P clang-mp-9.0) ]]; then
+                CC=clang-mp-9.0
+                CXX=clang++-mp-9.0
+                OSDEMO_LD="clang++-mp-9.0 -stdlib=libc++"
+            else
+                echo "Error: Please install clang 9 using the following command:"
+                echo "sudo port install clang-9.0"
+            fi
         else
             # This project is affected by a bug in Apple's gcc driver driver that was fixed in the apple-gcc42 port:
             # https://github.com/macports/macports-ports/blob/master/lang/apple-gcc42/files/driverdriver-num_infiles.patch
@@ -192,8 +192,7 @@ fi
 
 # see https://stackoverflow.com/a/24067243
 function version_gt() {
-    #test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; # requires GNU sort
-    test "$(printf '%s\n' "$@" sed 's/\b\([0-9]\)\b/0\1/g' versions.txt  | sort | sed 's/\b0\([0-9]\)/\1/g' | head -n 1)" != "$1"; # version numbers can have two digits at most (i.e. 0 to 99)
+    test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1";
 }
 
 # On MacPorts, building Mesa requires the following packages:
@@ -223,13 +222,17 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             xzcat="gzip -dc"
         fi
         # From Yosemite (14) gunzip can decompress xz files - but only if containing a tar archive.
-        if [ "$osname" = Darwin ] && [ "$osver" -ge 14 ]; then
-            xzcat="gzip -dc"
-        fi
+        #if [ "$osname" = Darwin ] && [ "$osver" -ge 14 ]; then
+        #    xzcat="gzip -dc"
+        #fi
         if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
             echo "* downloading LLVM ${llvmversion}..."
-            # the llvm we server doesnt' allow continuing partial downloads
-            curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
+            if version_gt "${llvmversion}" 7.0.0; then
+                curl $curlopts -O "https://github.com/llvm/llvm-project/releases/download/llvmorg-${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
+            else
+                # the llvm we server doesnt' allow continuing partial downloads
+                curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
+            fi
         fi
         $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
         cd llvm-${llvmversion}.src
@@ -379,7 +382,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    sleep 10
 	fi
     fi
-    llvmcomponents="engine mcjit"
+    llvmcomponents="engine mcjit x86codegen x86disassembler"
     if [ "$debug" = 1 ]; then
         llvmcomponents="$llvmcomponents mcdisassembler"
     fi
@@ -397,11 +400,14 @@ if [ "$clean" = 1 ]; then
     rm -rf "mesa-$mesaversion" "mesa-demos-$demoversion" "glu-$gluversion"
 fi
 
-if [ ! -f "mesa-${mesaversion}.tar.gz" ]; then
+archsuffix=xz
+if [ ! -f "mesa-${mesaversion}.tar.${archsuffix}" ]; then
     echo "* downloading Mesa ${mesaversion}..."
-    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.gz" || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.gz"
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.${archsuffix}" \
+    || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}" \
+    || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/${mesaversion}/mesa-${mesaversion}.tar.${archsuffix}"    
 fi
-tar zxf "mesa-${mesaversion}.tar.gz"
+tar xf "mesa-${mesaversion}.tar.${archsuffix}"
 
 # apply patches from MacPorts
 
@@ -440,6 +446,8 @@ scons-swr-cc-arch.patch \
 msys2_scons_fix.patch \
 osmesa-gl-DispatchTSD.patch \
 osmesa-configure-ac.patch \
+gallivm_math_h.patch \
+gallium_llvm.patch \
 "
 
 if [ "$osname" = Darwin ] && [ "$osver" -lt 14 ]; then
@@ -504,51 +512,68 @@ echo "* fixing src/mapi/glapi/glapi_getproc.c..."
 sed -i.bak -e 's/MANGLE/MANGLE_disabled/' src/mapi/glapi/glapi_getproc.c
 
 echo "* building Mesa..."
+use_scons=0
+use_autoconf=0
+use_meson=0
 
 case "$osname" in
     Msys*|MSYS*|MINGW*)
+        use_scons=1
+        if [ "$mangled" = 1 ] && version_gt "$mesaversion" 19.2.1; then
+            echo "Error: mangled GL support was dropped with Mesa 19.2.2"
+            exit 1
+        fi
+        ;;
+    *)
+        if version_gt 19.0.0 "$mesaversion"; then
+            use_autoconf=1
+        else
+            use_meson=1
+        fi
+        ;;
+esac
 
-        ####################################################################
-        # Windows build uses scons
-
-        case "$osname" in
-            MINGW64_NT-*)
-                scons_machine="x86_64"
-                ;;
-            *)
-                scons_machine="x86"
-                ;;
-        esac
-        scons_cflags="$CFLAGS"
-        scons_cxxflags="$CXXFLAGS -std=c++11"
-        scons_ldflags="-s"
-        if [ "$shared" = 0 ]; then
-            scons_ldflags="-static $scons_ldflags"
-        fi
-        if [ "$mangled" = 1 ]; then
-            scons_cflags="-DUSE_MGL_NAMESPACE"
-        fi
-        if [ "$debug" = 1 ]; then
-            scons_build="debug"
-        else
-            scons_build="release"
-        fi
-        if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
-            scons_llvm=yes
-        else
-            scons_llvm=no
-        fi
-        if [ "$osmesadriver" = 4 ]; then
-            scons_swr=1
-        else
-            scons_swr=0
-        fi
-        mkdir -p "$osmesaprefix/include" "$osmesaprefix/lib/pkgconfig"
-        env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
-        cp "build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll" "$osmesaprefix/lib/osmesa.dll"
-        cp "build/windows-$scons_machine/gallium/targets/osmesa/libosmesa.a" "$osmesaprefix/lib/libMangledOSMesa32.a"
-        cp -a "include/GL" "$osmesaprefix/include/" || exit 1
-        cat <<EOF > "$osmesaprefix/lib/pkgconfig/osmesa.pc"
+if [ "$use_scons" = 1 ]; then
+    ####################################################################
+    # Windows build uses scons
+    case "$osname" in
+        MINGW64_NT-*)
+            scons_machine="x86_64"
+            ;;
+        *)
+            scons_machine="x86"
+            ;;
+    esac
+    scons_cflags="$CFLAGS"
+    scons_cxxflags="$CXXFLAGS -std=c++11"
+    scons_ldflags="-s"
+    if [ "$shared" = 0 ]; then
+        scons_ldflags="-static $scons_ldflags"
+    fi
+    if [ "$mangled" = 1 ]; then
+        scons_cflags="-DUSE_MGL_NAMESPACE"
+    fi
+    if [ "$debug" = 1 ]; then
+        scons_build="debug"
+    else
+        scons_build="release"
+    fi
+    if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
+        scons_llvm=yes
+    else
+        scons_llvm=no
+    fi
+    if [ "$osmesadriver" = 4 ]; then
+        scons_swr=1
+    else
+        scons_swr=0
+    fi
+    mkdir -p "$osmesaprefix/include" "$osmesaprefix/lib/pkgconfig"
+    env LLVM_CONFIG="$llvmconfigbinary" LLVM="$llvmprefix" CFLAGS="$scons_cflags" CXXFLAGS="$scons_cxxflags" LDFLAGS="$scons_ldflags" scons build="$scons_build" platform=windows toolchain=mingw machine="$scons_machine" texture_float=yes llvm="$scons_llvm" swr="$scons_swr" verbose=yes osmesa
+    cp "build/windows-$scons_machine/gallium/targets/osmesa/osmesa.dll" "$osmesaprefix/lib/osmesa.dll"
+    cp "build/windows-$scons_machine/gallium/targets/osmesa/libosmesa.a" "$osmesaprefix/lib/libMangledOSMesa32.a"
+    cp -a "include/GL" "$osmesaprefix/include/" || exit 1
+    cat <<EOF > "$osmesaprefix/lib/pkgconfig/osmesa.pc"
 prefix=${osmesaprefix}
 exec_prefix=\${prefix}
 libdir=\${exec_prefix}/lib
@@ -561,149 +586,156 @@ Version: $mesaversion
 Libs: -L\${libdir} -lMangledOSMesa32
 Cflags: -I\${includedir}
 EOF
-        cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc
+    cp $osmesaprefix/lib/pkgconfig/osmesa.pc $osmesaprefix/lib/pkgconfig/gl.pc
 
-        # end of SCons build
-        ####################################################################
-        ;;
-    *)
+    # end of SCons build
+    ####################################################################
+elif [ "$use_autoconf" = 1 ]; then
+    ####################################################################
+    # Unix builds for version up to 18 use configure
 
-        ####################################################################
-        # Unix builds use configure
+    test -f Mafefile && make -j"${mkjobs}" distclean # if in an existing build
 
-        test -f Mafefile && make -j"${mkjobs}" distclean # if in an existing build
+    autoreconf -fi
 
-        autoreconf -fi
+    confopts="\
+        --disable-dependency-tracking \
+        --enable-texture-float \
+        --disable-gles1 \
+        --disable-gles2 \
+        --disable-dri \
+        --disable-dri3 \
+        --disable-glx \
+        --disable-glx-tls \
+        --disable-egl \
+        --disable-gbm \
+        --disable-xvmc \
+        --disable-vdpau \
+        --disable-omx \
+        --disable-va \
+        --disable-opencl \
+        --disable-shared-glapi \
+        --disable-driglx-direct \
+        --with-dri-drivers= \
+        --with-osmesa-bits=32 \
+        --with-egl-platforms= \
+        --prefix=$osmesaprefix \
+        "
+    if [ "$shared" = 1 ]; then
+        confopts="$confopts --enable-shared --disable-static"
+    else
+        confopts="$confopts --disable-shared --enable-static"
+    fi
 
-        confopts="\
-            --disable-dependency-tracking \
-            --enable-texture-float \
-            --disable-gles1 \
-            --disable-gles2 \
-            --disable-dri \
-            --disable-dri3 \
-            --disable-glx \
-            --disable-glx-tls \
-            --disable-egl \
-            --disable-gbm \
-            --disable-xvmc \
-            --disable-vdpau \
-            --disable-omx \
-            --disable-va \
-            --disable-opencl \
-            --disable-shared-glapi \
-            --disable-driglx-direct \
-            --with-dri-drivers= \
-            --with-osmesa-bits=32 \
-            --with-egl-platforms= \
-            --prefix=$osmesaprefix \
-            "
-        if [ "$shared" = 1 ]; then
-            confopts="$confopts --enable-shared --disable-static"
-        else
-            confopts="$confopts --disable-shared --enable-static"
+    if [ "$osmesadriver" = 1 ]; then
+        # pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
+        confopts="${confopts} \
+                --enable-osmesa \
+                --disable-gallium-osmesa \
+                --disable-gallium-llvm \
+                --with-gallium-drivers= \
+        "
+    elif [ "$osmesadriver" = 2 ]; then
+        # gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
+        confopts="${confopts} \
+                --disable-osmesa \
+                --enable-gallium-osmesa \
+                --disable-gallium-llvm \
+                --with-gallium-drivers=swrast \
+        "
+    elif [ "$osmesadriver" = 3 ]; then
+        # gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
+        confopts="${confopts} \
+                --disable-osmesa \
+                --enable-gallium-osmesa \
+                --enable-gallium-llvm=yes \
+                --with-llvm-prefix=$llvmprefix \
+                --disable-llvm-shared-libs \
+                --with-gallium-drivers=swrast \
+        "
+    else
+        # gallium osmesa (swr) OpenGL 3.0, GLSL 1.30
+        confopts="${confopts} \
+                --disable-osmesa \
+                --enable-gallium-osmesa \
+                --with-llvm-prefix=$llvmprefix \
+                --disable-llvm-shared-libs \
+                --with-gallium-drivers=swrast,swr \
+        "
+    fi
+
+    if [ "$debug" = 1 ]; then
+        confopts="${confopts} \
+                --enable-debug"
+    fi
+
+    if [ "$mangled" = 1 ]; then
+        confopts="${confopts} \
+                --enable-mangling"
+        #sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
+        #rm src/mesa/main/remap_helper.h
+    fi
+
+    if [ "$osname" = Darwin ]; then
+        osxflags=""
+        if [ "$osver" -ge 12 ]; then
+            # From Mountain Lion onward so we are only building 64bit arch.
+            osxflags="$osxflags -arch x86_64"
+        fi
+        if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
+            osxflags="$osxflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+        fi
+        if [ -n "${SDKROOT+x}" ]; then
+            osxflags="$osxflags -isysroot $SDKROOT"
         fi
 
-        if [ "$osmesadriver" = 1 ]; then
-            # pure osmesa (swrast) OpenGL 2.1, GLSL 1.20
-            confopts="${confopts} \
-                 --enable-osmesa \
-                 --disable-gallium-osmesa \
-                 --disable-gallium-llvm \
-                 --with-gallium-drivers= \
-            "
-        elif [ "$osmesadriver" = 2 ]; then
-            # gallium osmesa (softpipe) OpenGL 3.0, GLSL 1.30
-            confopts="${confopts} \
-                 --disable-osmesa \
-                 --enable-gallium-osmesa \
-                 --disable-gallium-llvm \
-                 --with-gallium-drivers=swrast \
-            "
-        elif [ "$osmesadriver" = 3 ]; then
-            # gallium osmesa (llvmpipe) OpenGL 3.0, GLSL 1.30
-            confopts="${confopts} \
-                 --disable-osmesa \
-                 --enable-gallium-osmesa \
-                 --enable-gallium-llvm=yes \
-                 --with-llvm-prefix=$llvmprefix \
-                 --disable-llvm-shared-libs \
-                 --with-gallium-drivers=swrast \
-            "
-        else
-            # gallium osmesa (swr) OpenGL 3.0, GLSL 1.30
-            confopts="${confopts} \
-                 --disable-osmesa \
-                 --enable-gallium-osmesa \
-                 --with-llvm-prefix=$llvmprefix \
-                 --disable-llvm-shared-libs \
-                 --with-gallium-drivers=swrast,swr \
-            "
+        if [ -n "$osxflags" ]; then
+            CFLAGS="$CFLAGS $osxflags"
+            CXXFLAGS="$CXXFLAGS $osxflags"
         fi
+    fi
 
-        if [ "$debug" = 1 ]; then
-            confopts="${confopts} \
-                 --enable-debug"
-        fi
+    env CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
 
-        if [ "$mangled" = 1 ]; then
-            confopts="${confopts} \
-                 --enable-mangling"
-            #sed -i.bak -e 's/"gl"/"mgl"/' src/mapi/glapi/gen/remap_helper.py
-            #rm src/mesa/main/remap_helper.h
-        fi
+    make -j"${mkjobs}"
 
-        if [ "$osname" = Darwin ]; then
-            osxflags=""
-            if [ "$osver" -ge 12 ]; then
-                # From Mountain Lion onward so we are only building 64bit arch.
-                osxflags="$osxflags -arch x86_64"
-            fi
-            if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
-                osxflags="$osxflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
-            fi
-            if [ -n "${SDKROOT+x}" ]; then
-                osxflags="$osxflags -isysroot $SDKROOT"
-            fi
+    echo "* installing Mesa..."
+    make install
 
-            if [ -n "$osxflags" ]; then
-                CFLAGS="$CFLAGS $osxflags"
-                CXXFLAGS="$CXXFLAGS $osxflags"
-            fi
-        fi
+    if [ "$osname" = Darwin ] && [ "$shared" = 0 ]; then
+        # fix the following error:
+        #Undefined symbols for architecture x86_64:
+        #  "_lp_dummy_tile", referenced from:
+        #      _lp_rast_create in libMangledOSMesa32.a(lp_rast.o)
+        #      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
+        #ld: symbol(s) not found for architecture x86_64
+        #clang: error: linker command failed with exit code 1 (use -v to see invocation)
+        for f in "$osmesaprefix/lib/"lib*.a; do
+                ranlib -c "$f"
+        done
+    fi
 
-        env CC="$CC" CXX="$CXX" PTHREADSTUBS_CFLAGS=" " PTHREADSTUBS_LIBS=" " ./configure ${confopts} CC="$CC" CFLAGS="$CFLAGS" CXX="$CXX" CXXFLAGS="$CXXFLAGS"
+    # End of configure-based build
+    ####################################################################
 
-        make -j"${mkjobs}"
-
-        echo "* installing Mesa..."
-        make install
-
-        if [ "$osname" = Darwin ] && [ "$shared" = 0 ]; then
-            # fix the following error:
-            #Undefined symbols for architecture x86_64:
-            #  "_lp_dummy_tile", referenced from:
-            #      _lp_rast_create in libMangledOSMesa32.a(lp_rast.o)
-            #      _lp_setup_set_fragment_sampler_views in libMangledOSMesa32.a(lp_setup.o)
-            #ld: symbol(s) not found for architecture x86_64
-            #clang: error: linker command failed with exit code 1 (use -v to see invocation)
-            for f in "$osmesaprefix/lib/"lib*.a; do
-                    ranlib -c "$f"
-            done
-        fi
-
-        # End of configure-based build
-        ####################################################################
-        ;;
-esac
+elif [ "$use_meson" = 1 ]; then
+    echo "Error: Meson build not yet implemented"
+    if [ "$mangled" = 1 ]; then
+        echo "Error: meson build, which is the only way to build Mesa 19 and later, when autoconf support was dropped, cannot handle mangled GL"
+    fi
+    exit 1
+else
+    echo "Error: cannot figure out build system"
+    exit 1
+fi
 
 cd ..
 
 if [ ! -f glu-${gluversion}.tar.bz2 ]; then
     echo "* downloading GLU ${gluversion}..."
-    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.bz2"
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.gz"
 fi
-tar jxf glu-${gluversion}.tar.bz2
+tar zxf glu-${gluversion}.tar.gz
 cd glu-${gluversion}
 echo "* building GLU..."
 confopts="\
@@ -720,7 +752,7 @@ if [ "$mangled" = 1 ]; then
      CPPFLAGS=-DUSE_MGL_NAMESPACE"
 fi
 
-env PKG_CONFIG_PATH="${PKG_CONFIG_PATH:+${PKG_CONFIG_PATH}:}${osmesaprefix}/lib/pkgconfig" ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+env PKG_CONFIG_PATH="${osmesaprefix}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}" ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
 make -j"${mkjobs}"
 
 echo "* installing GLU..."
@@ -740,13 +772,16 @@ if [ "$buildosdemo" = 1 ]; then
 cd ..
 if [ ! -f mesa-demos-${demoversion}.tar.bz2 ]; then
     echo "* downloading Mesa Demos ${demoversion}..."
-    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2"
+    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2" \
+    || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/mesa-demos-${demoversion}.tar.bz2"
 fi
 tar jxf mesa-demos-${demoversion}.tar.bz2
 
 cd mesa-demos-${demoversion}/src/osdemos
 echo "* building Mesa Demo..."
 # We need to include gl_mangle.h and glu_mangle.h, because osdemo32.c doesn't include them
+# Fix a wrong declaration (mesa-demos 8.4.0)
+sed -i.bak -e 's/void \*buffer/GLubyte *buffer/' -e 's/buffer = malloc/buffer = (GLubyte *)malloc/' osdemo.c
 CFLAGS="$CFLAGS -fpermissive"
 INCLUDES="-include $osmesaprefix/include/GL/gl.h -include $osmesaprefix/include/GL/glu.h"
 if [ "$mangled" = 1 ]; then

@@ -1,0 +1,10 @@
+--- mesa-17.1.10/src/gallium/auxiliary/gallivm/lp_bld_format_srgb.c.orig	2021-11-07 17:41:28.000000000 -0800
++++ mesa-17.1.10/src/gallium/auxiliary/gallivm/lp_bld_format_srgb.c	2021-11-07 17:42:04.000000000 -0800
+@@ -67,6 +67,7 @@
+  */
+ 
+ 
++#include <math.h>
+ #include "util/u_debug.h"
+ 
+ #include "lp_bld_type.h"
