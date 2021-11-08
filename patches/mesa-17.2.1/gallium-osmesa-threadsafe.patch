@@ -1,5 +1,5 @@
 --- mesa-17.2.1/src/gallium/state_trackers/osmesa/osmesa.c.orig	2017-09-17 16:03:22.000000000 -0700
-+++ mesa-17.2.1/src/gallium/state_trackers/osmesa/osmesa.c	2021-11-07 17:13:54.000000000 -0800
++++ mesa-17.2.1/src/gallium/state_trackers/osmesa/osmesa.c	2021-11-07 23:33:08.000000000 -0800
 @@ -52,6 +52,7 @@
  #include <stdio.h>
  #include "GL/osmesa.h"
@@ -112,7 +112,41 @@
     enum st_attachment_type i;
     struct osmesa_buffer *osbuffer = stfbi_to_osbuffer(stfbi);
     struct pipe_resource templat;
-@@ -473,53 +437,24 @@
+@@ -442,7 +406,7 @@
+ static uint32_t osmesa_fb_ID = 0;
+ 
+ static struct st_framebuffer_iface *
+-osmesa_create_st_framebuffer(void)
++osmesa_create_st_framebuffer(struct st_manager *manager)
+ {
+    struct st_framebuffer_iface *stfbi = CALLOC_STRUCT(st_framebuffer_iface);
+    if (stfbi) {
+@@ -450,7 +414,7 @@
+       stfbi->validate = osmesa_st_framebuffer_validate;
+       p_atomic_set(&stfbi->stamp, 1);
+       stfbi->ID = p_atomic_inc_return(&osmesa_fb_ID);
+-      stfbi->state_manager = get_st_manager();
++      stfbi->state_manager = manager;
+    }
+    return stfbi;
+ }
+@@ -460,66 +424,38 @@
+  * Create new buffer and add to linked list.
+  */
+ static struct osmesa_buffer *
+-osmesa_create_buffer(enum pipe_format color_format,
++osmesa_create_buffer(struct st_manager *manager,
++                     enum pipe_format color_format,
+                      enum pipe_format ds_format,
+                      enum pipe_format accum_format)
+ {
+    struct osmesa_buffer *osbuffer = CALLOC_STRUCT(osmesa_buffer);
+    if (osbuffer) {
+-      osbuffer->stfb = osmesa_create_st_framebuffer();
++      osbuffer->stfb = osmesa_create_st_framebuffer(manager);
+ 
+       osbuffer->stfb->st_manager_private = osbuffer;
+       osbuffer->stfb->visual = &osbuffer->visual;
  
        osmesa_init_st_visual(&osbuffer->visual, color_format,
                              ds_format, accum_format);
@@ -170,7 +204,7 @@
     FREE(osbuffer);
  }
  
-@@ -583,7 +518,6 @@
+@@ -583,7 +519,6 @@
     struct st_context_iface *st_shared;
     enum st_context_error st_error = 0;
     struct st_context_attribs attribs;
@@ -178,7 +212,7 @@
     GLenum format = GL_RGBA;
     int depthBits = 0, stencilBits = 0, accumBits = 0;
     int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
-@@ -696,9 +630,21 @@
+@@ -696,9 +631,21 @@
                           osmesa->depth_stencil_format,
                           osmesa->accum_format);
  
@@ -201,7 +235,7 @@
        FREE(osmesa);
        return NULL;
     }
-@@ -723,7 +669,10 @@
+@@ -723,7 +670,10 @@
  OSMesaDestroyContext(OSMesaContext osmesa)
  {
     if (osmesa) {
@@ -212,7 +246,7 @@
        osmesa->stctx->destroy(osmesa->stctx);
        FREE(osmesa);
     }
-@@ -756,14 +705,26 @@
+@@ -756,14 +706,26 @@
  OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
                    GLsizei width, GLsizei height)
  {
@@ -231,7 +265,7 @@
 +      osmesa->api->make_current(osmesa->api, osmesa->stctx, NULL, NULL);
 +      /* make sure the active buffer is not referenced anymore */
 +      if (osmesa->current_buffer) {
-+         osmesa_destroy_buffer(osmesa->current_buffer);
++         osmesa_destroy_buffer(osmesa->api, osmesa->current_buffer);
 +         osmesa->current_buffer = NULL;
 +      }
 +      osmesa->type = 0;
@@ -241,7 +275,7 @@
     if (osmesa->format == OSMESA_RGB_565 && type != GL_UNSIGNED_SHORT_5_6_5) {
        return GL_FALSE;
     }
-@@ -774,28 +735,43 @@
+@@ -774,28 +736,44 @@
        return GL_FALSE;
     }
  
@@ -251,6 +285,7 @@
 -                                 osmesa->accum_format, width, height);
 -   if (!osbuffer) {
 -      /* Existing buffer found, create new buffer */
+-      osbuffer = osmesa_create_buffer(color_format,
 +   osbuffer = osmesa->current_buffer;
 +   /* Try to reuse the osbuffer. */
 +   if (!(osbuffer &&
@@ -260,10 +295,11 @@
 +         osbuffer->width == width &&
 +         osbuffer->height == height)) {
 +      if (osbuffer) {
-+         osmesa_destroy_buffer(osbuffer);
++         osmesa_destroy_buffer(osmesa->api, osbuffer);
 +      }
 +      /* create new buffer */
-       osbuffer = osmesa_create_buffer(color_format,
++      osbuffer = osmesa_create_buffer(osmesa->manager,
++                                      color_format,
                                        osmesa->depth_stencil_format,
                                        osmesa->accum_format);
 +      osbuffer->width = width;
@@ -298,7 +334,7 @@
  
     if (!osmesa->ever_used) {
        /* one-time init, just postprocessing for now */
-@@ -828,9 +804,8 @@
+@@ -828,9 +806,8 @@
  GLAPI OSMesaContext GLAPIENTRY
  OSMesaGetCurrentContext(void)
  {
@@ -310,7 +346,7 @@
  }
  
  
-@@ -884,7 +859,7 @@
+@@ -884,7 +861,7 @@
        /* fall-through */
     case OSMESA_MAX_HEIGHT:
        {
@@ -319,7 +355,7 @@
           int maxLevels = screen->get_param(screen,
                                             PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
           *value = 1 << (maxLevels - 1);
-@@ -915,6 +890,11 @@
+@@ -915,6 +892,11 @@
     struct pipe_transfer *transfer = NULL;
     struct pipe_box box;
  
