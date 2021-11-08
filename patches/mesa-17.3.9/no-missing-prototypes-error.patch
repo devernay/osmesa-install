@@ -1,0 +1,10 @@
+--- mesa-17.3.9/configure.ac.orig	2021-11-08 08:37:50.000000000 -0800
++++ mesa-17.3.9/configure.ac	2021-11-08 08:38:27.000000000 -0800
+@@ -287,7 +287,6 @@
+ dnl
+ AX_CHECK_COMPILE_FLAG([-Wall],                                 [CFLAGS="$CFLAGS -Wall"])
+ AX_CHECK_COMPILE_FLAG([-Werror=implicit-function-declaration], [CFLAGS="$CFLAGS -Werror=implicit-function-declaration"])
+-AX_CHECK_COMPILE_FLAG([-Werror=missing-prototypes],            [CFLAGS="$CFLAGS -Werror=missing-prototypes"])
+ AX_CHECK_COMPILE_FLAG([-Wmissing-prototypes],                  [CFLAGS="$CFLAGS -Wmissing-prototypes"])
+ AX_CHECK_COMPILE_FLAG([-fno-math-errno],                       [CFLAGS="$CFLAGS -fno-math-errno"])
+ AX_CHECK_COMPILE_FLAG([-fno-trapping-math],                    [CFLAGS="$CFLAGS -fno-trapping-math"])
