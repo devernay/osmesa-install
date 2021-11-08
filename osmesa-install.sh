@@ -16,7 +16,7 @@ set -u # Treat unset variables as an error when substituting.
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-17.1.10}"
+mesaversion="${OSMESA_VERSION:-17.3.9}"
 # mesa-demos version
 demoversion=8.4.0
 # glu version
@@ -43,9 +43,11 @@ shared="${SHARED:-0}"
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
 buildllvm="${LLVM_BUILD:-0}"
-llvmversion="${LLVM_VERSION:-4.0.1}"
+llvmversion="${LLVM_VERSION:-6.0.1}"
 # redirect output and error to log file; exit script on error.
 silentlogging="${SILENT_LOG:-0}"
+buildosmesa="${BUILD_OSMESA:-1}"
+buildglu="${BUILD_GLU:-1}"
 buildosdemo="${BUILD_OSDEMO:-1}"
 osname=$(uname)
 # This script
@@ -375,8 +377,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         fi
         exit 1
     else
-	if version_gt $("$llvmconfigbinary" --version) 4.0.1; then
-	    echo "Warning: LLVM version is $($llvmconfigbinary --version), but this script was only tested with versions 3.3 to 4.0.1"
+	if version_gt $("$llvmconfigbinary" --version) 6.0.1; then
+	    echo "Warning: LLVM version is $($llvmconfigbinary --version), but this script was only tested with versions 3.3 to 6.0.1"
+	    echo "LLVM 6.0.1 seems to work, LLVM 9.0.1 hangs on osdemo16, at least up to Mesa 17.3.9."
 	    echo "Please modify this script and file a github issue if it works with this version."
 	    echo "Continuing anyway after 10s."
 	    sleep 10
@@ -399,6 +402,8 @@ fi
 if [ "$clean" = 1 ]; then
     rm -rf "mesa-$mesaversion" "mesa-demos-$demoversion" "glu-$gluversion"
 fi
+
+if [ "$buildosmesa" = 1 ]; then
 
 archsuffix=xz
 if [ ! -f "mesa-${mesaversion}.tar.${archsuffix}" ]; then
@@ -598,6 +603,18 @@ elif [ "$use_autoconf" = 1 ]; then
 
     autoreconf -fi
 
+    platformsopt="--with-platforms="
+    llvmopt="llvm"
+    omx="omx-bellagio"
+    if version_gt 17.1.0 "$mesaversion"; then
+        # configure: WARNING: --with-egl-platforms is deprecated. Use --with-platforms instead.
+        platformsopt="--with-egl-platforms="
+        # configure: WARNING: The --enable-gallium-llvm option has been deprecated. Use --enable-llvm instead.
+        llvmopt="gallium-llvm"
+    fi
+    if version_gt 17.3.0 "$mesaversion"; then
+        omx="omx"
+    fi
     confopts="\
         --disable-dependency-tracking \
         --enable-texture-float \
@@ -611,14 +628,14 @@ elif [ "$use_autoconf" = 1 ]; then
         --disable-gbm \
         --disable-xvmc \
         --disable-vdpau \
-        --disable-omx \
+        --disable-$omx \
         --disable-va \
         --disable-opencl \
         --disable-shared-glapi \
         --disable-driglx-direct \
         --with-dri-drivers= \
         --with-osmesa-bits=32 \
-        --with-egl-platforms= \
+        $platformsopt \
         --prefix=$osmesaprefix \
         "
     if [ "$shared" = 1 ]; then
@@ -632,7 +649,7 @@ elif [ "$use_autoconf" = 1 ]; then
         confopts="${confopts} \
                 --enable-osmesa \
                 --disable-gallium-osmesa \
-                --disable-gallium-llvm \
+                --disable-$llvmopt \
                 --with-gallium-drivers= \
         "
     elif [ "$osmesadriver" = 2 ]; then
@@ -640,7 +657,7 @@ elif [ "$use_autoconf" = 1 ]; then
         confopts="${confopts} \
                 --disable-osmesa \
                 --enable-gallium-osmesa \
-                --disable-gallium-llvm \
+                --disable-$llvmopt \
                 --with-gallium-drivers=swrast \
         "
     elif [ "$osmesadriver" = 3 ]; then
@@ -648,7 +665,7 @@ elif [ "$use_autoconf" = 1 ]; then
         confopts="${confopts} \
                 --disable-osmesa \
                 --enable-gallium-osmesa \
-                --enable-gallium-llvm=yes \
+                --enable-$llvmopt=yes \
                 --with-llvm-prefix=$llvmprefix \
                 --disable-llvm-shared-libs \
                 --with-gallium-drivers=swrast \
@@ -658,6 +675,7 @@ elif [ "$use_autoconf" = 1 ]; then
         confopts="${confopts} \
                 --disable-osmesa \
                 --enable-gallium-osmesa \
+                --enable-$llvmopt=yes \
                 --with-llvm-prefix=$llvmprefix \
                 --disable-llvm-shared-libs \
                 --with-gallium-drivers=swrast,swr \
@@ -731,6 +749,10 @@ fi
 
 cd ..
 
+fi # if [ "$buildosmesa" = 1 ];
+
+if [ "$buildglu" = 1 ]; then
+
 if [ ! -f glu-${gluversion}.tar.bz2 ]; then
     echo "* downloading GLU ${gluversion}..."
     curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.gz"
@@ -767,6 +789,8 @@ if [ "$mangled" = 1 ]; then
     fi
 fi
 
+fi # if [ "$buildglu" = 1 ];
+
 if [ "$buildosdemo" = 1 ]; then
 # build the demo
 cd ..
@@ -798,7 +822,6 @@ if [ "$osname" = Darwin ] || [ "$osname" = Linux ]; then
     # missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
     LIBS32="$LIBS32 -lz"
 fi
-echo "$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs"
 if [ "$osname" = Darwin ] || [ "$osname" = Linux ]; then
     allowfail=false
 else
@@ -810,12 +833,14 @@ else
     #collect2.exe: error: ld returned 1 exit status
     allowfail=true
 fi
+set -x
 $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo32 osdemo32.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
 ./osdemo32 image32.tga || $allowfail
-$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo16 osdemo16.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
-./osdemo16 image16.tga || $allowfail
 $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo osdemo.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
 ./osdemo image.tga || $allowfail
+# osdemo16 hangs and runs forever on 17.3.9
+$OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo16 osdemo16.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
+./osdemo16 image16.tga || $allowfail
 # results are in image32.tga image16.tga image.tga
 fi # buildosdemo == 1
 
