@@ -76,15 +76,6 @@ diff -ur mesa-11.2.2/src/gallium/state_trackers/osmesa/osmesa.c mesa-11.2.2.new/
        case 0:
           /* end of list */
           break;
-@@ -625,7 +638,7 @@
-    osmesa->manager = CALLOC_STRUCT(st_manager);
-    assert(osmesa->manager);
-    if (osmesa->manager) {
--      osmesa->manager->screen = osmesa_create_screen();
-+      osmesa->manager->screen = osmesa_create_screen(driver);
-       osmesa->manager->get_param = osmesa_st_get_param;
-       osmesa->manager->get_egl_image = NULL;
-    }
 diff -ur mesa-11.2.2/src/gallium/targets/osmesa/target.c mesa-11.2.2.new/src/gallium/targets/osmesa/target.c
 --- mesa-11.2.2/src/gallium/targets/osmesa/target.c	2016-01-18 08:39:26.000000000 +0100
 +++ mesa-11.2.2.new/src/gallium/targets/osmesa/target.c	2016-06-06 12:03:05.000000000 +0200
@@ -127,3 +118,14 @@ diff -ur mesa-11.2.2/src/gallium/targets/osmesa/target.c mesa-11.2.2.new/src/gal
        case 0:
           /* end of list */
           break;
+--- mesa-17.1.10/src/gallium/state_trackers/osmesa/osmesa.c.orig	2021-11-08 17:55:39.000000000 -0800
++++ mesa-17.1.10/src/gallium/state_trackers/osmesa/osmesa.c	2021-11-08 17:55:46.000000000 -0800
+@@ -645,7 +645,7 @@
+       FREE(osmesa);
+       return NULL;
+    }
+-   osmesa->manager->screen = osmesa_create_screen();
++   osmesa->manager->screen = osmesa_create_screen(driver);
+    if (!osmesa->manager->screen) {
+       FREE(osmesa->manager);
+       osmesa->api->destroy(osmesa->api);

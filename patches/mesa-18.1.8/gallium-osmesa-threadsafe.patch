@@ -1,5 +1,5 @@
 --- mesa-17.2.8/src/gallium/state_trackers/osmesa/osmesa.c.orig	2017-12-22 14:45:21.000000000 -0800
-+++ mesa-17.2.8/src/gallium/state_trackers/osmesa/osmesa.c	2021-11-08 17:06:33.000000000 -0800
++++ mesa-17.2.8/src/gallium/state_trackers/osmesa/osmesa.c	2021-11-08 17:47:09.000000000 -0800
 @@ -52,6 +52,7 @@
  #include <stdio.h>
  #include "GL/osmesa.h"
@@ -213,30 +213,41 @@
     GLenum format = GL_RGBA;
     int depthBits = 0, stencilBits = 0, accumBits = 0;
     int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
-@@ -698,9 +632,21 @@
+@@ -698,9 +632,32 @@
                           osmesa->depth_stencil_format,
                           osmesa->accum_format);
  
 -   osmesa->stctx = stapi->create_context(stapi, get_st_manager(),
 +   osmesa->api = st_gl_api_create();
 +   osmesa->manager = CALLOC_STRUCT(st_manager);
-+   assert(osmesa->manager);
-+   if (osmesa->manager) {
-+      osmesa->manager->screen = osmesa_create_screen();
-+      osmesa->manager->get_param = osmesa_st_get_param;
-+      osmesa->manager->get_egl_image = NULL;
++   if (!osmesa->manager) {
++      osmesa->api->destroy(osmesa->api);
++      osmesa->stctx->destroy(osmesa->stctx);
++      FREE(osmesa);
++      return NULL;
 +   }
++   osmesa->manager->screen = osmesa_create_screen();
++   if (!osmesa->manager->screen) {
++      FREE(osmesa->manager);
++      osmesa->api->destroy(osmesa->api);
++      osmesa->stctx->destroy(osmesa->stctx);
++      FREE(osmesa);
++      return NULL;
++   }
++   osmesa->manager->get_param = osmesa_st_get_param;
++   osmesa->manager->get_egl_image = NULL;
 +
 +   osmesa->stctx = osmesa->api->create_context(osmesa->api, osmesa->manager,
                                           &attribs, &st_error, st_shared);
     if (!osmesa->stctx) {
++      osmesa->manager->screen->destroy(osmesa->manager->screen);
 +      FREE(osmesa->manager);
 +      osmesa->api->destroy(osmesa->api);
 +      osmesa->stctx->destroy(osmesa->stctx);
        FREE(osmesa);
        return NULL;
     }
-@@ -725,7 +671,10 @@
+@@ -725,7 +682,10 @@
  OSMesaDestroyContext(OSMesaContext osmesa)
  {
     if (osmesa) {
@@ -247,7 +258,7 @@
        osmesa->stctx->destroy(osmesa->stctx);
        FREE(osmesa);
     }
-@@ -758,14 +707,26 @@
+@@ -758,14 +718,26 @@
  OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
                    GLsizei width, GLsizei height)
  {
@@ -276,7 +287,7 @@
     if (osmesa->format == OSMESA_RGB_565 && type != GL_UNSIGNED_SHORT_5_6_5) {
        return GL_FALSE;
     }
-@@ -776,28 +737,44 @@
+@@ -776,28 +748,44 @@
        return GL_FALSE;
     }
  
@@ -335,7 +346,7 @@
  
     if (!osmesa->ever_used) {
        /* one-time init, just postprocessing for now */
-@@ -830,9 +807,8 @@
+@@ -830,9 +818,8 @@
  GLAPI OSMesaContext GLAPIENTRY
  OSMesaGetCurrentContext(void)
  {
@@ -347,7 +358,7 @@
  }
  
  
-@@ -886,7 +862,7 @@
+@@ -886,7 +873,7 @@
        /* fall-through */
     case OSMESA_MAX_HEIGHT:
        {
@@ -356,7 +367,7 @@
           int maxLevels = screen->get_param(screen,
                                             PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
           *value = 1 << (maxLevels - 1);
-@@ -917,6 +893,11 @@
+@@ -917,6 +904,11 @@
     struct pipe_transfer *transfer = NULL;
     struct pipe_box box;
  
