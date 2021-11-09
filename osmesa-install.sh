@@ -118,29 +118,13 @@ if [ "$osname" = Darwin ]; then
     fi
     if [ "$osver" = 10 ]; then
         # On Snow Leopard, libc++ is installed by MacPorts (see https://trac.macports.org/wiki/LibcxxOnOlderSystems)
-        if [ -f /opt/local/etc/macports/macports.conf ]; then
-            if [[ $(type -P clang-mp-9.0) ]]; then
-                CC=clang-mp-9.0
-                CXX=clang++-mp-9.0
-                OSDEMO_LD="clang++-mp-9.0 -stdlib=libc++"
-            else
-                echo "Error: Please install clang 9 using the following command:"
-                echo "sudo port install clang-9.0"
-            fi
+        if [[ $(type -P clang-mp-9.0) ]]; then
+            CC=clang-mp-9.0
+            CXX=clang++-mp-9.0
+            OSDEMO_LD="clang++-mp-9.0 -stdlib=libc++"
         else
-            # This project is affected by a bug in Apple's gcc driver driver that was fixed in the apple-gcc42 port:
-            # https://github.com/macports/macports-ports/blob/master/lang/apple-gcc42/files/driverdriver-num_infiles.patch
-            # Use that or clang.
-            if [[ $(type -P clang-mp-3.4) ]]; then
-                CC=clang-mp-3.4
-                CXX=clang++-mp-3.4
-            elif [[ $(type -P gcc-apple-4.2) ]]; then
-                CC=gcc-apple-4.2
-                CXX=g++-apple-4.2
-            fi
-            if [ -z "${LLVM_VERSION+x}" ]; then
-                llvmversion=3.4.2
-            fi
+            echo "Error: Please install MacPorts and clang 9 using the following command:"
+            echo "sudo port install clang-9.0"
         fi
     fi
 fi
