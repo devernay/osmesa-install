@@ -74,3 +74,16 @@
  void
  linker_error(gl_shader_program *prog, const char *fmt, ...)
  {
+--- mesa-18.3.6/src/util/ralloc.c.orig	2021-11-09 10:32:49.000000000 -0800
++++ mesa-18.3.6/src/util/ralloc.c	2021-11-09 10:35:14.000000000 -0800
+@@ -402,7 +402,9 @@
+ bool
+ ralloc_strncat(char **dest, const char *str, size_t n)
+ {
+-   return cat(dest, str, strnlen(str, n));
++   size_t m;
++   for (m = 0; m < n && str[m]; m++);
++   return cat(dest, str, m);
+ }
+ 
+ bool
