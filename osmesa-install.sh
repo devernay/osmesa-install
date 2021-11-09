@@ -120,7 +120,9 @@ if [ "$osname" = Darwin ]; then
         #     https://github.com/OpenSWR/openswr-mesa/issues/11
         osmesadriver=3
     fi
-    if [ "$osver" = 10 ]; then
+    # We want at least Xcode 9 (LLVM 4, macOS 10.12) to compile LLVM 4 or 6.
+    # On anything older than macOS 10.12, let us require a stable version of MacPorts clang
+    if [ "$osver" -lt 16 ]; then
         # On Snow Leopard, libc++ is installed by MacPorts (see https://trac.macports.org/wiki/LibcxxOnOlderSystems)
         if [[ $(type -P clang-mp-9.0) ]]; then
             CC=clang-mp-9.0
