@@ -180,7 +180,7 @@ fi
 
 # see https://stackoverflow.com/a/24067243
 sort=sort
-if [ "$osname" = Darwin ] && [ "$osver" -le 10 ]; then
+if [ "$osname" = Darwin ] && [ "$osver" -le 13 ]; then
     sort=gsort
 fi
 function version_gt() {
