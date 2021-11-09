@@ -517,6 +517,7 @@ if [ "$osname" = Darwin ]; then
     no-missing-prototypes-error.patch \
     o-cloexec.patch \
     patch-include-GL-mesa_glinterop_h.diff \
+    missing_clock_gettime.patch \
     "
 fi
 
