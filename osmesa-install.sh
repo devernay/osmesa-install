@@ -22,7 +22,7 @@ demoversion=8.4.0
 # glu version
 gluversion=9.0.1 # 9.0.2 doesn't support mangled GL, but supports building with meson
 # set debug to 1 to compile a version with debugging symbols
-debug=0
+debug=${DEBUG:-0}
 # set clean to 1 to clean the source directories first (recommended)
 clean=1
 # number of parallel make jobs, set to 4 by default
