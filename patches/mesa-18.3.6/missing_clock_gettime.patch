@@ -1,0 +1,27 @@
+--- mesa-18.3.6/include/c11/threads_posix.h.orig	2021-11-09 09:30:17.000000000 -0800
++++ mesa-18.3.6/include/c11/threads_posix.h	2021-11-09 09:32:58.000000000 -0800
+@@ -386,6 +386,9 @@
+ 
+ #ifdef __APPLE__
+ #include <time.h>
++#if __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101200
++#include <sys/time.h>
++#endif
+ #define timespec_get(ts, b) mesa_timespec_get(ts, b)
+ #endif
+ 
+@@ -394,7 +397,14 @@
+ {
+     if (!ts) return 0;
+     if (base == TIME_UTC) {
++#if defined(__APPLE__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101200
++        struct timeval tv;
++        gettimeofday(&tv, NULL);
++        ts->tv_sec  = tv.tv_sec;
++        ts->tv_nsec = tv.tv_usec * 1000;
++#else
+         clock_gettime(CLOCK_REALTIME, ts);
++#endif
+         return base;
+     }
+     return 0;
