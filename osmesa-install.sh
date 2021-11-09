@@ -193,8 +193,12 @@ if [ -n "${SDKROOT+x}" ]; then
 fi
 
 # see https://stackoverflow.com/a/24067243
+sort=sort
+if [ "$osname" = Darwin ] && [ "$osver" -le 10 ]; then
+    sort=gsort
+fi
 function version_gt() {
-    test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1";
+    test "$(printf '%s\n' "$@" | $sort -V | head -n 1)" != "$1";
 }
 
 # On MacPorts, building Mesa requires the following packages:
@@ -428,13 +432,14 @@ fi
 if [ "$buildosmesa" = 1 ]; then
 
 archsuffix=xz
+xzcat=xzcat
 if [ ! -f "mesa-${mesaversion}.tar.${archsuffix}" ]; then
     echo "* downloading Mesa ${mesaversion}..."
     curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.${archsuffix}" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/${mesaversion}/mesa-${mesaversion}.tar.${archsuffix}"    
 fi
-tar xf "mesa-${mesaversion}.tar.${archsuffix}"
+$xzcat "mesa-${mesaversion}.tar.${archsuffix}" | tar xf -
 
 # apply patches from MacPorts
 
@@ -505,6 +510,7 @@ if [ "$osname" = Darwin ]; then
     PATCHES="$PATCHES \
     0001-mesa-Deal-with-size-differences-between-GLuint-and-G.patch \
     0002-applegl-Provide-requirements-of-_SET_DrawBuffers.patch \
+    0002-Hack-to-address-build-failure-when-using-newer-macOS.patch \
     0003-glext.h-Add-missing-include-of-stddef.h-for-ptrdiff_.patch \
     5002-darwin-Suppress-type-conversion-warnings-for-GLhandl.patch \
     static-strndup.patch \
