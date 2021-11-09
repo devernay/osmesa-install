@@ -87,6 +87,10 @@ if [ "$osname" = Darwin ]; then
     # 15: OS X 10.11 El Capitan
     # 16: macOS 10.12 Sierra
     # 17: macOS 10.13 High Sierra
+    # 18: macOS 10.14 Mojave
+    # 19: macOS 10.15 Catalina
+    # 20: macOS 11 Big Sur
+    # 21: macOS 12 Monterey
     
     if [ "$osver" = 10 ]; then
         # On Snow Leopard (10.6), build universal
