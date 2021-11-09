@@ -117,10 +117,8 @@ if [ "$osname" = Darwin ]; then
         osmesadriver=3
     fi
     if [ "$osver" = 10 ]; then
-        # On Snow Leopard, if using the system's gcci with libstdc++, build with llvm 3.4.2.
-        # If using libc++ (see https://trac.macports.org/wiki/LibcxxOnOlderSystems), compile
-        # everything with clang-5.0
-        if [ -f /opt/local/etc/macports/macports.conf ] && grep -q -e '^cxx_stdlib.*libc\+\+' /opt/local/etc/macports/macports.conf; then
+        # On Snow Leopard, libc++ is installed by MacPorts (see https://trac.macports.org/wiki/LibcxxOnOlderSystems)
+        if [ -f /opt/local/etc/macports/macports.conf ]; then
             if [[ $(type -P clang-mp-9.0) ]]; then
                 CC=clang-mp-9.0
                 CXX=clang++-mp-9.0
