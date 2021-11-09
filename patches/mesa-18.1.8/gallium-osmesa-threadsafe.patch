@@ -1,5 +1,5 @@
---- mesa-17.2.1/src/gallium/state_trackers/osmesa/osmesa.c.orig	2017-09-17 16:03:22.000000000 -0700
-+++ mesa-17.2.1/src/gallium/state_trackers/osmesa/osmesa.c	2021-11-07 23:33:08.000000000 -0800
+--- mesa-17.2.8/src/gallium/state_trackers/osmesa/osmesa.c.orig	2017-12-22 14:45:21.000000000 -0800
++++ mesa-17.2.8/src/gallium/state_trackers/osmesa/osmesa.c	2021-11-08 17:06:33.000000000 -0800
 @@ -52,6 +52,7 @@
  #include <stdio.h>
  #include "GL/osmesa.h"
@@ -8,7 +8,7 @@
  #include "glapi/glapi.h"  /* for OSMesaGetProcAddress below */
  
  #include "pipe/p_context.h"
-@@ -69,6 +70,7 @@
+@@ -70,6 +71,7 @@
  
  #include "state_tracker/st_api.h"
  #include "state_tracker/st_gl_api.h"
@@ -16,7 +16,7 @@
  
  
  
-@@ -86,13 +88,13 @@
+@@ -87,13 +89,13 @@
     struct pipe_resource *textures[ST_ATTACHMENT_COUNT];
  
     void *map;
@@ -32,7 +32,7 @@
     struct st_context_iface *stctx;
  
     boolean ever_used;     /*< Has this context ever been current? */
-@@ -114,17 +116,6 @@
+@@ -115,17 +117,6 @@
  
  
  /**
@@ -50,7 +50,7 @@
   * Called from the ST manager.
   */
  static int
-@@ -135,39 +126,6 @@
+@@ -136,39 +127,6 @@
  }
  
  
@@ -90,7 +90,7 @@
  static inline boolean
  little_endian(void)
  {
-@@ -319,6 +277,11 @@
+@@ -320,6 +278,11 @@
     unsigned y, bytes, bpp;
     int dst_stride;
  
@@ -102,7 +102,7 @@
     if (osmesa->pp) {
        struct pipe_resource *zsbuf = NULL;
        unsigned i;
-@@ -387,7 +350,8 @@
+@@ -388,7 +351,8 @@
                                 unsigned count,
                                 struct pipe_resource **out)
  {
@@ -112,7 +112,7 @@
     enum st_attachment_type i;
     struct osmesa_buffer *osbuffer = stfbi_to_osbuffer(stfbi);
     struct pipe_resource templat;
-@@ -442,7 +406,7 @@
+@@ -444,7 +408,7 @@
  static uint32_t osmesa_fb_ID = 0;
  
  static struct st_framebuffer_iface *
@@ -121,7 +121,7 @@
  {
     struct st_framebuffer_iface *stfbi = CALLOC_STRUCT(st_framebuffer_iface);
     if (stfbi) {
-@@ -450,7 +414,7 @@
+@@ -452,7 +416,7 @@
        stfbi->validate = osmesa_st_framebuffer_validate;
        p_atomic_set(&stfbi->stamp, 1);
        stfbi->ID = p_atomic_inc_return(&osmesa_fb_ID);
@@ -130,7 +130,7 @@
     }
     return stfbi;
  }
-@@ -460,66 +424,38 @@
+@@ -462,66 +426,37 @@
   * Create new buffer and add to linked list.
   */
  static struct osmesa_buffer *
@@ -195,16 +195,17 @@
      * Notify the state manager that the associated framebuffer interface
      * is no longer valid.
      */
-    stapi->destroy_drawable(stapi, osbuffer->stfb);
- 
+-   stapi->destroy_drawable(stapi, osbuffer->stfb);
+-
 -   FREE(osbuffer->stfb);
 +   if (osbuffer) {
++      stapi->destroy_drawable(stapi, osbuffer->stfb);
 +      FREE(osbuffer->stfb);
 +   }
     FREE(osbuffer);
  }
  
-@@ -583,7 +519,6 @@
+@@ -585,7 +520,6 @@
     struct st_context_iface *st_shared;
     enum st_context_error st_error = 0;
     struct st_context_attribs attribs;
@@ -212,7 +213,7 @@
     GLenum format = GL_RGBA;
     int depthBits = 0, stencilBits = 0, accumBits = 0;
     int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
-@@ -696,9 +631,21 @@
+@@ -698,9 +632,21 @@
                           osmesa->depth_stencil_format,
                           osmesa->accum_format);
  
@@ -235,7 +236,7 @@
        FREE(osmesa);
        return NULL;
     }
-@@ -723,7 +670,10 @@
+@@ -725,7 +671,10 @@
  OSMesaDestroyContext(OSMesaContext osmesa)
  {
     if (osmesa) {
@@ -246,7 +247,7 @@
        osmesa->stctx->destroy(osmesa->stctx);
        FREE(osmesa);
     }
-@@ -756,14 +706,26 @@
+@@ -758,14 +707,26 @@
  OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
                    GLsizei width, GLsizei height)
  {
@@ -275,7 +276,7 @@
     if (osmesa->format == OSMESA_RGB_565 && type != GL_UNSIGNED_SHORT_5_6_5) {
        return GL_FALSE;
     }
-@@ -774,28 +736,44 @@
+@@ -776,28 +737,44 @@
        return GL_FALSE;
     }
  
@@ -334,7 +335,7 @@
  
     if (!osmesa->ever_used) {
        /* one-time init, just postprocessing for now */
-@@ -828,9 +806,8 @@
+@@ -830,9 +807,8 @@
  GLAPI OSMesaContext GLAPIENTRY
  OSMesaGetCurrentContext(void)
  {
@@ -346,7 +347,7 @@
  }
  
  
-@@ -884,7 +861,7 @@
+@@ -886,7 +862,7 @@
        /* fall-through */
     case OSMESA_MAX_HEIGHT:
        {
@@ -355,7 +356,7 @@
           int maxLevels = screen->get_param(screen,
                                             PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
           *value = 1 << (maxLevels - 1);
-@@ -915,6 +892,11 @@
+@@ -917,6 +893,11 @@
     struct pipe_transfer *transfer = NULL;
     struct pipe_box box;
  
