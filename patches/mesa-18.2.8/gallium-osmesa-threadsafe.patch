@@ -222,7 +222,7 @@
 +   osmesa->manager = CALLOC_STRUCT(st_manager);
 +   if (!osmesa->manager) {
 +      osmesa->api->destroy(osmesa->api);
-+      osmesa->stctx->destroy(osmesa->stctx);
++      // osmesa->stctx->destroy(osmesa->stctx);
 +      FREE(osmesa);
 +      return NULL;
 +   }
@@ -230,7 +230,7 @@
 +   if (!osmesa->manager->screen) {
 +      FREE(osmesa->manager);
 +      osmesa->api->destroy(osmesa->api);
-+      osmesa->stctx->destroy(osmesa->stctx);
++      // osmesa->stctx->destroy(osmesa->stctx);
 +      FREE(osmesa);
 +      return NULL;
 +   }
@@ -243,7 +243,7 @@
 +      osmesa->manager->screen->destroy(osmesa->manager->screen);
 +      FREE(osmesa->manager);
 +      osmesa->api->destroy(osmesa->api);
-+      osmesa->stctx->destroy(osmesa->stctx);
++      // osmesa->stctx->destroy(osmesa->stctx);
        FREE(osmesa);
        return NULL;
     }
