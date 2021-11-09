@@ -27,6 +27,8 @@ The reasons are:
 - Source support for GL symbol mangling support was dropped with 19.2.2 ([commit](https://gitlab.freedesktop.org/mesa/mesa/-/commit/a0829cf23b307ca44ab8c4505974fb7c8d71a35a), [relnotes](https://docs.mesa3d.org/relnotes/19.2.2.html)). Re-adding it means we would have to maintain that large patch.
 - The legacy `swrast` driver was dropped in Mesa 21.0.0.
 
+An [upstream bug was filed](https://gitlab.freedesktop.org/mesa/mesa/-/issues/880) ([original bug](https://bugs.freedesktop.org/show_bug.cgi?id=95035)) to integrate at least the thread-safety fixes into Mesa, but it may require some work to port to the latest version of Mesa.
+
 Pick the rigght LLVM version for your build:
 - Mesa 17.1.10 - 17.3.9 were tested with LLVM 4.0.1.
 - Mesa 18.0.4 - 18.3.6 were tested with LLVM 6.0.1.
