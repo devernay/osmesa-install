@@ -121,7 +121,7 @@ if [ "$osname" = Darwin ]; then
         osmesadriver=3
     fi
     # We want at least Xcode 9 (LLVM 4, macOS 10.12) to compile LLVM 4 or 6.
-    # On anything older than macOS 10.12, let us require a stable version of MacPorts clang
+    # On anything older than macOS 10.12, let us require a stable version of MacPorts clang.
     if [ "$osver" -lt 16 ]; then
         # On Snow Leopard, libc++ is installed by MacPorts (see https://trac.macports.org/wiki/LibcxxOnOlderSystems)
         if [[ $(type -P clang-mp-9.0) ]]; then
@@ -182,7 +182,7 @@ fi
 
 # see https://stackoverflow.com/a/24067243
 sort=sort
-if [ "$osname" = Darwin ] && [ "$osver" -le 13 ]; then
+if [ "$osname" = Darwin ] && [ "$osver" -le 10 ]; then
     sort=gsort
 fi
 function version_gt() {
