@@ -265,6 +265,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    # https://bugzilla.redhat.com/show_bug.cgi?id=1540620
         # llvm 6.0.1 patches from:
         # https://github.com/macports/macports-ports/tree/b3959e9bbcef4d6b7adffe779ec116dd832972a9/lang/llvm-6.0
+        # + update config.guess to guess aarch64 on M1 Macs
         # llvm 9.0.1 patches from:
         # https://github.com/macports/macports-ports/tree/b3959e9bbcef4d6b7adffe779ec116dd832972a9/lang/llvm-9.0
             llvm_patches="\
@@ -276,6 +277,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    0005-Dont-build-LibFuzzer-pre-Lion-due-to-missing-__threa.patch \
 	    0005-Threading-Only-call-pthread_setname_np-on-SnowLeopar.patch \
         0006-Only-call-setpriority-PRIO_DARWIN_THREAD-0-PRIO_DARW.patch \
+        config-guess.patch \
 	    "
             if [ "$osname" = Darwin ] && [ "$osver" = 10 ]; then
                 # On Snow Leopard, build universal
@@ -294,7 +296,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 cmake_archflags="$cmake_archflags -DLLVM_ENABLE_LIBCXX=ON"
                 if [ "$osver" -ge 12 ]; then
                     # From Mountain Lion onward. We are only building 64bit arch.
-                    cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=x86_64"
+                    cmake_archflags="$cmake_archflags -DCMAKE_OSX_ARCHITECTURES=$(uname -m)"
                 fi
                 # https://cmake.org/cmake/help/v3.0/variable/CMAKE_OSX_DEPLOYMENT_TARGET.html
                 if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
@@ -384,7 +386,18 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    sleep 10
 	fi
     fi
-    llvmcomponents="engine mcjit x86codegen x86disassembler"
+    llvmcomponents="engine mcjit"
+    case "$(uname -m)" in
+    i386*|x86*)
+        llvmcomponents="$llvmcomponents x86codegen x86disassembler"
+        ;;
+    arm64*|aarch64*)
+        llvmcomponents="$llvmcomponents aarch64codegen aarch64disassembler"
+        ;;
+    ppc*|powerpc*)
+        llvmcomponents="$llvmcomponents powerpccodegen powerpcdisassembler"
+        ;;
+    esac
     if [ "$debug" = 1 ]; then
         llvmcomponents="$llvmcomponents mcdisassembler"
     fi
@@ -715,7 +728,7 @@ elif [ "$use_autoconf" = 1 ]; then
         osxflags=""
         if [ "$osver" -ge 12 ]; then
             # From Mountain Lion onward so we are only building 64bit arch.
-            osxflags="$osxflags -arch x86_64"
+            osxflags="$osxflags -arch $(uname -m)"
         fi
         if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
             osxflags="$osxflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
