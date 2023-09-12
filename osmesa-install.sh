@@ -91,6 +91,8 @@ if [ "$osname" = Darwin ]; then
     # 19: macOS 10.15 Catalina
     # 20: macOS 11 Big Sur
     # 21: macOS 12 Monterey
+    # 22: macOS 13 Ventura
+    # 23: macOS 14 Sonoma
     
     if [ "$osver" = 10 ]; then
         # On Snow Leopard (10.6), build universal
@@ -367,7 +369,9 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         if [ "$buildllvm" = 0 ]; then
             # advise user to turn on automatic download, build and install option
             echo "Error: $llvmconfigbinary does not exist, set environment variable LLVM_BUILD to 1 to automatically download and install llvm, as in:"
-	    echo "  env LLVM_BUILD=1 $0"
+            echo "  env LLVM_BUILD=1 $0"
+            echo "Or alternatively give the path to an existing LLVM installation as in:"
+            echo "  env LLVM_PREFIX=/opt/local/libexec/llvm-6.0 $0"
         else
             echo "Error: $llvmconfigbinary does not exist, please install LLVM with RTTI support in $llvmprefix"
             echo " download the LLVM sources from llvm.org, and configure it with:"
@@ -381,7 +385,13 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    echo "LLVM 4.0.1 is the best option for Mesa 17.x."
         echo "LLVM 6.0.1 works with Mesa 18.x."
         echo "LLVM 9.0.1 hangs on osdemo16, at least up to Mesa 18.2.8, but may work with Mesa 18.3.6 and later."
+        echo "LLVM 15 and greater will NOT work, because of:"
+        echo " - https://discourse.llvm.org/t/rfc-remove-most-constant-expressions/63179/11 (LLVM 15)"
+        echo " - https://llvm.org/docs/OpaquePointers.html#frontends (LLVM 16)"
 	    echo "Please modify this script and file a github issue if it works with this version."
+        if version_gt $("$llvmconfigbinary" --version) 14.99; then
+            exit 1
+        fi
 	    echo "Continuing anyway after 10s."
 	    sleep 10
 	fi
@@ -422,6 +432,13 @@ if version_gt $("$llvmconfigbinary" --version) 6.0.1 && version_gt 19.0.0 "$mesa
     echo "Building for an unsupported combination of Mesa/LLVM."
     echo "LLVM 6.0.1 is the best option for Mesa 18.x."
     echo "LLVM 9.0.1 and later hang when running osdemo16 with Mesa up to 18.1.8."
+    echo "LLVM 15 and greater will NOT work, because of:"
+    echo " - https://discourse.llvm.org/t/rfc-remove-most-constant-expressions/63179/11 (LLVM 15)"
+    echo " - https://llvm.org/docs/OpaquePointers.html#frontends (LLVM 16)"
+    echo "Please modify this script and file a github issue if it works with this version."
+    if version_gt $("$llvmconfigbinary" --version) 14.99; then
+        exit 1
+    fi
     echo "Continuing anyway after 10s."
     sleep 10
 fi
@@ -520,6 +537,8 @@ if [ "$osname" = Darwin ]; then
     patch-include-GL-mesa_glinterop_h.diff \
     missing_clock_gettime.patch \
     "
+    SED=gsed
+    export SED
 fi
 
 for i in $PATCHES; do
@@ -631,6 +650,7 @@ elif [ "$use_autoconf" = 1 ]; then
 
     test -f Mafefile && make -j"${mkjobs}" distclean # if in an existing build
 
+    autoupdate
     autoreconf -fi
 
     platformsopt="--with-platforms="
@@ -735,6 +755,10 @@ elif [ "$use_autoconf" = 1 ]; then
         fi
         if [ -n "${SDKROOT+x}" ]; then
             osxflags="$osxflags -isysroot $SDKROOT"
+        fi
+        # clang >= 15 started treating int <-> ptr conversions as errors
+        if [ "$CC" = "clang" ]; then
+            osxflags="$osxflags -Wno-int-conversion"
         fi
 
         if [ -n "$osxflags" ]; then
