@@ -669,8 +669,19 @@ xzcat=xzcat
 if [ ! -f "mesa-${mesaversion}.tar.${archsuffix}" ]; then
     echo "* downloading Mesa ${mesaversion}..."
     # ftp.freedesktop.org refuses connections (as of 2026): try archive.mesa3d.org (HTTPS) first,
-    # where old releases are in older-versions/X.x/ (17.x, 18.x) or older-versions/X.x/X.Y.Z/ (13.x and earlier)
-    curl $curlopts -O "https://archive.mesa3d.org/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}" \
+    # where releases are at the root (23.x and later), in older-versions/X.x/ (14.x to 22.x),
+    # or in older-versions/X.x/X.Y.Z/ (13.x and earlier)
+    mesaurlroot="https://archive.mesa3d.org/mesa-${mesaversion}.tar.${archsuffix}"
+    mesaurlolder="https://archive.mesa3d.org/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}"
+    if [ "${mesaversion%%.*}" -ge 23 ]; then
+        mesaurl1="$mesaurlroot"
+        mesaurl2="$mesaurlolder"
+    else
+        mesaurl1="$mesaurlolder"
+        mesaurl2="$mesaurlroot"
+    fi
+    curl $curlopts -O "$mesaurl1" \
+    || curl $curlopts -O "$mesaurl2" \
     || curl $curlopts -O "https://archive.mesa3d.org/older-versions/${mesaversion/.*/.x}/${mesaversion}/mesa-${mesaversion}.tar.${archsuffix}" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.${archsuffix}" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}" \
