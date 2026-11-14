@@ -1,0 +1,169 @@
+--- a/include/GL/gl.h
++++ b/include/GL/gl.h
+@@ -26,6 +26,11 @@
+ 
+ #ifndef __gl_h_
+ #define __gl_h_
++
++#if defined(USE_MGL_NAMESPACE)
++#include "gl_mangle.h"
++#endif
++
+ 
+ /**********************************************************************
+  * Begin system-specific stuff.
+@@ -2089,6 +2094,13 @@
+ typedef void (APIENTRYP PFNGLEGLIMAGETARGETTEXTURE2DOESPROC) (GLenum target, GLeglImageOES image);
+ typedef void (APIENTRYP PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC) (GLenum target, GLeglImageOES image);
+ #endif
++
++
++/**
++ ** NOTE!!!!!  If you add new functions to this file, or update
++ ** glext.h be sure to regenerate the gl_mangle.h file.  See comments
++ ** in that file for details.
++ **/
+ 
+ 
+ #ifdef __cplusplus
+--- a/include/GL/glx.h
++++ b/include/GL/glx.h
+@@ -32,6 +32,11 @@
+ #include <GL/gl.h>
+ 
+ 
++#if defined(USE_MGL_NAMESPACE)
++#include "glx_mangle.h"
++#endif
++
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+--- a/include/meson.build
++++ b/include/meson.build
+@@ -49,6 +49,7 @@
+       'GL/gl.h',
+       'GL/glcorearb.h',
+       'GL/glext.h',
++      'GL/gl_mangle.h',
+       subdir : 'GL',
+     )
+   endif
+--- a/src/mapi/glapi/gen/gl_procs.py
++++ b/src/mapi/glapi/gen/gl_procs.py
+@@ -111,6 +111,15 @@
+         print('    ;')
+         print('')
+         print('')
++        print("#ifdef USE_MGL_NAMESPACE")
++        for func in api.functionIterateByOffset():
++            for n in func.entry_points:
++                if (not func.is_static_entry_point(func.name)) or (func.has_different_protocol(n) and not func.is_static_entry_point(n)):
++                    print('#define gl_dispatch_stub_%u mgl_dispatch_stub_%u' % (func.offset, func.offset))
++                    break
++        print("#endif /* USE_MGL_NAMESPACE */")
++        print('')
++        print('')
+         print('#if defined(NEED_FUNCTION_POINTER) || defined(GLX_INDIRECT_RENDERING)')
+         for func in api.functionIterateByOffset():
+             for n in func.entry_points:
+--- a/src/mapi/glapi/gen/gl_x86-64_asm.py
++++ b/src/mapi/glapi/gen/gl_x86-64_asm.py
+@@ -132,7 +132,12 @@
+         print('#  define HIDDEN(x)')
+         print('#endif')
+         print('')
++        print('# if defined(USE_MGL_NAMESPACE)')
++        print('#  define GL_PREFIX(n) GLNAME(CONCAT(mgl,n))')
++        print('#  define _glapi_Dispatch _mglapi_Dispatch')
++        print('# else')
+         print('#  define GL_PREFIX(n) GLNAME(CONCAT(gl,n))')
++        print('# endif')
+         print('')
+         print('\t.text')
+         print('')
+--- a/src/mapi/glapi/gen/gl_x86_asm.py
++++ b/src/mapi/glapi/gen/gl_x86_asm.py
+@@ -56,9 +56,18 @@
+         print('#include "x86/assyntax.h"')
+         print('')
+         print('#if defined(STDCALL_API)')
++        print('# if defined(USE_MGL_NAMESPACE)')
++        print('#  define GL_PREFIX(n,n2) GLNAME(CONCAT(mgl,n2))')
++        print('# else')
+         print('#  define GL_PREFIX(n,n2) GLNAME(CONCAT(gl,n2))')
++        print('# endif')
+         print('#else')
++        print('# if defined(USE_MGL_NAMESPACE)')
++        print('#  define GL_PREFIX(n,n2) GLNAME(CONCAT(mgl,n))')
++        print('#  define _glapi_Dispatch _mglapi_Dispatch')
++        print('# else')
+         print('#  define GL_PREFIX(n,n2) GLNAME(CONCAT(gl,n))')
++        print('# endif')
+         print('#endif')
+         print('')
+         print('#define GL_OFFSET(x) CODEPTR(REGOFF(4 * x, EAX))')
+--- a/src/mapi/glapi/glapi.h
++++ b/src/mapi/glapi/glapi.h
+@@ -71,6 +71,16 @@
+ #endif /* _GLAPI_NO_EXPORTS */
+ 
+ 
++/* Is this needed?  It is incomplete anyway. */
++#ifdef USE_MGL_NAMESPACE
++#define _glapi_set_dispatch _mglapi_set_dispatch
++#define _glapi_get_dispatch _mglapi_get_dispatch
++#define _glapi_set_context _mglapi_set_context
++#define _glapi_get_context _mglapi_get_context
++#define _glapi_Dispatch _mglapi_Dispatch
++#define _glapi_Context _mglapi_Context
++#endif
++
+ typedef void (*_glapi_proc)(void);
+ 
+ typedef void (*_glapi_nop_handler_proc)(const char *name);
+--- a/src/mapi/glapi/glapi_dispatch.c
++++ b/src/mapi/glapi/glapi_dispatch.c
+@@ -51,7 +51,11 @@
+ 
+ #define KEYWORD2 GLAPIENTRY
+ 
++#if defined(USE_MGL_NAMESPACE)
++#define NAME(func)  mgl##func
++#else
+ #define NAME(func)  gl##func
++#endif
+ 
+ #if 0  /* Use this to log GL calls to stdout (for debug only!) */
+ 
+--- a/src/mapi/glapi/glapi_getproc.c
++++ b/src/mapi/glapi/glapi_getproc.c
+@@ -120,6 +120,11 @@
+ {
+    init_glapi_relocs_once();
+ 
++#ifdef USE_MGL_NAMESPACE
++   if (funcName && funcName[0] == 'm')
++      funcName++;
++#endif
++
+    if (!funcName || funcName[0] != 'g' || funcName[1] != 'l')
+       return NULL;
+ 
+--- a/src/mapi/mapi_abi.py
++++ b/src/mapi/mapi_abi.py
+@@ -605,8 +605,13 @@
+     def _get_c_header(self):
+         header = """#ifndef _GLAPI_TMP_H_
+ #define _GLAPI_TMP_H_
++#ifdef USE_MGL_NAMESPACE
++#define GLAPI_PREFIX(func)  mgl##func
++#define GLAPI_PREFIX_STR(func)  "mgl"#func
++#else
+ #define GLAPI_PREFIX(func)  gl##func
+ #define GLAPI_PREFIX_STR(func)  "gl"#func
++#endif /* USE_MGL_NAMESPACE */
+ 
+ #include "util/glheader.h"
+ #endif /* _GLAPI_TMP_H_ */"""

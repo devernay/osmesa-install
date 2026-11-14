@@ -98,3 +98,18 @@ On top of these patches, the script passes `-Wno-int-conversion` to clang ≥ 15
 | Mangled `mgl*` symbols | `--enable-mangling` | **Removed in Mesa 19.2.2** ([commit](https://gitlab.freedesktop.org/mesa/mesa/-/commit/a0829cf23b307ca44ab8c4505974fb7c8d71a35a)). |
 | Build system | autoconf | autoconf was removed in 19.0 and SCons in 21.1. Only meson remains. |
 | Classic `swrast` driver | yes | Removed in 21.0. |
+
+## 6. Moving to Mesa 25.0.7 (work in progress)
+
+Mesa 25.0.7 is the last release with OSMesa. Tested on macOS 27 (arm64), it covers both requirements:
+
+- **Thread safety without patches.** `osdemo/osmesa_mt_test.c` runs N threads. Each creates its own context and renders its own color into its own same-size buffer, which is the case that shared buffers before the fix. It then checks every pixel. Stock 25.0.7 passed every run (up to 64 threads, with llvmpipe and softpipe). The patched 18.3.6 crashed in about 1 run out of 15 with 8 threads.
+- **Mangling with a small patch.** `patches/mesa-25.0.7/mgl-namespace.patch` puts back the `USE_MGL_NAMESPACE` hooks that Mesa 19.2.2 removed. They are about 50 lines in `gl.h`, `glx.h`, `glapi.h`, `glapi_dispatch.c`, `glapi_getproc.c`, the dispatch generators and `include/meson.build`. `gl_mangle.h` is generated from the actual headers by running `patches/mesa-25.0.7/gl_mangle.h.in` with `sh` in `include/GL`. That template is the 18.3.6 generator with the GLES fix, extended to `GLES/glext.h` and `GLES2/gl2ext.h`, because some dispatch functions are declared only there. Built with `-DUSE_MGL_NAMESPACE`, `libOSMesa` exports no `gl*` symbols, only 1296 `mgl*` and 13 `OSMesa*`. A program linked with both OpenGL.framework and this OSMesa gets `glGetString` from Apple's `libGL.dylib` and `mglGetString` from OSMesa. The multithreaded test passes in that configuration too.
+
+Differences from the 18.3.6 build:
+
+- **Build system:** meson and ninja, plus Python 3 with `mako` and `PyYAML`.
+- **LLVM:** 25.0.7 needs a much newer LLVM than 6.0.1. With LLVM 6.0.1, gallivm fails to compile (no `LLVMBuildIntCast2` or atomic `FAdd`), even though meson only asks for ≥ 5. It builds with LLVM 22.1.8.
+- **Static library:** the OSMesa target is a shared library only, so building `libMangledOSMesa32.a` will need a small meson change.
+- **Exported symbols:** on macOS, the dylib also exports all internal LLVM and Mesa symbols. The `osmesa.sym` version script is only used with GNU ld, so macOS needs an `-exported_symbols_list`.
+- **Driver choice:** per-context driver choice (`OSMESA_GALLIUM_DRIVER`) is not upstream. All contexts share one screen, so the driver can only be chosen per process (`GALLIUM_DRIVER`).
