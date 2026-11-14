@@ -1,0 +1,100 @@
+# Why OSMesa, and what the patches do
+
+This document explains why this script exists, and what each change it makes to Mesa is for. The patch descriptions refer to the patch set for Mesa 18.3.6 (`patches/mesa-18.3.6/`), the newest version the script builds. Older versions use the same patches, with small adaptations.
+
+## What OSMesa is for
+
+[OSMesa](https://docs.mesa3d.org/osmesa.html) ("off-screen Mesa") is Mesa's software OpenGL implementation that renders into a memory buffer supplied by the application. It needs no window system, no display connection and no GPU.
+
+Applications such as [Natron](https://natrongithub.github.io/) and its OpenFX plugins use it to run OpenGL-based image processing on machines without a usable GPU, for example render farms, headless servers, virtual machines and CI. They also use it as a CPU fallback when the GPU's OpenGL is missing or broken.
+
+Using OSMesa in such an application has two requirements that stock Mesa did not meet. Almost all the non-build-related patches exist because of them:
+
+1. **Thread safety.** The application renders from many threads at once, each with its own OSMesa context.
+2. **Living in the same process as the system OpenGL.** The same application also uses the GPU's OpenGL (for its user interface and for GPU rendering). Both libraries export the same `gl*` functions, so OSMesa's functions must have different names.
+
+The script also adds a third, smaller feature: choosing the Gallium driver (softpipe or llvmpipe) for each context.
+
+## 1. Thread safety
+
+**Patch:** `gallium-osmesa-threadsafe.patch`. Upstream bug: [mesa#880](https://gitlab.freedesktop.org/mesa/mesa/-/issues/880), originally [fdo#95035](https://bugs.freedesktop.org/show_bug.cgi?id=95035).
+
+The Gallium OSMesa front-end (`src/gallium/state_trackers/osmesa/osmesa.c`) kept its state in three unprotected global variables:
+
+| Global | Problem |
+|---|---|
+| `stapi`, created on first use in `get_st_api()` | Two threads calling `OSMesaCreateContext()` at the same time could both create it, or use it half-initialized. |
+| `stmgr`, created on first use in `get_st_manager()`, holding the single `pipe_screen` | Same race. Also, every context shared one screen, so all contexts had to use the same driver. |
+| `BufferList`, a global linked list of `osmesa_buffer` | `OSMesaMakeCurrent()` reused any buffer in the list with the same formats and size. Two threads rendering to two different images of the same size therefore got **the same buffer**, so they drew into each other's memory and also raced on the list itself. |
+
+What the patch changes:
+
+- **Per-context state.** `struct osmesa_context` gets its own `api` and `manager`, and therefore its own `pipe_screen`, created in `OSMesaCreateContext()`. Every place that used `get_st_api()` or `get_st_manager()` now uses the context's own copy. If creation fails, everything created so far is cleaned up.
+- **No global buffer list.** Each context owns exactly one buffer, `current_buffer`. `OSMesaMakeCurrent()` reuses it only if the formats and size match. Otherwise it destroys it and creates a new one. `OSMesaDestroyContext()` frees it, so buffers no longer leak. Before the patch, `osmesa_destroy_buffer()` was never called.
+- **Stale framebuffer pointers.** The state tracker decides whether it can reuse a framebuffer by comparing *pointers* (`st_framebuffer_reuse_or_create()`). A buffer freed and immediately reallocated can get the same address, so Mesa would keep using the freed framebuffer. After creating a new buffer, the patch clears `ctx->WinSysDrawBuffer` and `ctx->WinSysReadBuffer` to force a fresh lookup.
+- **Releasing the current context.** `OSMesaMakeCurrent(NULL, ...)` now calls `_mesa_make_current(NULL, NULL, NULL)`, so the thread no longer references a context that may be destroyed afterwards. `OSMesaMakeCurrent(ctx, NULL, ...)` unbinds the context's buffer and frees it.
+- **`OSMesaGetCurrentContext()`** reads the thread's current GL context (`_mesa_get_current_context()`), instead of asking the global `stapi`.
+- **Defensive checks:** `assert`s and `NULL` checks on the color resource in `osmesa_read_buffer()` and `OSMesaGetDepthBuffer()`.
+
+The same kind of fix for the other drivers:
+
+- `lp_scene-safe.patch`: llvmpipe's `lp_scene_end_rasterization()` returns early when `scene` is `NULL`, which can happen when a context is unbound or destroyed while no scene is active.
+- `swrast-makecurrentnull.patch`: the classic (non-Gallium) OSMesa driver `src/mesa/drivers/osmesa/osmesa.c` gets the same `OSMesaMakeCurrent(NULL, ...)` behavior: release the current context instead of only returning `GL_FALSE`.
+
+## 2. Living in the same process as the system OpenGL ("mangling")
+
+When an application links both the system OpenGL (OpenGL.framework, `libGL`, `opengl32.dll`) and OSMesa, both define `glBegin`, `glDrawArrays`, and so on. With static libraries, or a flat namespace, only one of them can win, and calls go to the wrong implementation.
+
+Mesa used to support a *mangled* build, where every OpenGL function is renamed `mgl*` (`mglBegin`, `mglDrawArrays`, ...). An application then calls the system OpenGL through `gl*` and OSMesa through `mgl*`, in the same process. In practice, the application includes `GL/gl_mangle.h` (which `#define`s every `glFoo` to `mglFoo`) in the code that renders with OSMesa. Natron's OpenFX plugins do exactly that.
+
+How the script builds a mangled OSMesa (`MANGLED=1`, the default):
+
+- **Mesa:** configure with `--enable-mangling`, which defines `USE_MGL_NAMESPACE`. Mesa's headers (`gl.h`, `glx.h`, `glapi.h`) and its generated dispatch code (`mapi_abi.py`: `GLAPI_PREFIX(func)` becomes `mgl##func`) then produce `mgl*` entry points. `OSMesaGetProcAddress("mglFoo")` and `("glFoo")` both work, because `mapi_glapi.c` skips the leading `m`. On Windows (SCons build), `-DUSE_MGL_NAMESPACE` is passed directly, and `mgl_export.patch` renames all exported `gl*` symbols in `osmesa.def` and `osmesa.mingw.def` to `mgl*`.
+- **`gl_mangle.h` is regenerated** from the actual headers. Upstream's copy only listed functions from `gl.h` and `glext.h` declared with `GLAPI`. The script adds the GLES headers (`GLES/gl.h`, `GLES2/gl2.h`, `GLES3/gl3*.h`) and also matches `GL_API`, so that the ES entry points are mangled too ([fdo#91724](https://bugs.freedesktop.org/show_bug.cgi?id=91724)).
+- **GLU** is built with `CPPFLAGS=-DUSE_MGL_NAMESPACE` against the mangled Mesa, and installed as `libMangledGLU`, so that `mgluSphere()` and friends call `mgl*` functions. GLU 9.0.1 is used because 9.0.2 dropped mangling support.
+- **Library names:** the libraries are installed as `libMangledOSMesa32` and `libMangledGLU`, and the `.la` and `.pc` files are adjusted. That way they can't be confused with an unmangled `libOSMesa` or the system `libGLU`.
+- `glapi_getproc.c`: the script replaces `MANGLE` with `MANGLE_disabled` there, so that the dispatch table is looked up by unmangled names. This was needed before Mesa 11.2.2, together with `glapi-getproc-mangled.patch`. Since then the file contains no `MANGLE` and the substitution does nothing.
+
+The libraries are static by default (`SHARED=0`). The application embeds its own OSMesa and doesn't depend on whatever `libOSMesa` the system may have.
+
+## 3. Choosing the Gallium driver per context
+
+**Patch:** `osmesa-gallium-driver.patch`.
+
+Stock OSMesa picks softpipe or llvmpipe once, for the whole process, from the `GALLIUM_DRIVER` environment variable. The patch adds a context attribute, `OSMESA_GALLIUM_DRIVER` (`0x38`), to `OSMesaCreateContextAttribs()`: `0` = softpipe, `1` = llvmpipe, `2` = swr. It also passes the driver name down to `osmesa_create_screen()` and `sw_screen_create_named()`, which the patch makes non-`static` for that purpose.
+
+This only works because, after the thread-safety patch, each context has its own `pipe_screen`. The classic driver accepts the attribute and ignores it.
+
+## 4. Build fixes
+
+These patches don't change behavior. They make Mesa build with compilers, SDKs and LLVM versions newer (or older) than the ones Mesa 18.3.6 was released with. Most come from [MacPorts](https://github.com/macports/macports-ports/tree/master/x11/mesa/files) or MSYS2.
+
+| Patch | Applied on | Why |
+|---|---|---|
+| `gallium_llvm.patch` | all | Build gallivm (llvmpipe's LLVM code generator) with LLVM 5 to 12+: API changes in `lp_bld_init.c` and `lp_bld_misc.cpp`, for example `deregisterEHFrames()` and removed or renamed passes. |
+| `gallivm_math_h.patch` | all | Missing `#include <math.h>` in `lp_bld_format_srgb.c`. |
+| `install-GL-headers.patch` | all | Install the GL headers and `gl.pc` even though GLX is disabled (`--disable-glx`). Applications need `GL/gl.h`, `GL/osmesa.h` and `GL/gl_mangle.h` from the OSMesa prefix. |
+| `swr-sched.patch` | all (swr) | Include `<sched.h>` for `sched_yield()` in the swr driver on non-Windows systems. |
+| `add_pi.patch` | all | Define `M_PI`, `M_PI_2` and `M_PI_4` when `<math.h>` doesn't (MinGW in strict mode). |
+| `scons-llvm-3-9-libs.patch`, `scons-swr-cc-arch.patch`, `msys2_scons_fix.patch` | Windows (SCons) | Link `ole32` and `uuid`, which LLVM ≥ 3.9 needs. Don't pass MSVC-only flags when the compiler is gcc. Run the code generators with `python2.exe` on MSYS2. |
+| `5002-darwin-Suppress-type-conversion-warnings-for-GLhandl.patch` | macOS | On macOS `GLhandleARB` is a `void *`, not an integer: add casts in `shader_query.cpp`. |
+| `0002-applegl-Provide-requirements-of-_SET_DrawBuffers.patch` | macOS | MacPorts fix for the Apple GLX backend's link dependencies. GLX is disabled here, so it is harmless. |
+| `0002-Hack-to-address-build-failure-when-using-newer-macOS.patch` | macOS | Newer macOS SDKs provide `timespec_get()`, which clashes with Mesa's C11 threads emulation (`include/c11/threads_posix.h`). |
+| `missing_clock_gettime.patch` | macOS < 10.12 | `clock_gettime()` only exists since macOS 10.12: use `gettimeofday()` before that. |
+| `static-strndup.patch` | macOS < 10.7 | `strndup()` is missing on old macOS: use a private copy in `xmlconfig.c`. |
+| `o-cloexec.patch` | macOS 10.6 | `O_CLOEXEC` is missing: fall back to `fcntl(FD_CLOEXEC)` in `disk_cache.c`. |
+| `no-missing-prototypes-error.patch` | macOS | Don't turn missing-prototype warnings into errors (`-Werror=missing-prototypes`), which breaks the build with Apple's toolchain. |
+| `disable_shader_cache.patch` | macOS < 10.10 | Disable the on-disk shader cache, which doesn't build or work there ([MacPorts #54638](https://trac.macports.org/ticket/54638)). |
+
+On top of these patches, the script passes `-Wno-int-conversion` to clang ≥ 15, which turned int/pointer conversions into errors. It also works around the gl_mangle.h issue described in section 2.
+
+## 5. Status in current Mesa
+
+| | Mesa 18.3.6 + these patches | Current upstream |
+|---|---|---|
+| OSMesa | yes | **Removed in Mesa 25.1.** The last release with OSMesa is 25.0.7. Upstream's replacement is EGL with the surfaceless platform (`EGL_MESA_platform_surfaceless`) and pbuffers. |
+| Thread safety | `gallium-osmesa-threadsafe.patch` | **Fixed upstream** (mesa#880 was closed in Dec 2020). In 25.0.7, each context owns its buffer (no global list), the shared screen is created with `call_once()`, framebuffers are matched by a unique `drawable_ID` instead of by pointer, and `OSMesaMakeCurrent(NULL, NULL, ...)` releases the context. All contexts still share one `pipe_screen`. |
+| Per-context driver choice (`OSMESA_GALLIUM_DRIVER`) | `osmesa-gallium-driver.patch` | Not upstream. Only the process-wide `GALLIUM_DRIVER` environment variable. |
+| Mangled `mgl*` symbols | `--enable-mangling` | **Removed in Mesa 19.2.2** ([commit](https://gitlab.freedesktop.org/mesa/mesa/-/commit/a0829cf23b307ca44ab8c4505974fb7c8d71a35a)). |
+| Build system | autoconf | autoconf was removed in 19.0 and SCons in 21.1. Only meson remains. |
+| Classic `swrast` driver | yes | Removed in 21.0. |

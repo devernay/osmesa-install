@@ -30,6 +30,10 @@ bash ../osmesa-install.sh
   (the script needs bash: `sh` is not bash on e.g. Debian/Ubuntu)
 - there is a test program on the `osdemo` directory, with a few checks
 
+## Why these patches?
+
+OSMesa is used here by applications that render with OpenGL from many threads, without a GPU, in the same process as the system's OpenGL. Stock Mesa supports neither. See [PATCHES.md](PATCHES.md) for why OSMesa is used, what each patch does, and which of these fixes are now upstream.
+
 ## Notes and caveats
 
 The latest Mesa version that can be built using this script is 18.3.6.
