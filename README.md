@@ -30,7 +30,7 @@ bash ../osmesa-install.sh
 ```
   (the script needs bash: `sh` is not bash on e.g. Debian/Ubuntu)
 - there is a test program on the `osdemo` directory, with a few checks, and a multithreaded test (`osdemo/osmesa_mt_test.c`), which the script runs at the end
-- LLVM (for the `llvmpipe` driver): by default (`LLVM_BUILD=auto`), the script uses the LLVM in `LLVM_PREFIX` (`/opt/llvm`) if it is suitable for the Mesa version (version, RTTI, static libraries), and else downloads and builds it there. Use `LLVM_BUILD=1` to always build it, `LLVM_BUILD=0` to never build it.
+- LLVM (for the `llvmpipe` driver): by default (`LLVM_BUILD=auto`), the script uses the LLVM in `LLVM_PREFIX` (`/opt/llvm`) if it is suitable for the Mesa version (version, RTTI, static libraries), and downloads and builds it there if `LLVM_PREFIX` contains no LLVM. An existing, unsuitable LLVM is never replaced automatically: the script stops, and you can give another `LLVM_PREFIX` (e.g. `/opt/llvm-15.0.7` for Mesa 25.0.7), or use `LLVM_BUILD=1` to rebuild it in place. `LLVM_BUILD=0` never builds LLVM.
 
 ## Mesa 25.0.7
 

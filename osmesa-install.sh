@@ -4,7 +4,8 @@
 # - OSMESA_PREFIX: where to install osmesa (must be writable)
 # - LLVM_PREFIX: where llvm is / should be installed
 # - LLVM_BUILD: whether to build LLVM (0/1/auto, auto by default: use the LLVM in LLVM_PREFIX if it
-#   is suitable for this Mesa version, else build it)
+#   is suitable for this Mesa version, build it if there is no LLVM in LLVM_PREFIX, and stop with an
+#   error if there is an unsuitable one, which is only replaced with LLVM_BUILD=1)
 # - OSMESA_VERSION: Mesa version (18.3.6 by default; 25.0.7, the last Mesa with OSMesa, uses meson)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 # - BUILD_OSDEMO: try to compile and run osdemo (0/1, 1 by default)
@@ -350,8 +351,14 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 echo "* using LLVM $("$llvmconfigbinary" --version) from $llvmprefix"
                 buildllvm=0
             fi
+        elif [ -e "$llvmconfigbinary" ]; then
+            # never overwrite an existing LLVM installation automatically (it may be used by other builds)
+            echo "Error: $llvmproblem."
+            echo "Give the prefix of another LLVM with LLVM_PREFIX, or a new prefix where LLVM $llvmversion will be built"
+            echo "(e.g. env LLVM_PREFIX=/opt/llvm-$llvmversion ...), or use LLVM_BUILD=1 to replace the LLVM in $llvmprefix."
+            exit 1
         else
-            echo "* $llvmproblem: building LLVM $llvmversion in $llvmprefix"
+            echo "* no LLVM in $llvmprefix: building LLVM $llvmversion there"
             buildllvm=1
         fi
     fi
