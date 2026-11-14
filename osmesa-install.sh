@@ -100,7 +100,7 @@ if [ "$osname" = Darwin ]; then
         CFLAGS="$CFLAGS $archs"
         CXXFLAGS="$CXXFLAGS $archs"
     fi
-    XCODE_VER=$(xcodebuild -version | sed -e 's/Xcode //' | head -n 1)
+    XCODE_VER=$(xcodebuild -version 2>/dev/null | sed -e 's/Xcode //' | head -n 1)
     case "$XCODE_VER" in
         4.2*|[5-9].*|1[0-9].*)
             # clang became the default compiler on Xcode 4.2
@@ -193,6 +193,13 @@ function version_gt() {
 
 # On MacPorts, building Mesa requires the following packages:
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
+
+# On macOS, Mesa's configure is run with SED=gsed (GNU sed), check for it early (before building LLVM)
+if [ "$osname" = Darwin ] && [ "$buildosmesa" = 1 ] && [ -z "$(type -P gsed)" ]; then
+    echo "Error: GNU sed (gsed) is required to build Mesa on macOS."
+    echo "Install it with \"sudo port install gsed\" (MacPorts) or \"brew install gnu-sed\" (Homebrew)."
+    exit 1
+fi
 
 llvmlibs=
 if [ ! -d "$osmesaprefix" ] || [ ! -w "$osmesaprefix" ]; then
@@ -421,6 +428,8 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     llvmlibs="$llvmlibs $llvmlibsadd"
 fi
 
+# Mesa/LLVM compatibility checks (llvmconfigbinary is only set for the llvmpipe/swr drivers)
+if [ -n "${llvmconfigbinary:-}" ]; then
 if version_gt $("$llvmconfigbinary" --version) 4.0.1 && version_gt 18.0.0 "$mesaversion"; then
     echo "Building for an unsupported combination of Mesa/LLVM."
     echo "LLVM 4.0.1 is the best option for Mesa 17.x."
@@ -442,6 +451,7 @@ if version_gt $("$llvmconfigbinary" --version) 6.0.1 && version_gt 19.0.0 "$mesa
     echo "Continuing anyway after 10s."
     sleep 10
 fi
+fi # llvmconfigbinary
 
 if [ "$clean" = 1 ]; then
     rm -rf "mesa-$mesaversion" "mesa-demos-$demoversion" "glu-$gluversion"
@@ -648,7 +658,7 @@ elif [ "$use_autoconf" = 1 ]; then
     ####################################################################
     # Unix builds for version up to 18 use configure
 
-    test -f Mafefile && make -j"${mkjobs}" distclean # if in an existing build
+    test -f Makefile && make -j"${mkjobs}" distclean # if in an existing build
 
     autoupdate
     autoreconf -fi
@@ -757,7 +767,8 @@ elif [ "$use_autoconf" = 1 ]; then
             osxflags="$osxflags -isysroot $SDKROOT"
         fi
         # clang >= 15 started treating int <-> ptr conversions as errors
-        if [ "$CC" = "clang" ]; then
+        # (test the compiler itself: CC may be "gcc", which is clang with only the Command Line Tools)
+        if $CC --version 2>/dev/null | grep -q clang; then
             osxflags="$osxflags -Wno-int-conversion"
         fi
 
