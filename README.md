@@ -6,6 +6,17 @@ Script and patches to build and install variations of OSMesa http://www.mesa3d.o
 - choice of osmesa driver: `swrast`, `softpipe`, `llvmpipe` or `swr` (SWR is not yet supported on macOS)
 - possibility to also compile and install LLVM 6.0.1, 4.0.1 or 3.4.2 for the `llvmpipe` driver
 
+## Prerequisites (macOS)
+
+Xcode or the Command Line Tools, plus the following, e.g. from MacPorts:
+```
+sudo port install python27 cmake autoconf automake libtool pkgconfig gsed xz
+sudo port select --set python python27
+```
+- GNU sed (`gsed`; `brew install gnu-sed` on Homebrew) is required: Mesa's configure is run with `SED=gsed` on macOS.
+- `xz` provides `xzcat`, used to unpack the Mesa and LLVM tarballs (macOS doesn't ship it).
+- On macOS older than 10.12, the script also needs MacPorts `clang-9.0`, and on 10.6 and older, `coreutils` (for `gsort`).
+
 ## Usage
 
 - edit variables / paths as the beginning of the `osmesa-install.sh`
@@ -14,8 +25,9 @@ Script and patches to build and install variations of OSMesa http://www.mesa3d.o
 ```
 mkdir build
 cd build
-sh ../osmesa-install.sh
+bash ../osmesa-install.sh
 ```
+  (the script needs bash: `sh` is not bash on e.g. Debian/Ubuntu)
 - there is a test program on the `osdemo` directory, with a few checks
 
 ## Notes and caveats

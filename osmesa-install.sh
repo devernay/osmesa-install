@@ -102,7 +102,7 @@ if [ "$osname" = Darwin ]; then
     fi
     XCODE_VER=$(xcodebuild -version | sed -e 's/Xcode //' | head -n 1)
     case "$XCODE_VER" in
-        4.2*|[5-9].*|1[0-9].*)
+        4.2*|[5-9].*|[1-9][0-9].*)
             # clang became the default compiler on Xcode 4.2
             CC=clang
             CXX=clang++
@@ -138,7 +138,8 @@ if [ "$osname" = Darwin ]; then
 fi
 
 # tell curl to continue downloads and follow redirects
-curlopts="-L -C -"
+# -f: fail on HTTP errors (e.g. 404) instead of saving the error page, so the "||" fallbacks work
+curlopts="-f -L -C -"
 srcdir="$scriptdir"
 
 echo "Mesa buid options:"
@@ -280,6 +281,8 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
 	    0005-Threading-Only-call-pthread_setname_np-on-SnowLeopar.patch \
         0006-Only-call-setpriority-PRIO_DARWIN_THREAD-0-PRIO_DARW.patch \
         config-guess.patch \
+        regex_impl-include-guard.patch \
+        sancov-explicit-string.patch \
 	    "
             if [ "$osname" = Darwin ] && [ "$osver" = 10 ]; then
                 # On Snow Leopard, build universal
@@ -453,7 +456,11 @@ archsuffix=xz
 xzcat=xzcat
 if [ ! -f "mesa-${mesaversion}.tar.${archsuffix}" ]; then
     echo "* downloading Mesa ${mesaversion}..."
-    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.${archsuffix}" \
+    # ftp.freedesktop.org refuses connections (as of 2026): try archive.mesa3d.org (HTTPS) first,
+    # where old releases are in older-versions/X.x/ (17.x, 18.x) or older-versions/X.x/X.Y.Z/ (13.x and earlier)
+    curl $curlopts -O "https://archive.mesa3d.org/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}" \
+    || curl $curlopts -O "https://archive.mesa3d.org/older-versions/${mesaversion/.*/.x}/${mesaversion}/mesa-${mesaversion}.tar.${archsuffix}" \
+    || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.${archsuffix}" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/${mesaversion}/mesa-${mesaversion}.tar.${archsuffix}"    
 fi
@@ -809,7 +816,8 @@ if [ "$buildglu" = 1 ]; then
 
 if [ ! -f glu-${gluversion}.tar.gz ]; then
     echo "* downloading GLU ${gluversion}..."
-    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.gz"
+    curl $curlopts -O "https://archive.mesa3d.org/glu/glu-${gluversion}.tar.gz" \
+    || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${gluversion}.tar.gz"
 fi
 tar zxf glu-${gluversion}.tar.gz
 cd glu-${gluversion}
@@ -850,7 +858,8 @@ if [ "$buildosdemo" = 1 ]; then
 cd ..
 if [ ! -f mesa-demos-${demoversion}.tar.bz2 ]; then
     echo "* downloading Mesa Demos ${demoversion}..."
-    curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2" \
+    curl $curlopts -O "https://archive.mesa3d.org/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2" \
+    || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/${demoversion}/mesa-demos-${demoversion}.tar.bz2" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/demos/mesa-demos-${demoversion}.tar.bz2"
 fi
 tar jxf mesa-demos-${demoversion}.tar.bz2
