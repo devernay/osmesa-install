@@ -122,6 +122,5 @@ Mesa 25.0.7 is the last release with OSMesa. Tested on macOS 27 (arm64), it cove
 ### Remaining work
 
 - **Build system:** meson and ninja, plus Python 3 with `mako` and `PyYAML`.
-- **Integrate into `osmesa-install.sh`:** a meson build path for Mesa ≥ 19, LLVM from the `llvm-project` tarball, a check of an installed LLVM (version ≥ 15, static libraries, RTTI), the static archive merge, `gl_mangle.h` generation, GLU, and the osdemos.
 - **Exported symbols of the shared library:** on macOS, the dylib also exports all internal LLVM and Mesa symbols. The `osmesa.sym` version script is only used with GNU ld, so macOS needs an `-exported_symbols_list`. This only matters if `SHARED=1`.
 - **Platforms:** test Linux and Windows (MSYS2), and macOS 15.

@@ -4,7 +4,8 @@ Script and patches to build and install variations of OSMesa http://www.mesa3d.o
 - "mangled" or not (in mangled OSMesa, all functions start with `mgl` instead of `gl`)
 - debug or not
 - choice of osmesa driver: `swrast`, `softpipe`, `llvmpipe` or `swr` (SWR is not yet supported on macOS)
-- possibility to also compile and install LLVM 6.0.1, 4.0.1 or 3.4.2 for the `llvmpipe` driver
+- possibility to also compile and install LLVM 6.0.1, 4.0.1 or 3.4.2 for the `llvmpipe` driver (LLVM 15.0.7 for Mesa 25.0.7)
+- Mesa 18.3.6 (default, autoconf) or Mesa 25.0.7, the last Mesa release with OSMesa (meson, see below)
 
 ## Prerequisites (macOS)
 
@@ -28,7 +29,25 @@ cd build
 bash ../osmesa-install.sh
 ```
   (the script needs bash: `sh` is not bash on e.g. Debian/Ubuntu)
-- there is a test program on the `osdemo` directory, with a few checks
+- there is a test program on the `osdemo` directory, with a few checks, and a multithreaded test (`osdemo/osmesa_mt_test.c`), which the script runs at the end
+- LLVM (for the `llvmpipe` driver): by default (`LLVM_BUILD=auto`), the script uses the LLVM in `LLVM_PREFIX` (`/opt/llvm`) if it is suitable for the Mesa version (version, RTTI, static libraries), and else downloads and builds it there. Use `LLVM_BUILD=1` to always build it, `LLVM_BUILD=0` to never build it.
+
+## Mesa 25.0.7
+
+Mesa 25.0.7 is the last Mesa release with OSMesa (it was removed in 25.1). It is thread-safe without patches, and the script adds back mangling support and per-context driver selection (see [PATCHES.md](PATCHES.md)). To build it:
+```
+env OSMESA_VERSION=25.0.7 bash ../osmesa-install.sh
+```
+It needs, in addition to the prerequisites above:
+- `meson` and `ninja` (e.g. `sudo port install meson ninja`)
+- Python 3 with the `mako` and `yaml` modules (e.g. `python3 -m pip install mako pyyaml`; set `PYTHON` to use another `python3`)
+- LLVM 15 or later for `llvmpipe` (LLVM 15.0.7 and 22.1.8 were tested). LLVM 15.0.7 is built by default if no suitable LLVM is found in `LLVM_PREFIX`.
+
+The static library (`libMangledOSMesa32.a`, the default) needs more LLVM components than with Mesa 18. Link with:
+```
+-lMangledOSMesa32 -lz `llvm-config --link-static --ldflags --libs bitwriter engine mcdisassembler mcjit core executionengine scalaropts transformutils instcombine coroutines native passes --system-libs`
+```
+(or use `pkg-config --static --libs osmesa`).
 
 ## Why these patches?
 
@@ -36,7 +55,7 @@ OSMesa is used here by applications that render with OpenGL from many threads, w
 
 ## Notes and caveats
 
-The latest Mesa version that can be built using this script is 18.3.6.
+The latest Mesa version that can be built using this script with autoconf is 18.3.6, and with meson 25.0.7 (only on macOS and Linux for now, and Linux is untested).
 
 The reasons are:
 - Mesa dropped autoconf support with 19.0, supporting only meson and SCons builds. SCons support was also dropped in 21.1. Mangled OSMesa support was only accessible from autoconf and SCons, but it is just a matter of adding `-DUSE_MGL_NAMESPACE` to `CPPFLAGS`, so it should still be possible to easily get mangled OSMesa using meson.

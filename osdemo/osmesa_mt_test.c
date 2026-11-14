@@ -39,7 +39,7 @@ static void *render(void *arg)
     }
 #endif
     ctx = OSMesaCreateContextAttribs(attribs, NULL);
-    unsigned char *buf = malloc(W * H * 4);
+    unsigned char *buf = (unsigned char *)malloc(W * H * 4);
     /* a color unique to this thread */
     unsigned char r = (unsigned char)(37 * id + 11), g = (unsigned char)(91 * id + 23), b = (unsigned char)(53 * id + 47);
     int it, i, bad = 0;
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
         iterations = atoi(argv[2]);
     if (argc > 3)
         driver = atoi(argv[3]);
-    threads = malloc(nthreads * sizeof(pthread_t));
+    threads = (pthread_t *)malloc(nthreads * sizeof(pthread_t));
     for (i = 0; i < nthreads; i++)
         pthread_create(&threads[i], NULL, render, (void *)(long)i);
     for (i = 0; i < nthreads; i++)
