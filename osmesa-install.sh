@@ -8,6 +8,7 @@
 # - BUILD_OSDEMO: try to compile and run osdemo (0/1, 1 by default)
 # - MANGLED: build a mangled OSMesa and GLU (function names are prefixed with "m") (0/1, 1 by default)
 # - SHARED: build shared OSMesa libraries (0/1, 0 by default)
+# - INTERACTIVE: show the build options and ask for confirmation before building (0/1, 0 by default)
 
 set -e # Exit immediately if a command exits with a non-zero status
 set -u # Treat unset variables as an error when substituting.
@@ -49,16 +50,35 @@ silentlogging="${SILENT_LOG:-0}"
 buildosmesa="${BUILD_OSMESA:-1}"
 buildglu="${BUILD_GLU:-1}"
 buildosdemo="${BUILD_OSDEMO:-1}"
+interactive="${INTERACTIVE:-0}"
 osname=$(uname)
 # This script
 scriptdir=$(cd "$(dirname "$0")"; pwd)
 # scriptname is the script name without the suffix (if any)
 scriptname=$(basename "$0")
 scriptname="${scriptname%.*}"
+# Sources are downloaded and built in the current directory: don't do that in the script directory.
+if [ "$(pwd)" = "$scriptdir" ]; then
+    echo "Error: do not run this script from its own directory. Create a build directory and run it from there:"
+    echo "  mkdir build && cd build && bash ../$(basename "$0")"
+    exit 1
+fi
 if [ "$silentlogging" = 1 ]; then
+    # Don't overwrite the log of a previous run: use osmesa-install.log, then osmesa-install_1.log, etc.
+    logfile="$scriptdir/$scriptname.log"
+    i=1
+    while [ -e "$logfile" ]; do
+        logfile="$scriptdir/${scriptname}_$i.log"
+        i=$((i + 1))
+    done
+    echo "Output is redirected to $logfile"
+    if [ "$interactive" = 1 ]; then
+        echo "Note: INTERACTIVE is ignored with SILENT_LOG=1"
+        interactive=0
+    fi
     # Exit script on error, redirect output and error to log file. Open log for realtime updates.
     set -e
-    exec </dev/null &>"$scriptdir/$scriptname.log"
+    exec </dev/null &>"$logfile"
 fi
 
 if [ "$debug" = 1 ]; then
@@ -137,6 +157,17 @@ if [ "$osname" = Darwin ]; then
     fi
 fi
 
+# On macOS 10.12 and later, if no SDK was given, use the default SDK reported by xcrun, so that the
+# SDK used for the build is explicit and is shown in the options below.
+if [ "$osname" = Darwin ] && [ "$osver" -ge 16 ] && [ -z "${SDKROOT:-}" ]; then
+    SDKROOT=$(xcrun --show-sdk-path 2>/dev/null || true)
+    if [ -n "$SDKROOT" ]; then
+        export SDKROOT
+    else
+        unset SDKROOT
+    fi
+fi
+
 # tell curl to continue downloads and follow redirects
 # -f: fail on HTTP errors (e.g. 404) instead of saving the error page, so the "||" fallbacks work
 curlopts="-f -L -C -"
@@ -182,6 +213,30 @@ fi
 if [ -n "${SDKROOT+x}" ]; then
     echo "- OSX SDK root is $SDKROOT"
 fi
+# tool versions, useful when reading a build log
+echo "- CC: $CC ($($CC --version 2>/dev/null | head -n 1 || true))"
+echo "- CXX: $CXX ($($CXX --version 2>/dev/null | head -n 1 || true))"
+for tool in cmake autoconf automake python scons; do
+    if [ -n "$(type -P $tool)" ]; then
+        echo "- $tool: $($tool --version 2>&1 | head -n 1 || true)"
+    fi
+done
+
+if [ "$interactive" = 1 ]; then
+    read -r -p "Continue with these options? [Y/n] " answer || answer=n
+    case "$answer" in
+        n*|N*)
+            echo "Exiting."
+            exit 0
+            ;;
+    esac
+fi
+
+# elapsed time per stage (SECONDS is the number of seconds since the script started)
+function print_elapsed() {
+    local seconds=$((SECONDS - $2))
+    echo "* $1 took $((seconds / 60))min $((seconds % 60))s"
+}
 
 # see https://stackoverflow.com/a/24067243
 sort=sort
@@ -241,6 +296,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
         cd llvm-${llvmversion}.src
         echo "* building LLVM..."
+        llvmstart=$SECONDS
         cmake_archflags=
         if [ $llvmversion = 3.4.2 ] && [ "$osname" = Darwin ] && [ "$osver" = 10 ]; then
             if [ "$debug" = 1 ]; then
@@ -363,6 +419,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             cd ..
         fi
         cd ..
+        print_elapsed "LLVM build" $llvmstart
     fi
     llvmconfigbinary=
     case "$osname" in
@@ -461,6 +518,7 @@ if [ "$clean" = 1 ]; then
 fi
 
 if [ "$buildosmesa" = 1 ]; then
+osmesastart=$SECONDS
 
 archsuffix=xz
 xzcat=xzcat
@@ -821,9 +879,11 @@ fi
 
 cd ..
 
+print_elapsed "Mesa build" $osmesastart
 fi # if [ "$buildosmesa" = 1 ];
 
 if [ "$buildglu" = 1 ]; then
+glustart=$SECONDS
 
 if [ ! -f glu-${gluversion}.tar.gz ]; then
     echo "* downloading GLU ${gluversion}..."
@@ -862,9 +922,11 @@ if [ "$mangled" = 1 ]; then
     fi
 fi
 
+print_elapsed "GLU build" $glustart
 fi # if [ "$buildglu" = 1 ];
 
 if [ "$buildosdemo" = 1 ]; then
+osdemostart=$SECONDS
 # build the demo
 cd ..
 if [ ! -f mesa-demos-${demoversion}.tar.bz2 ]; then
@@ -916,8 +978,11 @@ $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo
 $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo16 osdemo16.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
 ./osdemo16 image16.tga || $allowfail
 # results are in image32.tga image16.tga image.tga
+set +x
+print_elapsed "osdemo build and run" $osdemostart
 fi # buildosdemo == 1
 
+print_elapsed "Total" 0
 exit
 
 # Useful information:

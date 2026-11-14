@@ -7,3 +7,4 @@ osdemo32
 osdemo32-mangled
 *.dSYM
 *.exe
+*.log
