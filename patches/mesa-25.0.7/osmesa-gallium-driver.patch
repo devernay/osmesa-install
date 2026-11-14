@@ -4,7 +4,7 @@
  #define OSMESA_COMPAT_PROFILE        0x35
  #define OSMESA_CONTEXT_MAJOR_VERSION 0x36
  #define OSMESA_CONTEXT_MINOR_VERSION 0x37
-+#define OSMESA_GALLIUM_DRIVER        0x38 /* 0 = softpipe, 1 = llvmpipe */
++#define OSMESA_GALLIUM_DRIVER        0x38 /* 0 = softpipe, 1 = llvmpipe, 2 = swr (now llvmpipe) */
  
  
  typedef struct osmesa_context *OSMesaContext;
@@ -156,23 +156,34 @@
     int i;
  
     if (sharelist) {
-@@ -628,6 +659,12 @@
+@@ -628,6 +659,21 @@
           if (version_minor < 0)
              return NULL;
           break;
 +      case OSMESA_GALLIUM_DRIVER:
-+         /* 0 = softpipe, 1 = llvmpipe (2 = swr, which was removed from Mesa) */
-+         if (attribList[i+1] != 0 && attribList[i+1] != 1)
++         /* 0 = softpipe, 1 = llvmpipe, 2 = swr: swr was removed from Mesa (22.0),
++          * use llvmpipe, which is also an LLVM-based rasterizer */
++         switch (attribList[i+1]) {
++         case 0:
++            driver = 1; /* softpipe */
++            break;
++         case 1:
++         case 2:
++            driver = 2; /* llvmpipe */
++            break;
++         default:
 +            return NULL;
-+         driver = attribList[i+1] + 1;
++         }
 +         break;
        case 0:
           /* end of list */
           break;
-@@ -637,9 +674,21 @@
+@@ -635,11 +681,23 @@
+          fprintf(stderr, "Bad attribute in OSMesaCreateContextAttribs()\n");
+          return NULL;
        }
-    }
- 
++   }
++
 +   if (sharelist) {
 +      /* contexts sharing objects must use the same driver */
 +      fscreen = sharelist->fscreen;
@@ -180,10 +191,10 @@
 +         return NULL;
 +   } else {
 +      fscreen = get_st_manager(driver >= 0 ? driver : 0);
-+   }
+    }
 +   if (!fscreen)
 +      return NULL;
-+
+ 
     osmesa = (OSMesaContext) CALLOC_STRUCT(osmesa_context);
     if (!osmesa)
        return NULL;
@@ -191,7 +202,7 @@
  
     /* Choose depth/stencil/accum buffer formats */
     if (accumBits > 0) {
-@@ -677,7 +726,7 @@
+@@ -677,7 +735,7 @@
                           osmesa->depth_stencil_format,
                           osmesa->accum_format);
  
@@ -200,7 +211,7 @@
                                           &attribs, &st_error, st_shared);
     if (!osmesa->st) {
        FREE(osmesa);
-@@ -767,7 +816,8 @@
+@@ -767,7 +825,8 @@
     }
  
     if (!osmesa->current_buffer) {
@@ -210,7 +221,7 @@
                                        osmesa->depth_stencil_format,
                                        osmesa->accum_format);
     }
-@@ -875,7 +925,7 @@
+@@ -875,7 +934,7 @@
        FALLTHROUGH;
     case OSMESA_MAX_HEIGHT:
        {
