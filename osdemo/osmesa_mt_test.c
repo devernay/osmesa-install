@@ -2,8 +2,11 @@
  * into its own buffer (all buffers have the same size, which triggered buffer sharing in
  * unpatched Mesa <= 20.x), then checks that the buffer only contains its color.
  * Build with -DMANGLED to call the mgl* functions of a mangled OSMesa.
- * Usage: osmesa_mt_test [threads] [iterations]
+ * Usage: osmesa_mt_test [threads] [iterations] [driver]
+ * driver (needs OSMESA_GALLIUM_DRIVER): -1 = default (GALLIUM_DRIVER env var), 0 = softpipe,
+ * 1 = llvmpipe, 2 = mixed (even threads softpipe, odd threads llvmpipe)
  */
+#include <string.h>
 #ifdef MANGLED
 #include <GL/gl_mangle.h>
 #endif
@@ -17,15 +20,25 @@
 #define H 256
 
 static int iterations = 200;
+static int driver = -1;
 static int failures = 0;
 static pthread_mutex_t failures_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void *render(void *arg)
 {
     int id = (int)(long)arg;
-    const int attribs[] = { OSMESA_FORMAT, OSMESA_RGBA, OSMESA_DEPTH_BITS, 24,
-                            OSMESA_PROFILE, OSMESA_COMPAT_PROFILE, 0 };
-    OSMesaContext ctx = OSMesaCreateContextAttribs(attribs, NULL);
+    int attribs[16] = { OSMESA_FORMAT, OSMESA_RGBA, OSMESA_DEPTH_BITS, 24,
+                        OSMESA_PROFILE, OSMESA_COMPAT_PROFILE, 0 };
+    int thread_driver = driver == 2 ? id % 2 : driver;
+    OSMesaContext ctx;
+#ifdef OSMESA_GALLIUM_DRIVER
+    if (thread_driver >= 0) {
+        attribs[6] = OSMESA_GALLIUM_DRIVER;
+        attribs[7] = thread_driver;
+        attribs[8] = 0;
+    }
+#endif
+    ctx = OSMesaCreateContextAttribs(attribs, NULL);
     unsigned char *buf = malloc(W * H * 4);
     /* a color unique to this thread */
     unsigned char r = (unsigned char)(37 * id + 11), g = (unsigned char)(91 * id + 23), b = (unsigned char)(53 * id + 47);
@@ -47,6 +60,14 @@ static void *render(void *arg)
         if (OSMesaGetCurrentContext() != ctx) {
             fprintf(stderr, "thread %d: OSMesaGetCurrentContext() is not this thread's context\n", id);
             bad = 1;
+        }
+        if (it == 0 && thread_driver >= 0) {
+            const char *renderer = (const char *)glGetString(GL_RENDERER);
+            const char *expected = thread_driver == 0 ? "softpipe" : "llvmpipe";
+            if (!renderer || !strstr(renderer, expected)) {
+                fprintf(stderr, "thread %d: renderer is '%s', expected %s\n", id, renderer ? renderer : "(null)", expected);
+                bad = 1;
+            }
         }
         glViewport(0, 0, W, H);
         glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -88,12 +109,14 @@ int main(int argc, char **argv)
 
     if (argc > 2)
         iterations = atoi(argv[2]);
+    if (argc > 3)
+        driver = atoi(argv[3]);
     threads = malloc(nthreads * sizeof(pthread_t));
     for (i = 0; i < nthreads; i++)
         pthread_create(&threads[i], NULL, render, (void *)(long)i);
     for (i = 0; i < nthreads; i++)
         pthread_join(threads[i], NULL);
-    printf("%d threads x %d iterations: %s (%d failing threads)\n", nthreads, iterations,
+    printf("%d threads x %d iterations, driver %d: %s (%d failing threads)\n", nthreads, iterations, driver,
            failures ? "FAILED" : "OK", failures);
     free(threads);
     return failures ? 1 : 0;

@@ -1,0 +1,252 @@
+--- a/include/GL/osmesa.h
++++ b/include/GL/osmesa.h
+@@ -106,6 +106,7 @@
+ #define OSMESA_COMPAT_PROFILE        0x35
+ #define OSMESA_CONTEXT_MAJOR_VERSION 0x36
+ #define OSMESA_CONTEXT_MINOR_VERSION 0x37
++#define OSMESA_GALLIUM_DRIVER        0x38 /* 0 = softpipe, 1 = llvmpipe */
+ 
+ 
+ typedef struct osmesa_context *OSMesaContext;
+--- a/src/gallium/frontends/osmesa/osmesa.c
++++ b/src/gallium/frontends/osmesa/osmesa.c
+@@ -84,7 +84,7 @@
+ 
+ 
+ extern struct pipe_screen *
+-osmesa_create_screen(void);
++osmesa_create_screen(const char *driver);
+ 
+ 
+ 
+@@ -105,6 +105,7 @@
+ struct osmesa_context
+ {
+    struct st_context *st;
++   struct pipe_frontend_screen *fscreen; /*< screen of the context's Gallium driver */
+ 
+    bool ever_used;     /*< Has this context ever been current? */
+ 
+@@ -140,43 +141,70 @@
+    return 0;
+ }
+ 
+-static struct pipe_frontend_screen *global_fscreen = NULL;
++/*
++ * One shared screen per Gallium driver, so that the driver can be chosen per
++ * context (OSMESA_GALLIUM_DRIVER). Index 0 is the default driver (GALLIUM_DRIVER
++ * environment variable, else llvmpipe if available), then softpipe, llvmpipe.
++ * Contexts using the same driver share its screen, as Gallium screens are
++ * thread-safe.
++ */
++#define OSMESA_NUM_DRIVERS 3
++static const char *osmesa_driver_names[OSMESA_NUM_DRIVERS] = { NULL, "softpipe", "llvmpipe" };
++static struct pipe_frontend_screen *global_fscreens[OSMESA_NUM_DRIVERS];
++static mtx_t global_fscreens_mutex;
++static once_flag global_fscreens_once = ONCE_FLAG_INIT;
+ 
+ static void
+-destroy_st_manager(void)
++destroy_st_managers(void)
+ {
+-   if (global_fscreen) {
+-      if (global_fscreen->screen)
+-         global_fscreen->screen->destroy(global_fscreen->screen);
+-      FREE(global_fscreen);
++   for (unsigned i = 0; i < OSMESA_NUM_DRIVERS; i++) {
++      if (global_fscreens[i]) {
++         if (global_fscreens[i]->screen)
++            global_fscreens[i]->screen->destroy(global_fscreens[i]->screen);
++         FREE(global_fscreens[i]);
++         global_fscreens[i] = NULL;
++      }
+    }
+ }
+ 
+ static void
+-create_st_manager(void)
++init_st_managers(void)
+ {
+-   if (atexit(destroy_st_manager) != 0)
+-      return;
+-
+-   global_fscreen = CALLOC_STRUCT(pipe_frontend_screen);
+-   if (global_fscreen) {
+-      global_fscreen->screen = osmesa_create_screen();
+-      global_fscreen->get_param = osmesa_st_get_param;
+-      global_fscreen->get_egl_image = NULL;
+-   }
++   mtx_init(&global_fscreens_mutex, mtx_plain);
++   atexit(destroy_st_managers);
+ }
+ 
+ /**
+- * Create/return a singleton st_manager object.
++ * Create/return the shared st_manager object of a driver (see osmesa_driver_names).
++ * Returns NULL if the driver is not available.
+  */
+ static struct pipe_frontend_screen *
+-get_st_manager(void)
++get_st_manager(unsigned driver)
+ {
+-   static once_flag create_once_flag = ONCE_FLAG_INIT;
++   struct pipe_frontend_screen *fscreen;
+ 
+-   call_once(&create_once_flag, create_st_manager);
++   assert(driver < OSMESA_NUM_DRIVERS);
++   call_once(&global_fscreens_once, init_st_managers);
+ 
+-   return global_fscreen;
++   mtx_lock(&global_fscreens_mutex);
++   fscreen = global_fscreens[driver];
++   if (!fscreen) {
++      fscreen = CALLOC_STRUCT(pipe_frontend_screen);
++      if (fscreen) {
++         fscreen->screen = osmesa_create_screen(osmesa_driver_names[driver]);
++         fscreen->get_param = osmesa_st_get_param;
++         fscreen->get_egl_image = NULL;
++         if (fscreen->screen) {
++            global_fscreens[driver] = fscreen;
++         } else {
++            FREE(fscreen);
++            fscreen = NULL;
++         }
++      }
++   }
++   mtx_unlock(&global_fscreens_mutex);
++
++   return fscreen;
+ }
+ 
+ /* Reads the color or depth buffer from the backing context to either the user storage
+@@ -414,7 +442,7 @@
+                                struct pipe_resource **out,
+                                struct pipe_resource **resolve)
+ {
+-   struct pipe_screen *screen = get_st_manager()->screen;
++   struct pipe_screen *screen = drawable->fscreen->screen;
+    enum st_attachment_type i;
+    struct osmesa_buffer *osbuffer = drawable_to_osbuffer(drawable);
+    struct pipe_resource templat;
+@@ -474,7 +502,8 @@
+  * Create new buffer and add to linked list.
+  */
+ static struct osmesa_buffer *
+-osmesa_create_buffer(enum pipe_format color_format,
++osmesa_create_buffer(struct pipe_frontend_screen *fscreen,
++                     enum pipe_format color_format,
+                      enum pipe_format ds_format,
+                      enum pipe_format accum_format)
+ {
+@@ -484,7 +513,7 @@
+       osbuffer->base.validate = osmesa_st_framebuffer_validate;
+       p_atomic_set(&osbuffer->base.stamp, 1);
+       osbuffer->base.ID = p_atomic_inc_return(&osmesa_fb_ID);
+-      osbuffer->base.fscreen = get_st_manager();
++      osbuffer->base.fscreen = fscreen;
+       osbuffer->base.visual = &osbuffer->visual;
+ 
+       osmesa_init_st_visual(&osbuffer->visual, color_format,
+@@ -570,6 +599,8 @@
+    GLenum format = GL_RGBA;
+    int depthBits = 0, stencilBits = 0, accumBits = 0;
+    int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
++   int driver = -1; /* default driver */
++   struct pipe_frontend_screen *fscreen;
+    int i;
+ 
+    if (sharelist) {
+@@ -628,6 +659,12 @@
+          if (version_minor < 0)
+             return NULL;
+          break;
++      case OSMESA_GALLIUM_DRIVER:
++         /* 0 = softpipe, 1 = llvmpipe (2 = swr, which was removed from Mesa) */
++         if (attribList[i+1] != 0 && attribList[i+1] != 1)
++            return NULL;
++         driver = attribList[i+1] + 1;
++         break;
+       case 0:
+          /* end of list */
+          break;
+@@ -637,9 +674,21 @@
+       }
+    }
+ 
++   if (sharelist) {
++      /* contexts sharing objects must use the same driver */
++      fscreen = sharelist->fscreen;
++      if (driver >= 0 && fscreen != get_st_manager(driver))
++         return NULL;
++   } else {
++      fscreen = get_st_manager(driver >= 0 ? driver : 0);
++   }
++   if (!fscreen)
++      return NULL;
++
+    osmesa = (OSMesaContext) CALLOC_STRUCT(osmesa_context);
+    if (!osmesa)
+       return NULL;
++   osmesa->fscreen = fscreen;
+ 
+    /* Choose depth/stencil/accum buffer formats */
+    if (accumBits > 0) {
+@@ -677,7 +726,7 @@
+                          osmesa->depth_stencil_format,
+                          osmesa->accum_format);
+ 
+-   osmesa->st = st_api_create_context(get_st_manager(),
++   osmesa->st = st_api_create_context(osmesa->fscreen,
+                                          &attribs, &st_error, st_shared);
+    if (!osmesa->st) {
+       FREE(osmesa);
+@@ -767,7 +816,8 @@
+    }
+ 
+    if (!osmesa->current_buffer) {
+-      osmesa->current_buffer = osmesa_create_buffer(color_format,
++      osmesa->current_buffer = osmesa_create_buffer(osmesa->fscreen,
++                                      color_format,
+                                       osmesa->depth_stencil_format,
+                                       osmesa->accum_format);
+    }
+@@ -875,7 +925,7 @@
+       FALLTHROUGH;
+    case OSMESA_MAX_HEIGHT:
+       {
+-         struct pipe_screen *screen = get_st_manager()->screen;
++         struct pipe_screen *screen = osmesa->fscreen->screen;
+          *value = screen->caps.max_texture_2d_size;
+       }
+       return;
+--- a/src/gallium/targets/osmesa/osmesa_target.c
++++ b/src/gallium/targets/osmesa/osmesa_target.c
+@@ -28,11 +28,14 @@
+ 
+ 
+ struct pipe_screen *
+-osmesa_create_screen(void);
++osmesa_create_screen(const char *driver);
+ 
+ 
++/* driver is "softpipe", "llvmpipe", or NULL for the default
++ * (GALLIUM_DRIVER environment variable, else llvmpipe if available).
++ */
+ struct pipe_screen *
+-osmesa_create_screen(void)
++osmesa_create_screen(const char *driver)
+ {
+    struct sw_winsys *winsys;
+    struct pipe_screen *screen;
+@@ -45,7 +48,10 @@
+       return NULL;
+ 
+    /* Create llvmpipe or softpipe screen */
+-   screen = sw_screen_create(winsys);
++   if (driver)
++      screen = sw_screen_create_named(winsys, driver);
++   else
++      screen = sw_screen_create(winsys);
+    if (!screen) {
+       winsys->destroy(winsys);
+       return NULL;
