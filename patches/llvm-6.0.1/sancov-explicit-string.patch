@@ -1,0 +1,11 @@
+--- a/tools/sancov/sancov.cc	2026-11-14 12:23:21
++++ b/tools/sancov/sancov.cc	2026-11-14 12:23:21
+@@ -606,7 +606,7 @@
+     if (ClBlacklist.empty())
+       return std::unique_ptr<SpecialCaseList>();
+ 
+-    return SpecialCaseList::createOrDie({{ClBlacklist}});
++    return SpecialCaseList::createOrDie({std::string(ClBlacklist)});
+   }
+   std::unique_ptr<SpecialCaseList> DefaultBlacklist;
+   std::unique_ptr<SpecialCaseList> UserBlacklist;
