@@ -106,10 +106,22 @@ Mesa 25.0.7 is the last release with OSMesa. Tested on macOS 27 (arm64), it cove
 - **Thread safety without patches.** `osdemo/osmesa_mt_test.c` runs N threads. Each creates its own context and renders its own color into its own same-size buffer, which is the case that shared buffers before the fix. It then checks every pixel. Stock 25.0.7 passed every run (up to 64 threads, with llvmpipe and softpipe). The patched 18.3.6 crashed in about 1 run out of 15 with 8 threads.
 - **Mangling with a small patch.** `patches/mesa-25.0.7/mgl-namespace.patch` puts back the `USE_MGL_NAMESPACE` hooks that Mesa 19.2.2 removed. They are about 50 lines in `gl.h`, `glx.h`, `glapi.h`, `glapi_dispatch.c`, `glapi_getproc.c`, the dispatch generators and `include/meson.build`. `gl_mangle.h` is generated from the actual headers by running `patches/mesa-25.0.7/gl_mangle.h.in` with `sh` in `include/GL`. That template is the 18.3.6 generator with the GLES fix, extended to `GLES/glext.h` and `GLES2/gl2ext.h`, because some dispatch functions are declared only there. Built with `-DUSE_MGL_NAMESPACE`, `libOSMesa` exports no `gl*` symbols, only 1296 `mgl*` and 13 `OSMesa*`. A program linked with both OpenGL.framework and this OSMesa gets `glGetString` from Apple's `libGL.dylib` and `mglGetString` from OSMesa. The multithreaded test passes in that configuration too.
 
-Differences from the 18.3.6 build:
+- **Per-context driver choice.** `patches/mesa-25.0.7/osmesa-gallium-driver.patch` ports `OSMESA_GALLIUM_DRIVER` (`0x38`): `0` = softpipe, `1` = llvmpipe. `2` (swr) now fails, because swr was removed from Mesa. Instead of one screen per context (the 18.3.6 approach), there is one shared screen per driver (default, softpipe, llvmpipe), created on demand under a mutex. Each context and its buffers use their driver's screen. Contexts sharing objects must use the same driver. `OSMESA_MAJOR_VERSION.OSMESA_MINOR_VERSION` is still 11.2, so code testing `>= 1102` (like openfx-misc's Shadertoy) keeps working. Tested with every thread on softpipe, every thread on llvmpipe, and alternating threads.
+- **Static library.** Shadertoy (openfx-misc) links `-lMangledOSMesa32` statically into its plugin bundle, with `-fvisibility=hidden` and an `-exported_symbols_list`. All OSMesa and LLVM symbols then stay hidden inside the plugin, and no dylib needs to ship with it. Mesa only builds `libOSMesa` as a shared library, but its link line lists every internal static archive and object (17 of them). Merging those with `libtool -static` (or `ar` on Linux) gives a complete `libMangledOSMesa32.a`: no `gl*` symbols, 2224 `mgl*` and 13 `OSMesa*`. A program linked statically against it, as Shadertoy links (`-lMangledOSMesa32 -lz` plus the LLVM static libraries), passes the multithreaded test.
+
+### LLVM version
+
+| LLVM | Result with Mesa 25.0.7 |
+|---|---|
+| 6.0.1 | Doesn't compile: gallivm uses `LLVMBuildIntCast2` (LLVM ≥ 8) and atomic `FAdd` (LLVM ≥ 10) unconditionally. Meson's `>= 5.0.0` check is misleading. |
+| 15.0.7 | Works. Built from the `llvm-project` tarball (LLVM ≥ 15 can't be built from the standalone `llvm-X.src` tarball, which needs the separate `cmake` modules), static, RTTI, AArch64 only, without zlib, zstd and libxml2. The resulting program only depends on system libraries. |
+| 22.1.8 (MacPorts) | Works, but MacPorts' LLVM adds `libzstd` and `libxml2` dylib dependencies. |
+
+**Minimum: LLVM 15** (tested). Versions 10 to 14 may work, but are untested. Many of gallivm's code paths are only for LLVM ≥ 15, and Mesa's own CI uses LLVM 15 or later. Linking needs these LLVM components: `bitwriter engine mcdisassembler mcjit core executionengine scalaropts transformutils instcombine coroutines native passes`. That's more than the `engine mcjit mcdisassembler` that Natron's build scripts pass today.
+
+### Remaining work
 
 - **Build system:** meson and ninja, plus Python 3 with `mako` and `PyYAML`.
-- **LLVM:** 25.0.7 needs a much newer LLVM than 6.0.1. With LLVM 6.0.1, gallivm fails to compile (no `LLVMBuildIntCast2` or atomic `FAdd`), even though meson only asks for ≥ 5. It builds with LLVM 22.1.8.
-- **Static library:** the OSMesa target is a shared library only, so building `libMangledOSMesa32.a` will need a small meson change.
-- **Exported symbols:** on macOS, the dylib also exports all internal LLVM and Mesa symbols. The `osmesa.sym` version script is only used with GNU ld, so macOS needs an `-exported_symbols_list`.
-- **Driver choice:** per-context driver choice (`OSMESA_GALLIUM_DRIVER`) is not upstream. All contexts share one screen, so the driver can only be chosen per process (`GALLIUM_DRIVER`).
+- **Integrate into `osmesa-install.sh`:** a meson build path for Mesa ≥ 19, LLVM from the `llvm-project` tarball, a check of an installed LLVM (version ≥ 15, static libraries, RTTI), the static archive merge, `gl_mangle.h` generation, GLU, and the osdemos.
+- **Exported symbols of the shared library:** on macOS, the dylib also exports all internal LLVM and Mesa symbols. The `osmesa.sym` version script is only used with GNU ld, so macOS needs an `-exported_symbols_list`. This only matters if `SHARED=1`.
+- **Platforms:** test Linux and Windows (MSYS2), and macOS 15.
