@@ -859,6 +859,18 @@ elif [ "$mangled" = 1 ]; then
     fi
     echo "* generating gl_mangle.h..."
     (cd include/GL; sh "$srcdir/patches/mesa-$mesaversion/gl_mangle.h.in" > gl_mangle.h)
+    case "$osname" in
+        Msys*|MSYS*|MINGW*)
+            # the DLLs export the GL functions by name: export the mangled names
+            # (as mgl_export.patch does for the SCons build)
+            for def in src/gallium/targets/osmesa/osmesa.def.in src/gallium/targets/libgl-gdi/opengl32.def.in; do
+                if [ -f "$def" ]; then
+                    echo "* mangling the exports in $def..."
+                    sed -e 's/^gl/mgl/' "$def" > "$def.new" && mv "$def.new" "$def"
+                fi
+            done
+            ;;
+    esac
 fi
 
 echo "* fixing src/mapi/glapi/glapi_getproc.c..."
@@ -1216,7 +1228,9 @@ elif [ "$use_meson" = 1 ]; then
             ranlib "$osmesaprefix/lib/lib$osmesalib.a"
         fi
         rm -f "$osmesaprefix/lib/"libOSMesa.*dylib "$osmesaprefix/lib/"libOSMesa.so* \
-            "$osmesaprefix/bin/"osmesa*.dll "$osmesaprefix/lib/"libosmesa*.dll.a
+            "$osmesaprefix/bin/"osmesa*.dll "$osmesaprefix/lib/"libosmesa*.dll.a \
+            "$osmesaprefix/bin/"opengl32.dll "$osmesaprefix/lib/"libopengl32*.dll.a \
+            "$osmesaprefix/bin/"libgallium_wgl.dll "$osmesaprefix/lib/"libgallium_wgl*.dll.a
         # pkg-config file for the static library
         osmesalibsprivate="-lz -lpthread -lm"
         if [ "$osmesadriver" != 2 ]; then
