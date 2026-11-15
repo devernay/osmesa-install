@@ -1111,11 +1111,17 @@ elif [ "$use_meson" = 1 ]; then
     else
         osmesalib=OSMesa32
     fi
+    # no window system platforms, except windows on Windows: it also sets the Windows-specific glapi
+    # defines (_GLAPI_NO_EXPORTS, ...) needed to link Mesa's static libraries into the OSMesa DLL
+    mesonplatforms=
+    case "$osname" in
+        Msys*|MSYS*|MINGW*) mesonplatforms=windows;;
+    esac
     mesonopts="\
         --prefix=$(nativepath "$osmesaprefix") \
         -Dlibdir=lib \
         -Dosmesa=true \
-        -Dplatforms= \
+        -Dplatforms=$mesonplatforms \
         -Dglx=disabled \
         -Degl=disabled \
         -Dgbm=disabled \
