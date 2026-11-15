@@ -3,7 +3,14 @@
 # environment variables used by this script:
 # - OSMESA_PREFIX: where to install osmesa (must be writable)
 # - LLVM_PREFIX: where llvm is / should be installed
-# - LLVM_BUILD: whether to build LLVM (0/1, 0 by default)
+# - LLVM_BUILD: whether to build LLVM (0/1/auto, auto by default: use the LLVM in LLVM_PREFIX if it
+#   is suitable for this Mesa version, build it if there is no LLVM in LLVM_PREFIX, and stop with an
+#   error if there is an unsuitable one, which is only replaced with LLVM_BUILD=1)
+# - LLVM_SYSTEM: with LLVM_BUILD=auto, if LLVM_PREFIX has no suitable LLVM, use the newest suitable
+#   LLVM installed by MacPorts, Homebrew, or the system (0/1, 0 by default). LLVM is still linked
+#   statically, but the result depends on that LLVM's dependencies (e.g. libzstd, libxml2) and
+#   minimum macOS version, so it is not suitable for redistribution.
+# - OSMESA_VERSION: Mesa version (18.3.6 by default; 25.0.7, the last Mesa with OSMesa, uses meson)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 # - BUILD_OSDEMO: try to compile and run osdemo (0/1, 1 by default)
 # - MANGLED: build a mangled OSMesa and GLU (function names are prefixed with "m") (0/1, 1 by default)
@@ -43,8 +50,19 @@ shared="${SHARED:-0}"
 # the prefix to the LLVM installation
 llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 # do we want to build the proper LLVM static libraries too? or are they already installed ?
-buildllvm="${LLVM_BUILD:-0}"
-llvmversion="${LLVM_VERSION:-6.0.1}"
+buildllvm="${LLVM_BUILD:-auto}"
+# Mesa 19 and later (meson build) need LLVM 15 or later, Mesa 18 and earlier need LLVM 14 or earlier
+if [ "${mesaversion%%.*}" -ge 19 ]; then
+    # LLVM 19 is the version used by Mesa 25.0's CI (LLVM 15.0.7 to 23.1.4 were tested here)
+    llvmversion="${LLVM_VERSION:-19.1.7}"
+else
+    llvmversion="${LLVM_VERSION:-6.0.1}"
+fi
+# Mesa versions where OSMesa is built with meson
+mesonbuild=0
+if [ "${mesaversion%%.*}" -ge 19 ]; then
+    mesonbuild=1
+fi
 # redirect output and error to log file; exit script on error.
 silentlogging="${SILENT_LOG:-0}"
 buildosmesa="${BUILD_OSMESA:-1}"
@@ -168,6 +186,15 @@ if [ "$osname" = Darwin ] && [ "$osver" -ge 16 ] && [ -z "${SDKROOT:-}" ]; then
     fi
 fi
 
+if [ "${mesaversion%%.*}" -ge 21 ] && [ "$osmesadriver" = 1 ]; then
+    echo "Error: the classic osmesa (swrast) driver was removed in Mesa 21.0, use OSMESA_DRIVER=2 (softpipe) or 3 (llvmpipe)"
+    exit 1
+fi
+if [ "${mesaversion%%.*}" -ge 22 ] && [ "$osmesadriver" = 4 ]; then
+    # the swr driver was removed in Mesa 22.0, use llvmpipe (which also includes softpipe)
+    osmesadriver=3
+fi
+
 # tell curl to continue downloads and follow redirects
 # -f: fail on HTTP errors (e.g. 404) instead of saving the error page, so the "||" fallbacks work
 curlopts="-f -L -C -"
@@ -251,11 +278,91 @@ function version_gt() {
 # sudo port install xorg-glproto xorg-libXext xorg-libXdamage xorg-libXfixes xorg-libxcb
 
 # On macOS, Mesa's configure is run with SED=gsed (GNU sed), check for it early (before building LLVM)
-if [ "$osname" = Darwin ] && [ "$buildosmesa" = 1 ] && [ -z "$(type -P gsed)" ]; then
+if [ "$osname" = Darwin ] && [ "$buildosmesa" = 1 ] && [ "$mesonbuild" = 0 ] && [ -z "$(type -P gsed)" ]; then
     echo "Error: GNU sed (gsed) is required to build Mesa on macOS."
     echo "Install it with \"sudo port install gsed\" (MacPorts) or \"brew install gnu-sed\" (Homebrew)."
     exit 1
 fi
+
+# Meson builds (Mesa 19 and later) need meson, ninja, and python3 with the mako and yaml modules
+pythonbin="${PYTHON:-$(type -P python3 || true)}"
+if [ "$buildosmesa" = 1 ] && [ "$mesonbuild" = 1 ]; then
+    case "$osname" in
+        Msys*|MSYS*|MINGW*)
+            echo "Error: building Mesa $mesaversion (meson) on Windows is not supported yet"
+            exit 1
+            ;;
+    esac
+    for tool in meson ninja; do
+        if [ -z "$(type -P $tool)" ]; then
+            echo "Error: $tool is required to build Mesa $mesaversion (e.g. \"sudo port install meson ninja\" or \"brew install meson ninja\")"
+            exit 1
+        fi
+    done
+    if [ -z "$pythonbin" ] || ! "$pythonbin" -c "import mako, yaml" 2>/dev/null; then
+        echo "Error: python3 with the mako and yaml modules is required to build Mesa $mesaversion."
+        echo "Install them (e.g. \"python3 -m pip install mako pyyaml\"), or set PYTHON to a python3 that has them."
+        exit 1
+    fi
+fi
+
+# llvm_problems LLVM_CONFIG: print why this LLVM can't be used to build this Mesa version, and return 1,
+# or return 0 if it can be used.
+function llvm_problems() {
+    local cfg="$1"
+    local v
+    if [ ! -x "$cfg" ]; then
+        echo "$cfg does not exist"
+        return 1
+    fi
+    v=$("$cfg" --version)
+    if [ "$mesonbuild" = 1 ]; then
+        if version_gt 15.0.0 "$v"; then
+            echo "LLVM $v is too old for Mesa $mesaversion (LLVM 15 or later is required)"
+            return 1
+        fi
+    elif version_gt "$v" 14.99; then
+        echo "LLVM $v is too new for Mesa $mesaversion (LLVM 15 and later don't work with Mesa 18 and earlier)"
+        return 1
+    fi
+    if "$cfg" --help 2>&1 | grep -q has-rtti && [ "$("$cfg" --has-rtti)" != YES ]; then
+        echo "LLVM $v in $("$cfg" --prefix) was built without RTTI"
+        return 1
+    fi
+    if "$cfg" --help 2>&1 | grep -q link-static && ! "$cfg" --link-static --libs core >/dev/null 2>&1; then
+        echo "LLVM $v in $("$cfg" --prefix) has no static libraries"
+        return 1
+    fi
+    return 0
+}
+
+# find_system_llvm: print the llvm-config of the newest suitable LLVM installed by MacPorts, Homebrew or
+# the system, and return 1 if there is none.
+function find_system_llvm() {
+    local cfg best= bestversion= minos
+    for cfg in /opt/local/libexec/llvm-*/bin/llvm-config /opt/homebrew/opt/llvm*/bin/llvm-config \
+               /usr/local/opt/llvm*/bin/llvm-config /usr/lib/llvm-*/bin/llvm-config \
+               $(type -P llvm-config || true); do
+        [ -x "$cfg" ] || continue
+        llvm_problems "$cfg" >/dev/null || continue
+        if [ "$osname" = Darwin ] && [ -n "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
+            # skip LLVMs built for a newer macOS than the deployment target
+            minos=$(otool -l "$("$cfg" --libdir)/libLLVMSupport.a" 2>/dev/null | awk '/minos/ {print $2; exit}')
+            if [ -n "$minos" ] && version_gt "$minos" "$MACOSX_DEPLOYMENT_TARGET"; then
+                continue
+            fi
+        fi
+        if [ -z "$best" ] || version_gt "$("$cfg" --version)" "$bestversion"; then
+            best="$cfg"
+            bestversion=$("$cfg" --version)
+        fi
+    done
+    [ -n "$best" ] || return 1
+    echo "$best"
+}
+
+# Linker flags to find the dependencies of the LLVM libraries (e.g. libzstd from MacPorts or Homebrew)
+llvmdepldflags=
 
 llvmlibs=
 if [ ! -d "$osmesaprefix" ] || [ ! -w "$osmesaprefix" ]; then
@@ -264,14 +371,57 @@ if [ ! -d "$osmesaprefix" ] || [ ! -w "$osmesaprefix" ]; then
 fi
 if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     # see also https://wiki.qt.io/Cross_compiling_Mesa_for_Windows
+    if [ "$buildllvm" = auto ]; then
+        case "$osname" in
+            Msys*|MSYS*|MINGW*) llvmconfigbinary="$llvmprefix/bin/llvm-config.exe";;
+            *) llvmconfigbinary="$llvmprefix/bin/llvm-config";;
+        esac
+        if llvmproblem=$(llvm_problems "$llvmconfigbinary"); then
+            if [ -n "${LLVM_VERSION:-}" ] && [ "$("$llvmconfigbinary" --version)" != "$LLVM_VERSION" ]; then
+                echo "* LLVM $("$llvmconfigbinary" --version) in $llvmprefix is not the requested version $LLVM_VERSION: building LLVM $llvmversion"
+                buildllvm=1
+            else
+                echo "* using LLVM $("$llvmconfigbinary" --version) from $llvmprefix"
+                buildllvm=0
+            fi
+        elif [ "${LLVM_SYSTEM:-0}" = 1 ] && systemllvm=$(find_system_llvm); then
+            llvmconfigbinary="$systemllvm"
+            llvmprefix=$("$llvmconfigbinary" --prefix)
+            buildllvm=0
+            case "$llvmprefix" in
+                /opt/local/*) llvmdepldflags="-L/opt/local/lib";;
+                /opt/homebrew/*) llvmdepldflags="-L/opt/homebrew/lib";;
+                /usr/local/*) llvmdepldflags="-L/usr/local/lib";;
+            esac
+            echo "* using the installed LLVM $("$llvmconfigbinary" --version) from $llvmprefix (LLVM_SYSTEM=1)"
+            echo "  Warning: the result also depends on: $("$llvmconfigbinary" --link-static --system-libs)"
+            echo "  It is not suitable for redistribution (use a LLVM built by this script for that)."
+        elif [ -e "$llvmconfigbinary" ]; then
+            # never overwrite an existing LLVM installation automatically (it may be used by other builds)
+            echo "Error: $llvmproblem."
+            echo "Give the prefix of another LLVM with LLVM_PREFIX, or a new prefix where LLVM $llvmversion will be built"
+            echo "(e.g. env LLVM_PREFIX=/opt/llvm-$llvmversion ...), or use LLVM_BUILD=1 to replace the LLVM in $llvmprefix."
+            exit 1
+        else
+            echo "* no LLVM in $llvmprefix: building LLVM $llvmversion there"
+            buildllvm=1
+        fi
+    fi
     if [ "$buildllvm" = 1 ]; then
         if [ ! -d "$llvmprefix" ] || [ ! -w "$llvmprefix" ]; then
             echo "Error: $llvmprefix does not exist or is not user-writable, please create $llvmprefix and make it user-writable"
             exit
         fi
         # LLVM must be compiled with RRTI, see https://bugs.freedesktop.org/show_bug.cgi?id=90032
+        llvmtopdir=$(pwd)
+        # LLVM 15 and later can't be built from the llvm-X.src tarball alone (it needs the separate
+        # cmake modules): use the llvm-project tarball.
+        llvmproject=0
+        if version_gt "$llvmversion" 14.99; then
+            llvmproject=1
+        fi
         if [ "$clean" = 1 ]; then
-            rm -rf llvm-${llvmversion}.src
+            rm -rf llvm-${llvmversion}.src llvm-project-${llvmversion}.src
         fi
 
         archsuffix=xz
@@ -284,7 +434,12 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         #if [ "$osname" = Darwin ] && [ "$osver" -ge 14 ]; then
         #    xzcat="gzip -dc"
         #fi
-        if [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
+        if [ "$llvmproject" = 1 ]; then
+            if [ ! -f llvm-project-${llvmversion}.src.tar.xz ]; then
+                echo "* downloading LLVM ${llvmversion}..."
+                curl $curlopts -O "https://github.com/llvm/llvm-project/releases/download/llvmorg-${llvmversion}/llvm-project-${llvmversion}.src.tar.xz"
+            fi
+        elif [ ! -f llvm-${llvmversion}.src.tar.$archsuffix ]; then
             echo "* downloading LLVM ${llvmversion}..."
             if version_gt "${llvmversion}" 7.0.0; then
                 curl $curlopts -O "https://github.com/llvm/llvm-project/releases/download/llvmorg-${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
@@ -293,8 +448,13 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 curl $curlopts -O "http://www.llvm.org/releases/${llvmversion}/llvm-${llvmversion}.src.tar.$archsuffix"
             fi
         fi
-        $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
-        cd llvm-${llvmversion}.src
+        if [ "$llvmproject" = 1 ]; then
+            $xzcat llvm-project-${llvmversion}.src.tar.xz | tar xf -
+            cd llvm-project-${llvmversion}.src/llvm
+        else
+            $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
+            cd llvm-${llvmversion}.src
+        fi
         echo "* building LLVM..."
         llvmstart=$SECONDS
         cmake_archflags=
@@ -391,6 +551,12 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                     patch -p1 -d . < "$srcdir"/patches/llvm-$llvmversion/$i
                 fi
             done
+            llvm_new_cmake_flags=
+            if [ "$llvmproject" = 1 ]; then
+                # only build the libraries (and llvm-config), without optional dependencies,
+                # so that programs linking LLVM statically only depend on system libraries
+                llvm_new_cmake_flags="-DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_LIBEDIT=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_BUILD_TOOLS=OFF"
+            fi
             mkdir build
             cd build
             if [ "$debug" = 1 ]; then
@@ -412,13 +578,20 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 -DLLVM_ENABLE_BACKTRACES=OFF \
                 -DLLVM_ENABLE_TERMINFO=OFF \
                 -DLLVM_ENABLE_ZLIB=OFF \
+                $llvm_new_cmake_flags \
                 $debugopts $cmake_archflags
             env REQUIRES_RTTI=1 make -j"${mkjobs}"
             echo "* installing LLVM..."
             env REQUIRES_RTTI=1 make install
+            if [ "$llvmproject" = 1 ]; then
+                # tools are not built (LLVM_BUILD_TOOLS=OFF), except llvm-config, which Mesa needs
+                env REQUIRES_RTTI=1 make -j"${mkjobs}" llvm-config
+                mkdir -p "$llvmprefix/bin"
+                cp bin/llvm-config "$llvmprefix/bin/"
+            fi
             cd ..
         fi
-        cd ..
+        cd "$llvmtopdir"
         print_elapsed "LLVM build" $llvmstart
     fi
     llvmconfigbinary=
@@ -446,6 +619,15 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             echo " env REQUIRES_RTTI=1 make -j${mkjobs}"
         fi
         exit 1
+    elif [ "$mesonbuild" = 1 ]; then
+        if ! llvmproblem=$(llvm_problems "$llvmconfigbinary"); then
+            echo "Error: $llvmproblem"
+            echo "Build a suitable LLVM with LLVM_BUILD=1 (LLVM $llvmversion), or give another LLVM_PREFIX."
+            exit 1
+        fi
+        if version_gt "$("$llvmconfigbinary" --version)" 23.1.4; then
+            echo "Warning: LLVM $("$llvmconfigbinary" --version) is newer than the versions tested with Mesa $mesaversion (15.0.7 to 23.1.4)."
+        fi
     else
 	if version_gt $("$llvmconfigbinary" --version) 6.0.1; then
 	    echo "Warning: LLVM version is $($llvmconfigbinary --version), but this script was only tested with versions 3.3 to 6.0.1"
@@ -478,12 +660,19 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     if [ "$debug" = 1 ]; then
         llvmcomponents="$llvmcomponents mcdisassembler"
     fi
+    if [ "$mesonbuild" = 1 ]; then
+        # the LLVM components used by Mesa's llvmpipe (see llvm_modules in Mesa's meson.build)
+        llvmcomponents="bitwriter engine mcdisassembler mcjit core executionengine scalaropts transformutils instcombine coroutines native passes"
+        llvmlibs=$("${llvmconfigbinary}" --link-static --ldflags --libs $llvmcomponents)
+        llvmlibsadd="$llvmdepldflags $("${llvmconfigbinary}" --link-static --system-libs)"
+    else
     llvmlibs=$("${llvmconfigbinary}" --ldflags --libs $llvmcomponents)
     if "${llvmconfigbinary}" --help 2>&1 | grep -q system-libs; then
         llvmlibsadd=$("${llvmconfigbinary}" --system-libs)
     else
         # on old llvm, system libs are in the ldflags
         llvmlibsadd=$("${llvmconfigbinary}" --ldflags)
+    fi
     fi
     llvmlibs="$llvmlibs $llvmlibsadd"
 fi
@@ -525,8 +714,19 @@ xzcat=xzcat
 if [ ! -f "mesa-${mesaversion}.tar.${archsuffix}" ]; then
     echo "* downloading Mesa ${mesaversion}..."
     # ftp.freedesktop.org refuses connections (as of 2026): try archive.mesa3d.org (HTTPS) first,
-    # where old releases are in older-versions/X.x/ (17.x, 18.x) or older-versions/X.x/X.Y.Z/ (13.x and earlier)
-    curl $curlopts -O "https://archive.mesa3d.org/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}" \
+    # where releases are at the root (23.x and later), in older-versions/X.x/ (14.x to 22.x),
+    # or in older-versions/X.x/X.Y.Z/ (13.x and earlier)
+    mesaurlroot="https://archive.mesa3d.org/mesa-${mesaversion}.tar.${archsuffix}"
+    mesaurlolder="https://archive.mesa3d.org/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}"
+    if [ "${mesaversion%%.*}" -ge 23 ]; then
+        mesaurl1="$mesaurlroot"
+        mesaurl2="$mesaurlolder"
+    else
+        mesaurl1="$mesaurlolder"
+        mesaurl2="$mesaurlroot"
+    fi
+    curl $curlopts -O "$mesaurl1" \
+    || curl $curlopts -O "$mesaurl2" \
     || curl $curlopts -O "https://archive.mesa3d.org/older-versions/${mesaversion/.*/.x}/${mesaversion}/mesa-${mesaversion}.tar.${archsuffix}" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/mesa-${mesaversion}.tar.${archsuffix}" \
     || curl $curlopts -O "ftp://ftp.freedesktop.org/pub/mesa/older-versions/${mesaversion/.*/.x}/mesa-${mesaversion}.tar.${archsuffix}" \
@@ -581,9 +781,9 @@ if [ "$osname" = Darwin ] && [ "$osver" -lt 14 ]; then
     PATCHES="$PATCHES disable_shader_cache.patch"
 fi
 
-#if mangled, add mgl_export (for mingw)
+#if mangled, add mgl_export (for mingw), and mgl-namespace (put back mangling support, for Mesa >= 19.2.2)
 if [ "$mangled" = 1 ]; then
-    PATCHES="$PATCHES mgl_export.patch"
+    PATCHES="$PATCHES mgl_export.patch mgl-namespace.patch"
 fi
 
 # mingw-specific patches (for maintainability, prefer putting everything in the main patch list)
@@ -625,6 +825,7 @@ done
 
 cd "mesa-${mesaversion}"
 
+if [ -f include/GL/gl_mangle.h ]; then
 echo "* fixing gl_mangle.h..."
 # edit include/GL/gl_mangle.h, add ../GLES*/gl[0-9]*.h to the "files" variable and change GLAPI in the grep line to GL_API
 gles=
@@ -635,6 +836,15 @@ for h in GLES/gl.h GLES2/gl2.h GLES3/gl3.h GLES3/gl31.h GLES3/gl32.h; do
 done
 (cd include/GL; sed -e 's@gl.h glext.h@gl.h glext.h '"$gles"'@' -e 's@\^GLAPI@^GL_\\?API@' -i.orig gl_mangle.h)
 (cd include/GL; sh ./gl_mangle.h > gl_mangle.h.new && mv gl_mangle.h.new gl_mangle.h)
+elif [ "$mangled" = 1 ]; then
+    # Mesa >= 19.2.2 doesn't have gl_mangle.h anymore: generate it from the GL and GLES headers
+    if [ ! -f "$srcdir/patches/mesa-$mesaversion/gl_mangle.h.in" ]; then
+        echo "Error: mangled GL is not supported with Mesa $mesaversion (missing patches/mesa-$mesaversion/gl_mangle.h.in)"
+        exit 1
+    fi
+    echo "* generating gl_mangle.h..."
+    (cd include/GL; sh "$srcdir/patches/mesa-$mesaversion/gl_mangle.h.in" > gl_mangle.h)
+fi
 
 echo "* fixing src/mapi/glapi/glapi_getproc.c..."
 # functions in the dispatch table sre not stored with the mgl prefix
@@ -867,11 +1077,135 @@ elif [ "$use_autoconf" = 1 ]; then
     ####################################################################
 
 elif [ "$use_meson" = 1 ]; then
-    echo "Error: Meson build not yet implemented"
+    ####################################################################
+    # Mesa 19 and later use meson
     if [ "$mangled" = 1 ]; then
-        echo "Error: meson build, which is the only way to build Mesa 19 and later, when autoconf support was dropped, cannot handle mangled GL"
+        osmesalib=MangledOSMesa32
+    else
+        osmesalib=OSMesa32
     fi
-    exit 1
+    mesonopts="\
+        --prefix=$osmesaprefix \
+        -Dlibdir=lib \
+        -Dosmesa=true \
+        -Dplatforms= \
+        -Dglx=disabled \
+        -Degl=disabled \
+        -Dgbm=disabled \
+        -Dgles1=disabled \
+        -Dgles2=disabled \
+        -Dshared-glapi=disabled \
+        -Dvulkan-drivers= \
+        -Dvalgrind=disabled \
+        -Dlibunwind=disabled \
+        -Dzstd=disabled \
+        -Dxmlconfig=disabled \
+        -Dexpat=disabled"
+    if [ "$debug" = 1 ]; then
+        mesonopts="$mesonopts -Dbuildtype=debug"
+    else
+        mesonopts="$mesonopts -Dbuildtype=release"
+    fi
+    # the native file gives the python and llvm-config to use
+    echo "[binaries]" > meson-native.ini
+    echo "python = '$pythonbin'" >> meson-native.ini
+    if [ "$osmesadriver" = 2 ]; then
+        mesonopts="$mesonopts -Dgallium-drivers=softpipe -Dllvm=disabled"
+    else
+        # llvmpipe (also includes softpipe, which can be selected at run-time)
+        mesonopts="$mesonopts -Dgallium-drivers=llvmpipe,softpipe -Dllvm=enabled -Dshared-llvm=disabled"
+        echo "llvm-config = '$llvmconfigbinary'" >> meson-native.ini
+    fi
+    mesonflags=
+    if [ "$mangled" = 1 ]; then
+        mesonflags="-DUSE_MGL_NAMESPACE"
+    fi
+    if [ "$osname" = Darwin ]; then
+        mesonflags="$mesonflags -arch $(uname -m)"
+        if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
+            mesonflags="$mesonflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+        fi
+        if [ -n "${SDKROOT+x}" ]; then
+            mesonflags="$mesonflags -isysroot $SDKROOT"
+        fi
+    fi
+    rm -rf build-meson
+    env CC="$CC" CXX="$CXX" CFLAGS="$CFLAGS $mesonflags" CXXFLAGS="$CXXFLAGS $mesonflags" LDFLAGS="${LDFLAGS:-} $llvmdepldflags" \
+        meson setup build-meson $mesonopts --native-file meson-native.ini
+    ninja -C build-meson -j"${mkjobs}"
+    echo "* installing Mesa..."
+    ninja -C build-meson install
+
+    # Mesa only builds OSMesa as a shared library, which links all of Mesa's internal static libraries.
+    osmesatarget=$(ninja -C build-meson -t targets all | grep -E '^src/gallium/targets/osmesa/libOSMesa[^:/]*\.(dylib|so[.0-9]*): .*LINKER' | cut -d: -f1 | head -n 1)
+    if [ -z "$osmesatarget" ]; then
+        echo "Error: cannot find the OSMesa library target in build-meson"
+        exit 1
+    fi
+    if [ "$shared" = 1 ]; then
+        # the library is installed as libOSMesa: also make it available as lib$osmesalib
+        for f in "$osmesaprefix/lib/"libOSMesa.*; do
+            ln -sf "$(basename "$f")" "$osmesaprefix/lib/lib$osmesalib${f#$osmesaprefix/lib/libOSMesa}"
+        done
+    else
+        # Build the static library lib$osmesalib.a from the objects and static libraries that are linked
+        # into the shared library, and remove the shared library.
+        echo "* creating static library lib$osmesalib.a..."
+        osmesaobjs=
+        for w in $(ninja -C build-meson -t commands "$osmesatarget" | tail -n 1); do
+            case "$w" in
+                /*) ;; # external libraries (LLVM, system)
+                *.a|*.o)
+                    if [ -f "build-meson/$w" ]; then
+                        osmesaobjs="$osmesaobjs build-meson/$w"
+                    fi
+                    ;;
+            esac
+        done
+        rm -f "$osmesaprefix/lib/lib$osmesalib.a"
+        if [ "$osname" = Darwin ]; then
+            # -c: include common symbols in the table of contents
+            libtool -static -c -no_warning_for_no_symbols -o "$osmesaprefix/lib/lib$osmesalib.a" $osmesaobjs
+        else
+            {
+                echo "create $osmesaprefix/lib/lib$osmesalib.a"
+                for f in $osmesaobjs; do
+                    case "$f" in
+                        *.a) echo "addlib $f";;
+                        *) echo "addmod $f";;
+                    esac
+                done
+                echo "save"
+                echo "end"
+            } | ar -M
+            ranlib "$osmesaprefix/lib/lib$osmesalib.a"
+        fi
+        rm -f "$osmesaprefix/lib/"libOSMesa.*dylib "$osmesaprefix/lib/"libOSMesa.so*
+        # pkg-config file for the static library
+        osmesalibsprivate="-lz -lpthread -lm"
+        if [ "$osmesadriver" != 2 ]; then
+            osmesalibsprivate="$llvmlibs $osmesalibsprivate"
+        fi
+        if [ "$osname" = Darwin ]; then
+            osmesalibsprivate="$osmesalibsprivate -lc++"
+        else
+            osmesalibsprivate="$osmesalibsprivate -lstdc++"
+        fi
+        cat > "$osmesaprefix/lib/pkgconfig/osmesa.pc" <<EOF
+prefix=$osmesaprefix
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: osmesa
+Description: Mesa Off-screen Rendering Library (static)
+Version: $mesaversion
+Libs: -L\${libdir} -l$osmesalib
+Libs.private: $(echo $osmesalibsprivate)
+Cflags: -I\${includedir}
+EOF
+    fi
+    # End of meson-based build
+    ####################################################################
 else
     echo "Error: cannot figure out build system"
     exit 1
@@ -978,6 +1312,22 @@ $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo
 $OSDEMO_LD $CFLAGS -I$osmesaprefix/include -I../../src/util $INCLUDES  -o osdemo16 osdemo16.c -L$osmesaprefix/lib $LIBS32 $llvmlibs || $allowfail
 ./osdemo16 image16.tga || $allowfail
 # results are in image32.tga image16.tga image.tga
+# multithreaded test: each thread renders with its own context into its own buffer
+mtdriver=-1
+if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
+    mtdriver=2 # alternate softpipe and llvmpipe between threads (needs OSMESA_GALLIUM_DRIVER)
+fi
+mtflags=
+if [ "$mangled" = 1 ]; then
+    mtflags="-DMANGLED"
+fi
+$OSDEMO_LD $CFLAGS $mtflags -I$osmesaprefix/include -o osmesa_mt_test "$srcdir/osdemo/osmesa_mt_test.c" -L$osmesaprefix/lib $LIBS32 $llvmlibs -lpthread || $allowfail
+if [ "$mesonbuild" = 1 ]; then
+    ./osmesa_mt_test 8 50 $mtdriver || $allowfail
+else
+    # Mesa 18.3.6 with the thread-safety patches can still crash rarely in this test
+    ./osmesa_mt_test 8 50 $mtdriver || echo "Warning: the multithreaded test failed"
+fi
 set +x
 print_elapsed "osdemo build and run" $osdemostart
 fi # buildosdemo == 1

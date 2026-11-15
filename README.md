@@ -4,7 +4,8 @@ Script and patches to build and install variations of OSMesa http://www.mesa3d.o
 - "mangled" or not (in mangled OSMesa, all functions start with `mgl` instead of `gl`)
 - debug or not
 - choice of osmesa driver: `swrast`, `softpipe`, `llvmpipe` or `swr` (SWR is not yet supported on macOS)
-- possibility to also compile and install LLVM 6.0.1, 4.0.1 or 3.4.2 for the `llvmpipe` driver
+- possibility to also compile and install LLVM 6.0.1, 4.0.1 or 3.4.2 for the `llvmpipe` driver (LLVM 19.1.7 for Mesa 25.0.7)
+- Mesa 18.3.6 (default, autoconf) or Mesa 25.0.7, the last Mesa release with OSMesa (meson, see below)
 
 ## Prerequisites (macOS)
 
@@ -28,11 +29,33 @@ cd build
 bash ../osmesa-install.sh
 ```
   (the script needs bash: `sh` is not bash on e.g. Debian/Ubuntu)
-- there is a test program on the `osdemo` directory, with a few checks
+- there is a test program on the `osdemo` directory, with a few checks, and a multithreaded test (`osdemo/osmesa_mt_test.c`), which the script runs at the end
+- LLVM (for the `llvmpipe` driver): by default (`LLVM_BUILD=auto`), the script uses the LLVM in `LLVM_PREFIX` (`/opt/llvm`) if it is suitable for the Mesa version (version, RTTI, static libraries), and downloads and builds it there if `LLVM_PREFIX` contains no LLVM. An existing, unsuitable LLVM is never replaced automatically: the script stops, and you can give another `LLVM_PREFIX` (e.g. `/opt/llvm-15.0.7` for Mesa 25.0.7), or use `LLVM_BUILD=1` to rebuild it in place. `LLVM_BUILD=0` never builds LLVM. With `LLVM_SYSTEM=1`, if `LLVM_PREFIX` has no suitable LLVM, the newest suitable LLVM installed by MacPorts, Homebrew or the system is used instead (skipping those built for a newer macOS than `MACOSX_DEPLOYMENT_TARGET`). LLVM is still linked statically, but the result then depends on that LLVM's own dependencies (e.g. `libzstd`, `libxml2` from MacPorts or Homebrew) and minimum macOS version: use it for local builds, not for redistributed plugins.
+
+## Mesa 25.0.7
+
+Mesa 25.0.7 is the last Mesa release with OSMesa (it was removed in 25.1). It is thread-safe without patches, and the script adds back mangling support and per-context driver selection (see [PATCHES.md](PATCHES.md)). To build it:
+```
+env OSMESA_VERSION=25.0.7 bash ../osmesa-install.sh
+```
+It needs, in addition to the prerequisites above:
+- `meson` and `ninja` (e.g. `sudo port install meson ninja`)
+- Python 3 with the `mako` and `yaml` modules (e.g. `python3 -m pip install mako pyyaml`; set `PYTHON` to use another `python3`)
+- LLVM 15 or later for `llvmpipe` (15.0.7, 19.1.7, 22.1.8 and 23.1.4 were tested). LLVM 19.1.7, the version used by Mesa 25.0's CI, is built by default if `LLVM_PREFIX` has no LLVM. The LLVM built by the script has no dependencies besides the system libraries, so it is the one to use for redistributed binaries.
+
+The static library (`libMangledOSMesa32.a`, the default) needs more LLVM components than with Mesa 18. Link with:
+```
+-lMangledOSMesa32 -lz `llvm-config --link-static --ldflags --libs bitwriter engine mcdisassembler mcjit core executionengine scalaropts transformutils instcombine coroutines native passes --system-libs`
+```
+(or use `pkg-config --static --libs osmesa`).
+
+## Why these patches?
+
+OSMesa is used here by applications that render with OpenGL from many threads, without a GPU, in the same process as the system's OpenGL. Stock Mesa supports neither. See [PATCHES.md](PATCHES.md) for why OSMesa is used, what each patch does, and which of these fixes are now upstream.
 
 ## Notes and caveats
 
-The latest Mesa version that can be built using this script is 18.3.6.
+The latest Mesa version that can be built using this script with autoconf is 18.3.6, and with meson 25.0.7 (only on macOS and Linux for now, and Linux is untested).
 
 The reasons are:
 - Mesa dropped autoconf support with 19.0, supporting only meson and SCons builds. SCons support was also dropped in 21.1. Mangled OSMesa support was only accessible from autoconf and SCons, but it is just a matter of adding `-DUSE_MGL_NAMESPACE` to `CPPFLAGS`, so it should still be possible to easily get mangled OSMesa using meson.
