@@ -1,7 +1,10 @@
 name: build
 
 on:
+  # pushes to master (pull requests are tested by the pull_request event; running both would build
+  # twice), and caches saved on master are shared with all pull requests
   push:
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
