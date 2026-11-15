@@ -185,3 +185,50 @@ jobs:
           test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
           test "$(nm -g "$HOME/osmesa/lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
           test "$(nm -g "$HOME/osmesa/lib/libMangledGLU.a" 2>/dev/null | grep -c ' T mglu[A-Z]' || true)" -gt 10
+
+  windows:
+    name: Windows (MSYS2 MINGW64), Mesa ${{ matrix.mesa }}
+    runs-on: windows-2025
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Mesa 18.3.6 is built with SCons and Python 2, which MSYS2 no longer has.
+          # LLVM: MSYS2's static LLVM libraries (building LLVM on Windows takes hours).
+          - mesa: 25.0.7
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            make patch diffutils tar xz curl bison flex autoconf automake libtool
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-pkgconf mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-meson mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-python mingw-w64-x86_64-python-mako mingw-w64-x86_64-python-yaml mingw-w64-x86_64-python-packaging
+            mingw-w64-x86_64-zlib mingw-w64-x86_64-llvm mingw-w64-x86_64-freeglut
+
+      - name: Build OSMesa, GLU and osdemo
+        run: |
+          mkdir -p build "$HOME/osmesa"
+          cd build
+          env OSMESA_VERSION=${{ matrix.mesa }} OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX=/mingw64 \
+              PYTHON=/mingw64/bin/python3 MKJOBS=$(nproc) \
+              bash ../osmesa-install.sh
+
+      - name: Check the installed libraries
+        run: |
+          ls -la "$HOME/osmesa/lib"
+          for lib in libMangledOSMesa32.a libMangledGLU.a; do
+            test -s "$HOME/osmesa/lib/$lib"
+          done
+          test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]' || true)" = 0
+          test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
+          test "$(nm -g "$HOME/osmesa/lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
+          test "$(nm -g "$HOME/osmesa/lib/libMangledGLU.a" 2>/dev/null | grep -c ' T mglu[A-Z]' || true)" -gt 10
