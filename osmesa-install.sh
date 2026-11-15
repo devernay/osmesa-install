@@ -812,8 +812,11 @@ if [ "$osname" = Darwin ]; then
     patch-include-GL-mesa_glinterop_h.diff \
     missing_clock_gettime.patch \
     "
-    SED=gsed
-    export SED
+    if [ "$mesonbuild" = 0 ]; then
+        # Mesa's configure needs GNU sed (only for the autoconf build, GLU works with BSD sed)
+        SED=gsed
+        export SED
+    fi
 fi
 
 for i in $PATCHES; do
@@ -932,6 +935,13 @@ EOF
 elif [ "$use_autoconf" = 1 ]; then
     ####################################################################
     # Unix builds for version up to 18 use configure
+
+    # Mesa's configure uses $PYTHON if set, and needs Python 2: ignore PYTHON if it is not Python 2
+    # (PYTHON is used for the meson build of newer Mesa versions, which need Python 3)
+    if [ -n "${PYTHON:-}" ] && ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info[0] != 2)' 2>/dev/null; then
+        echo "* ignoring PYTHON=$PYTHON, which is not Python 2, for Mesa's configure"
+        unset PYTHON
+    fi
 
     test -f Makefile && make -j"${mkjobs}" distclean # if in an existing build
 

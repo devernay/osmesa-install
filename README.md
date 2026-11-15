@@ -18,6 +18,10 @@ sudo port select --set python python27
 - `xz` provides `xzcat`, used to unpack the Mesa and LLVM tarballs (macOS doesn't ship it).
 - On macOS older than 10.12, the script also needs MacPorts `clang-9.0`, and on 10.6 and older, `coreutils` (for `gsort`).
 
+## Prerequisites (Linux, Mesa 25.0.7)
+
+On Debian/Ubuntu: `sudo apt-get install build-essential cmake pkg-config xz-utils zlib1g-dev meson ninja-build python3-mako python3-yaml python3-packaging bison flex freeglut3-dev` (`freeglut3-dev` provides `GL/glut.h`, needed to compile the osdemo tests).
+
 ## Usage
 
 - edit variables / paths as the beginning of the `osmesa-install.sh`

@@ -17,9 +17,11 @@ jobs:
           - mesa: 25.0.7
             llvm: 19.1.7
             ports: meson ninja py313-mako py313-yaml py313-packaging bison flex
+            python: /opt/local/bin/python3.13
           - mesa: 18.3.6
             llvm: 6.0.1
             ports: python27 autoconf automake libtool gsed
+            python: ""
     env:
       # MacPorts only: no Homebrew in PATH
       PATH: /opt/local/bin:/opt/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin
@@ -52,7 +54,7 @@ jobs:
           mkdir -p build "$HOME/osmesa" "$HOME/llvm-${{ matrix.llvm }}"
           cd build
           env OSMESA_VERSION=${{ matrix.mesa }} OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-${{ matrix.llvm }}" \
-              PYTHON=/opt/local/bin/python3.13 MKJOBS=$(sysctl -n hw.ncpu) \
+              ${{ matrix.python && format('PYTHON={0}', matrix.python) || '' }} MKJOBS=$(sysctl -n hw.ncpu) \
               bash ../osmesa-install.sh
 
       - name: Check the installed libraries
@@ -84,7 +86,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config xz-utils zlib1g-dev \
-              meson ninja-build python3-mako python3-yaml python3-packaging bison flex
+              meson ninja-build python3-mako python3-yaml python3-packaging bison flex \
+              freeglut3-dev
 
       - name: Cache LLVM
         uses: actions/cache@v4
