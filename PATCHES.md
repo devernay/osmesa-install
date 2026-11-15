@@ -114,10 +114,13 @@ Mesa 25.0.7 is the last release with OSMesa. It was tested on macOS 27 (Xcode 27
 | LLVM | Result with Mesa 25.0.7 |
 |---|---|
 | 6.0.1 | Doesn't compile: gallivm uses `LLVMBuildIntCast2` (LLVM ≥ 8) and atomic `FAdd` (LLVM ≥ 10) unconditionally. Meson's `>= 5.0.0` check is misleading. |
-| 15.0.7 | Works. Built from the `llvm-project` tarball (LLVM ≥ 15 can't be built from the standalone `llvm-X.src` tarball, which needs the separate `cmake` modules), static, RTTI, AArch64 only, without zlib, zstd and libxml2. The resulting program only depends on system libraries. |
-| 22.1.8 (MacPorts) | Works, but MacPorts' LLVM adds `libzstd` and `libxml2` dylib dependencies. |
+| 15.0.7 | Works. Built from the `llvm-project` tarball (LLVM ≥ 15 can't be built from the standalone `llvm-X.src` tarball, which needs the separate `cmake` modules), static, RTTI, host target only, without zlib, zstd and libxml2. The resulting program only depends on system libraries. Homebrew's `llvm@15` works too. |
+| 19.1.7 | Works. **This is the default the script builds**, because LLVM 19 is the version Mesa 25.0's CI used (x86_64 and arm64). Built by the script in 10 min on 8 cores, with system library dependencies only. |
+| 22.1.8 (MacPorts), 23.1.4 (Homebrew) | Work. As with any MacPorts or Homebrew LLVM, a program linked statically against them depends on their dylibs (`libzstd`, and `libz3` or `libunwind`), and they target the macOS version they were built on (27.0 here). |
 
-**Minimum: LLVM 15** (tested). Versions 10 to 14 may work, but are untested. Many of gallivm's code paths are only for LLVM ≥ 15, and Mesa's own CI uses LLVM 15 or later. Linking needs these LLVM components: `bitwriter engine mcdisassembler mcjit core executionengine scalaropts transformutils instcombine coroutines native passes`. That's more than the `engine mcjit mcdisassembler` that Natron's build scripts pass today.
+**Minimum: LLVM 15**; 15.0.7 to 23.1.4 were tested. Versions 10 to 14 may work, but are untested: many of gallivm's code paths are only for LLVM ≥ 15. Linking needs these LLVM components: `bitwriter engine mcdisassembler mcjit core executionengine scalaropts transformutils instcombine coroutines native passes`. That's more than the `engine mcjit mcdisassembler` that Natron's build scripts pass today. For the host-only LLVM the script builds, those components are 52 of LLVM's 77 libraries (79 of 90 MB), because `passes` pulls in all the optimization passes. Building only those components would save little.
+
+**Redistribution:** LLVM is always linked statically (`-Dshared-llvm=disabled`, `llvm-config --link-static`), and plugins like Shadertoy hide all its symbols. A dynamic `libLLVM` or exported LLVM symbols would clash with the host's or other plugins' LLVM: either a different version gets used, or LLVM aborts with `CommandLine Error: Option ... registered more than once`. For redistributed binaries, use the LLVM built by the script, which has no dependencies besides the system libraries and follows `MACOSX_DEPLOYMENT_TARGET`. `LLVM_SYSTEM=1` uses an installed LLVM, which is fine for local builds.
 
 ### Remaining work
 

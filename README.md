@@ -4,7 +4,7 @@ Script and patches to build and install variations of OSMesa http://www.mesa3d.o
 - "mangled" or not (in mangled OSMesa, all functions start with `mgl` instead of `gl`)
 - debug or not
 - choice of osmesa driver: `swrast`, `softpipe`, `llvmpipe` or `swr` (SWR is not yet supported on macOS)
-- possibility to also compile and install LLVM 6.0.1, 4.0.1 or 3.4.2 for the `llvmpipe` driver (LLVM 15.0.7 for Mesa 25.0.7)
+- possibility to also compile and install LLVM 6.0.1, 4.0.1 or 3.4.2 for the `llvmpipe` driver (LLVM 19.1.7 for Mesa 25.0.7)
 - Mesa 18.3.6 (default, autoconf) or Mesa 25.0.7, the last Mesa release with OSMesa (meson, see below)
 
 ## Prerequisites (macOS)
@@ -30,7 +30,7 @@ bash ../osmesa-install.sh
 ```
   (the script needs bash: `sh` is not bash on e.g. Debian/Ubuntu)
 - there is a test program on the `osdemo` directory, with a few checks, and a multithreaded test (`osdemo/osmesa_mt_test.c`), which the script runs at the end
-- LLVM (for the `llvmpipe` driver): by default (`LLVM_BUILD=auto`), the script uses the LLVM in `LLVM_PREFIX` (`/opt/llvm`) if it is suitable for the Mesa version (version, RTTI, static libraries), and downloads and builds it there if `LLVM_PREFIX` contains no LLVM. An existing, unsuitable LLVM is never replaced automatically: the script stops, and you can give another `LLVM_PREFIX` (e.g. `/opt/llvm-15.0.7` for Mesa 25.0.7), or use `LLVM_BUILD=1` to rebuild it in place. `LLVM_BUILD=0` never builds LLVM.
+- LLVM (for the `llvmpipe` driver): by default (`LLVM_BUILD=auto`), the script uses the LLVM in `LLVM_PREFIX` (`/opt/llvm`) if it is suitable for the Mesa version (version, RTTI, static libraries), and downloads and builds it there if `LLVM_PREFIX` contains no LLVM. An existing, unsuitable LLVM is never replaced automatically: the script stops, and you can give another `LLVM_PREFIX` (e.g. `/opt/llvm-15.0.7` for Mesa 25.0.7), or use `LLVM_BUILD=1` to rebuild it in place. `LLVM_BUILD=0` never builds LLVM. With `LLVM_SYSTEM=1`, if `LLVM_PREFIX` has no suitable LLVM, the newest suitable LLVM installed by MacPorts, Homebrew or the system is used instead (skipping those built for a newer macOS than `MACOSX_DEPLOYMENT_TARGET`). LLVM is still linked statically, but the result then depends on that LLVM's own dependencies (e.g. `libzstd`, `libxml2` from MacPorts or Homebrew) and minimum macOS version: use it for local builds, not for redistributed plugins.
 
 ## Mesa 25.0.7
 
@@ -41,7 +41,7 @@ env OSMESA_VERSION=25.0.7 bash ../osmesa-install.sh
 It needs, in addition to the prerequisites above:
 - `meson` and `ninja` (e.g. `sudo port install meson ninja`)
 - Python 3 with the `mako` and `yaml` modules (e.g. `python3 -m pip install mako pyyaml`; set `PYTHON` to use another `python3`)
-- LLVM 15 or later for `llvmpipe` (LLVM 15.0.7 and 22.1.8 were tested). LLVM 15.0.7 is built by default if no suitable LLVM is found in `LLVM_PREFIX`.
+- LLVM 15 or later for `llvmpipe` (15.0.7, 19.1.7, 22.1.8 and 23.1.4 were tested). LLVM 19.1.7, the version used by Mesa 25.0's CI, is built by default if `LLVM_PREFIX` has no LLVM. The LLVM built by the script has no dependencies besides the system libraries, so it is the one to use for redistributed binaries.
 
 The static library (`libMangledOSMesa32.a`, the default) needs more LLVM components than with Mesa 18. Link with:
 ```

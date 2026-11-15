@@ -6,6 +6,10 @@
 # - LLVM_BUILD: whether to build LLVM (0/1/auto, auto by default: use the LLVM in LLVM_PREFIX if it
 #   is suitable for this Mesa version, build it if there is no LLVM in LLVM_PREFIX, and stop with an
 #   error if there is an unsuitable one, which is only replaced with LLVM_BUILD=1)
+# - LLVM_SYSTEM: with LLVM_BUILD=auto, if LLVM_PREFIX has no suitable LLVM, use the newest suitable
+#   LLVM installed by MacPorts, Homebrew, or the system (0/1, 0 by default). LLVM is still linked
+#   statically, but the result depends on that LLVM's dependencies (e.g. libzstd, libxml2) and
+#   minimum macOS version, so it is not suitable for redistribution.
 # - OSMESA_VERSION: Mesa version (18.3.6 by default; 25.0.7, the last Mesa with OSMesa, uses meson)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 # - BUILD_OSDEMO: try to compile and run osdemo (0/1, 1 by default)
@@ -49,7 +53,8 @@ llvmprefix="${LLVM_PREFIX:-/opt/llvm}"
 buildllvm="${LLVM_BUILD:-auto}"
 # Mesa 19 and later (meson build) need LLVM 15 or later, Mesa 18 and earlier need LLVM 14 or earlier
 if [ "${mesaversion%%.*}" -ge 19 ]; then
-    llvmversion="${LLVM_VERSION:-15.0.7}"
+    # LLVM 19 is the version used by Mesa 25.0's CI (LLVM 15.0.7 to 23.1.4 were tested here)
+    llvmversion="${LLVM_VERSION:-19.1.7}"
 else
     llvmversion="${LLVM_VERSION:-6.0.1}"
 fi
@@ -331,6 +336,34 @@ function llvm_problems() {
     return 0
 }
 
+# find_system_llvm: print the llvm-config of the newest suitable LLVM installed by MacPorts, Homebrew or
+# the system, and return 1 if there is none.
+function find_system_llvm() {
+    local cfg best= bestversion= minos
+    for cfg in /opt/local/libexec/llvm-*/bin/llvm-config /opt/homebrew/opt/llvm*/bin/llvm-config \
+               /usr/local/opt/llvm*/bin/llvm-config /usr/lib/llvm-*/bin/llvm-config \
+               $(type -P llvm-config || true); do
+        [ -x "$cfg" ] || continue
+        llvm_problems "$cfg" >/dev/null || continue
+        if [ "$osname" = Darwin ] && [ -n "${MACOSX_DEPLOYMENT_TARGET:-}" ]; then
+            # skip LLVMs built for a newer macOS than the deployment target
+            minos=$(otool -l "$("$cfg" --libdir)/libLLVMSupport.a" 2>/dev/null | awk '/minos/ {print $2; exit}')
+            if [ -n "$minos" ] && version_gt "$minos" "$MACOSX_DEPLOYMENT_TARGET"; then
+                continue
+            fi
+        fi
+        if [ -z "$best" ] || version_gt "$("$cfg" --version)" "$bestversion"; then
+            best="$cfg"
+            bestversion=$("$cfg" --version)
+        fi
+    done
+    [ -n "$best" ] || return 1
+    echo "$best"
+}
+
+# Linker flags to find the dependencies of the LLVM libraries (e.g. libzstd from MacPorts or Homebrew)
+llvmdepldflags=
+
 llvmlibs=
 if [ ! -d "$osmesaprefix" ] || [ ! -w "$osmesaprefix" ]; then
     echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
@@ -351,6 +384,18 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 echo "* using LLVM $("$llvmconfigbinary" --version) from $llvmprefix"
                 buildllvm=0
             fi
+        elif [ "${LLVM_SYSTEM:-0}" = 1 ] && systemllvm=$(find_system_llvm); then
+            llvmconfigbinary="$systemllvm"
+            llvmprefix=$("$llvmconfigbinary" --prefix)
+            buildllvm=0
+            case "$llvmprefix" in
+                /opt/local/*) llvmdepldflags="-L/opt/local/lib";;
+                /opt/homebrew/*) llvmdepldflags="-L/opt/homebrew/lib";;
+                /usr/local/*) llvmdepldflags="-L/usr/local/lib";;
+            esac
+            echo "* using the installed LLVM $("$llvmconfigbinary" --version) from $llvmprefix (LLVM_SYSTEM=1)"
+            echo "  Warning: the result also depends on: $("$llvmconfigbinary" --link-static --system-libs)"
+            echo "  It is not suitable for redistribution (use a LLVM built by this script for that)."
         elif [ -e "$llvmconfigbinary" ]; then
             # never overwrite an existing LLVM installation automatically (it may be used by other builds)
             echo "Error: $llvmproblem."
@@ -580,8 +625,8 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             echo "Build a suitable LLVM with LLVM_BUILD=1 (LLVM $llvmversion), or give another LLVM_PREFIX."
             exit 1
         fi
-        if version_gt "$("$llvmconfigbinary" --version)" 22.1.8; then
-            echo "Warning: LLVM $("$llvmconfigbinary" --version) is newer than the versions tested with Mesa $mesaversion (15.0.7 to 22.1.8)."
+        if version_gt "$("$llvmconfigbinary" --version)" 23.1.4; then
+            echo "Warning: LLVM $("$llvmconfigbinary" --version) is newer than the versions tested with Mesa $mesaversion (15.0.7 to 23.1.4)."
         fi
     else
 	if version_gt $("$llvmconfigbinary" --version) 6.0.1; then
@@ -619,7 +664,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
         # the LLVM components used by Mesa's llvmpipe (see llvm_modules in Mesa's meson.build)
         llvmcomponents="bitwriter engine mcdisassembler mcjit core executionengine scalaropts transformutils instcombine coroutines native passes"
         llvmlibs=$("${llvmconfigbinary}" --link-static --ldflags --libs $llvmcomponents)
-        llvmlibsadd=$("${llvmconfigbinary}" --link-static --system-libs)
+        llvmlibsadd="$llvmdepldflags $("${llvmconfigbinary}" --link-static --system-libs)"
     else
     llvmlibs=$("${llvmconfigbinary}" --ldflags --libs $llvmcomponents)
     if "${llvmconfigbinary}" --help 2>&1 | grep -q system-libs; then
@@ -1085,7 +1130,7 @@ elif [ "$use_meson" = 1 ]; then
         fi
     fi
     rm -rf build-meson
-    env CC="$CC" CXX="$CXX" CFLAGS="$CFLAGS $mesonflags" CXXFLAGS="$CXXFLAGS $mesonflags" \
+    env CC="$CC" CXX="$CXX" CFLAGS="$CFLAGS $mesonflags" CXXFLAGS="$CXXFLAGS $mesonflags" LDFLAGS="${LDFLAGS:-} $llvmdepldflags" \
         meson setup build-meson $mesonopts --native-file meson-native.ini
     ninja -C build-meson -j"${mkjobs}"
     echo "* installing Mesa..."
