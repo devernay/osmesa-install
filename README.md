@@ -53,6 +53,8 @@ The static library (`libMangledOSMesa32.a`, the default) needs more LLVM compone
 ```
 (or use `pkg-config --static --libs osmesa`).
 
+C++20 (VFX Reference Platform CY2027): code using OSMesa can be compiled as C++20 and linked with the default (C++17) static library. Mesa 25.0.7 itself also builds as C++20. See [PATCHES.md](PATCHES.md#c20-vfx-reference-platform-cy2027).
+
 ## Why these patches?
 
 OSMesa is used here by applications that render with OpenGL from many threads, without a GPU, in the same process as the system's OpenGL. Stock Mesa supports neither. See [PATCHES.md](PATCHES.md) for why OSMesa is used, what each patch does, and which of these fixes are now upstream.
