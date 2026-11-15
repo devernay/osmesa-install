@@ -1,12 +1,23 @@
 name: build
 
 on:
-  # pushes to master (pull requests are tested by the pull_request event; running both would build
-  # twice), and caches saved on master are shared with all pull requests
+  # Pushes to master, and pull requests (running on both for pull request branches would build twice).
+  # Caches saved on master are shared with all pull requests.
   push:
     branches: [master]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Bump when the LLVM build in osmesa-install.sh changes (cmake flags, ...), to rebuild the cached LLVMs.
+  LLVM_CACHE_VERSION: v1
 
 jobs:
   macos:
@@ -21,55 +32,95 @@ jobs:
             llvm: 19.1.7
             ports: meson ninja py313-mako py313-yaml py313-packaging bison flex
             python: /opt/local/bin/python3.13
+            python_select: ""
           - mesa: 18.3.6
             llvm: 6.0.1
-            ports: python27 autoconf automake libtool gsed
-            python: ""
+            # python313: PYTHON is set to a Python 3, which the script must ignore for Mesa's configure
+            ports: python27 python313 autoconf automake libtool gsed
+            python: /opt/local/bin/python3.13
+            python_select: python27
     env:
       # MacPorts only: no Homebrew in PATH
       PATH: /opt/local/bin:/opt/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin
-      MACPORTS_VERSION: 2.12.7
+      # MacPorts installer used to bootstrap MacPorts (selfupdate then updates to the latest release).
+      # The suffix must match the runner's macOS version (runs-on).
+      MACPORTS_PKG: MacPorts-2.12.7-15-Sequoia.pkg
+      MACPORTS_URL: https://github.com/macports/macports-base/releases/download/v2.12.7
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install MacPorts
         run: |
-          pkg="MacPorts-${MACPORTS_VERSION}-15-Sequoia.pkg"
-          curl -fsSLO "https://github.com/macports/macports-base/releases/download/v${MACPORTS_VERSION}/${pkg}"
-          sudo installer -pkg "$pkg" -target /
+          curl -fsSL --retry 5 --retry-delay 10 -O "$MACPORTS_URL/$MACPORTS_PKG"
+          sudo installer -pkg "$MACPORTS_PKG" -target /
           sudo port -N selfupdate
 
       - name: Install build dependencies
         run: |
-          sudo port -N install cmake pkgconfig xz ${{ matrix.ports }}
-          if [ "${{ matrix.mesa }}" = 18.3.6 ]; then
-            sudo port select --set python python27
+          # zstd: used by actions/cache (the cache key depends on the compression method)
+          sudo port -N install cmake pkgconfig xz zstd ${{ matrix.ports }}
+          if [ -n "${{ matrix.python_select }}" ]; then
+            sudo port select --set python ${{ matrix.python_select }}
           fi
 
-      - name: Cache LLVM
-        uses: actions/cache@v4
+      - name: Restore LLVM
+        id: llvm-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/llvm-${{ matrix.llvm }}
-          key: macos-15-arm64-llvm-${{ matrix.llvm }}-${{ hashFiles(format('patches/llvm-{0}/*', matrix.llvm)) }}
+          key: macos-15-arm64-llvm-${{ matrix.llvm }}-${{ env.LLVM_CACHE_VERSION }}-${{ hashFiles(format('patches/llvm-{0}/*', matrix.llvm)) }}
 
-      - name: Build OSMesa, GLU and osdemo
+      # Build LLVM in its own step, and cache it even if the rest of the job fails
+      - name: Build LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p build "$HOME/osmesa" "$HOME/llvm-${{ matrix.llvm }}"
           cd build
           env OSMESA_VERSION=${{ matrix.mesa }} OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-${{ matrix.llvm }}" \
-              ${{ matrix.python && format('PYTHON={0}', matrix.python) || '' }} MKJOBS=$(sysctl -n hw.ncpu) \
+              BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(sysctl -n hw.ncpu) \
               bash ../osmesa-install.sh
 
-      - name: Check the installed libraries
+      - name: Save LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/llvm-${{ matrix.llvm }}
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
+
+      - name: Build OSMesa, GLU and osdemo
         run: |
+          mkdir -p build "$HOME/osmesa"
+          cd build
+          env OSMESA_VERSION=${{ matrix.mesa }} OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-${{ matrix.llvm }}" \
+              PYTHON=${{ matrix.python }} MKJOBS=$(sysctl -n hw.ncpu) \
+              bash ../osmesa-install.sh 2>&1 | tee build.log
+          test "${PIPESTATUS[0]}" = 0
+          if [ "${{ matrix.mesa }}" = 18.3.6 ]; then
+            # the script must have ignored PYTHON (a Python 3) for Mesa's configure
+            grep -q "ignoring PYTHON=" build.log
+          fi
+
+      - name: Check the installed libraries and test programs
+        run: |
+          set -o pipefail
           ls -la "$HOME/osmesa/lib"
-          test -s "$HOME/osmesa/lib/libMangledOSMesa32.a"
-          test -s "$HOME/osmesa/lib/libMangledGLU.a"
-          # mangled: no gl* functions, only mgl*
-          test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T _gl[A-Z]')" = 0
-          nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T _mgl'
-          # no dependency on Homebrew
-          ! otool -L build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep /opt/homebrew
+          for lib in libMangledOSMesa32.a libMangledGLU.a; do
+            test -s "$HOME/osmesa/lib/$lib"
+          done
+          # mangled: no gl*/glu* functions, only mgl*/mglu*
+          test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T _gl[A-Z]' || true)" = 0
+          test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T _mgl[A-Z]' || true)" -gt 1000
+          test "$(nm -g "$HOME/osmesa/lib/libMangledGLU.a" 2>/dev/null | grep -c ' T _glu[A-Z]' || true)" = 0
+          test "$(nm -g "$HOME/osmesa/lib/libMangledGLU.a" 2>/dev/null | grep -c ' T _mglu[A-Z]' || true)" -gt 10
+          # the test programs only depend on system libraries (no MacPorts, Homebrew or /usr/local)
+          for f in osdemo osdemo16 osdemo32 osmesa_mt_test; do
+            p=$(ls build/mesa-demos-*/src/osdemos/$f)
+            test -x "$p"
+            if otool -L "$p" | tail -n +2 | grep -Ev '^[[:space:]]*(/usr/lib/|/System/)'; then
+              echo "::error::$f depends on non-system libraries"
+              exit 1
+            fi
+          done
 
   linux:
     name: Linux (Ubuntu 24.04), Mesa ${{ matrix.mesa }}
@@ -79,11 +130,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Mesa 18.3.6 needs Python 2 with mako, which Ubuntu 24.04 doesn't have
+          # No Mesa 18.3.6: its configure needs Python 2 (it rejects recent Python 3 versions),
+          # which Ubuntu 24.04 doesn't have.
           - mesa: 25.0.7
             llvm: 19.1.7
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build dependencies
         run: |
@@ -92,15 +144,32 @@ jobs:
               meson ninja-build python3-mako python3-yaml python3-packaging bison flex \
               freeglut3-dev
 
-      - name: Cache LLVM
-        uses: actions/cache@v4
+      - name: Restore LLVM
+        id: llvm-cache
+        uses: actions/cache/restore@v6
         with:
           path: ~/llvm-${{ matrix.llvm }}
-          key: ubuntu-24.04-x86_64-llvm-${{ matrix.llvm }}-${{ hashFiles(format('patches/llvm-{0}/*', matrix.llvm)) }}
+          key: ubuntu-24.04-x86_64-llvm-${{ matrix.llvm }}-${{ env.LLVM_CACHE_VERSION }}-${{ hashFiles(format('patches/llvm-{0}/*', matrix.llvm)) }}
+
+      - name: Build LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build "$HOME/osmesa" "$HOME/llvm-${{ matrix.llvm }}"
+          cd build
+          env OSMESA_VERSION=${{ matrix.mesa }} OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-${{ matrix.llvm }}" \
+              BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(nproc) \
+              bash ../osmesa-install.sh
+
+      - name: Save LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/llvm-${{ matrix.llvm }}
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
 
       - name: Build OSMesa, GLU and osdemo
         run: |
-          mkdir -p build "$HOME/osmesa" "$HOME/llvm-${{ matrix.llvm }}"
+          mkdir -p build "$HOME/osmesa"
           cd build
           env OSMESA_VERSION=${{ matrix.mesa }} OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-${{ matrix.llvm }}" \
               PYTHON=/usr/bin/python3 MKJOBS=$(nproc) \
@@ -109,7 +178,10 @@ jobs:
       - name: Check the installed libraries
         run: |
           ls -la "$HOME/osmesa/lib"
-          test -s "$HOME/osmesa/lib/libMangledOSMesa32.a"
-          test -s "$HOME/osmesa/lib/libMangledGLU.a"
-          test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]')" = 0
-          nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl'
+          for lib in libMangledOSMesa32.a libMangledGLU.a; do
+            test -s "$HOME/osmesa/lib/$lib"
+          done
+          test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]' || true)" = 0
+          test "$(nm -g "$HOME/osmesa/lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
+          test "$(nm -g "$HOME/osmesa/lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
+          test "$(nm -g "$HOME/osmesa/lib/libMangledGLU.a" 2>/dev/null | grep -c ' T mglu[A-Z]' || true)" -gt 10
