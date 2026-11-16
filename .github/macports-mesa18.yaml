@@ -1,0 +1,15 @@
+# MacPorts installation for the Mesa 18.3.6 (autoconf) build, cached by melusina-org/setup-macports
+version: '2.11.5'
+prefix: '/opt/local'
+ports:
+  - name: cmake
+  - name: pkgconfig
+  - name: xz
+  - name: zstd
+  - name: gsed
+  - name: autoconf
+  - name: automake
+  - name: libtool
+  - name: python27
+  # PYTHON is set to a Python 3, which the script must ignore for Mesa's configure
+  - name: python313
