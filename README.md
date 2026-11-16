@@ -14,9 +14,13 @@ Xcode or the Command Line Tools, plus the following, e.g. from MacPorts:
 sudo port install python27 cmake autoconf automake libtool pkgconfig gsed xz
 sudo port select --set python python27
 ```
-- GNU sed (`gsed`; `brew install gnu-sed` on Homebrew) is required: Mesa's configure is run with `SED=gsed` on macOS.
+- GNU sed (`gsed`; `brew install gnu-sed` on Homebrew) is required for Mesa 18.3.6 and earlier (autoconf build): Mesa's configure is run with `SED=gsed` on macOS. It is not needed for Mesa 25.0.7.
 - `xz` provides `xzcat`, used to unpack the Mesa and LLVM tarballs (macOS doesn't ship it).
 - On macOS older than 10.12, the script also needs MacPorts `clang-9.0`, and on 10.6 and older, `coreutils` (for `gsort`).
+
+## Prerequisites (Linux, Mesa 25.0.7)
+
+On Debian/Ubuntu: `sudo apt-get install build-essential cmake pkg-config xz-utils zlib1g-dev meson ninja-build python3-mako python3-yaml python3-packaging bison flex freeglut3-dev` (`freeglut3-dev` provides `GL/glut.h`, needed to compile the osdemo tests).
 
 ## Usage
 
@@ -40,7 +44,7 @@ env OSMESA_VERSION=25.0.7 bash ../osmesa-install.sh
 ```
 It needs, in addition to the prerequisites above:
 - `meson` and `ninja` (e.g. `sudo port install meson ninja`)
-- Python 3 with the `mako` and `yaml` modules (e.g. `python3 -m pip install mako pyyaml`; set `PYTHON` to use another `python3`)
+- Python 3 with the `mako`, `yaml` and `packaging` modules (e.g. `sudo port install py313-mako py313-yaml py313-packaging`, or `python3 -m pip install mako pyyaml packaging`), passed with `PYTHON` (e.g. `PYTHON=/opt/local/bin/python3.13`)
 - LLVM 15 or later for `llvmpipe` (15.0.7, 19.1.7, 22.1.8 and 23.1.4 were tested). LLVM 19.1.7, the version used by Mesa 25.0's CI, is built by default if `LLVM_PREFIX` has no LLVM. The LLVM built by the script has no dependencies besides the system libraries, so it is the one to use for redistributed binaries.
 
 The static library (`libMangledOSMesa32.a`, the default) needs more LLVM components than with Mesa 18. Link with:
@@ -49,13 +53,15 @@ The static library (`libMangledOSMesa32.a`, the default) needs more LLVM compone
 ```
 (or use `pkg-config --static --libs osmesa`).
 
+C++20 (VFX Reference Platform CY2027): code using OSMesa can be compiled as C++20 and linked with the default (C++17) static library. Mesa 25.0.7 itself also builds as C++20. See [PATCHES.md](PATCHES.md#c20-vfx-reference-platform-cy2027).
+
 ## Why these patches?
 
 OSMesa is used here by applications that render with OpenGL from many threads, without a GPU, in the same process as the system's OpenGL. Stock Mesa supports neither. See [PATCHES.md](PATCHES.md) for why OSMesa is used, what each patch does, and which of these fixes are now upstream.
 
 ## Notes and caveats
 
-The latest Mesa version that can be built using this script with autoconf is 18.3.6, and with meson 25.0.7 (only on macOS and Linux for now, and Linux is untested).
+The latest Mesa version that can be built using this script with autoconf is 18.3.6, and with meson 25.0.7 (on macOS and Linux for now; both are tested by CI).
 
 The reasons are:
 - Mesa dropped autoconf support with 19.0, supporting only meson and SCons builds. SCons support was also dropped in 21.1. Mangled OSMesa support was only accessible from autoconf and SCons, but it is just a matter of adding `-DUSE_MGL_NAMESPACE` to `CPPFLAGS`, so it should still be possible to easily get mangled OSMesa using meson.

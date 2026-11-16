@@ -228,7 +228,7 @@ elif [ "$osmesadriver" = 4 ]; then
     fi
 else
     echo "Error: osmesadriver must be 1, 2, 3 or 4"
-    exit
+    exit 1
 fi
 if [ "$clean" = 1 ]; then
     echo "- clean sources"
@@ -299,9 +299,9 @@ if [ "$buildosmesa" = 1 ] && [ "$mesonbuild" = 1 ]; then
             exit 1
         fi
     done
-    if [ -z "$pythonbin" ] || ! "$pythonbin" -c "import mako, yaml" 2>/dev/null; then
-        echo "Error: python3 with the mako and yaml modules is required to build Mesa $mesaversion."
-        echo "Install them (e.g. \"python3 -m pip install mako pyyaml\"), or set PYTHON to a python3 that has them."
+    if [ -z "$pythonbin" ] || ! "$pythonbin" -c "import mako, yaml, packaging" 2>/dev/null; then
+        echo "Error: python3 with the mako, yaml and packaging modules is required to build Mesa $mesaversion."
+        echo "Install them (e.g. \"python3 -m pip install mako pyyaml packaging\"), or set PYTHON to a python3 that has them."
         exit 1
     fi
 fi
@@ -367,7 +367,7 @@ llvmdepldflags=
 llvmlibs=
 if [ ! -d "$osmesaprefix" ] || [ ! -w "$osmesaprefix" ]; then
     echo "Error: $osmesaprefix does not exist or is not user-writable, please create $osmesaprefix and make it user-writable"
-    exit
+    exit 1
 fi
 if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     # see also https://wiki.qt.io/Cross_compiling_Mesa_for_Windows
@@ -410,7 +410,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
     if [ "$buildllvm" = 1 ]; then
         if [ ! -d "$llvmprefix" ] || [ ! -w "$llvmprefix" ]; then
             echo "Error: $llvmprefix does not exist or is not user-writable, please create $llvmprefix and make it user-writable"
-            exit
+            exit 1
         fi
         # LLVM must be compiled with RRTI, see https://bugs.freedesktop.org/show_bug.cgi?id=90032
         llvmtopdir=$(pwd)
@@ -812,8 +812,11 @@ if [ "$osname" = Darwin ]; then
     patch-include-GL-mesa_glinterop_h.diff \
     missing_clock_gettime.patch \
     "
-    SED=gsed
-    export SED
+    if [ "$mesonbuild" = 0 ]; then
+        # Mesa's configure needs GNU sed (only for the autoconf build, GLU works with BSD sed)
+        SED=gsed
+        export SED
+    fi
 fi
 
 for i in $PATCHES; do
@@ -932,6 +935,14 @@ EOF
 elif [ "$use_autoconf" = 1 ]; then
     ####################################################################
     # Unix builds for version up to 18 use configure
+
+    # Mesa's configure (Mesa <= 18) uses $PYTHON if set. It works with Python 2, but rejects recent
+    # Python 3 versions ("Python interpreter is too old" with Python 3.13). PYTHON is meant for the
+    # meson build of newer Mesa versions, so ignore it here if it is not Python 2.
+    if [ -n "${PYTHON:-}" ] && ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info[0] != 2)' 2>/dev/null; then
+        echo "* ignoring PYTHON=$PYTHON, which is not Python 2, for Mesa's configure"
+        unset PYTHON
+    fi
 
     test -f Makefile && make -j"${mkjobs}" distclean # if in an existing build
 
@@ -1226,6 +1237,12 @@ if [ ! -f glu-${gluversion}.tar.gz ]; then
 fi
 tar zxf glu-${gluversion}.tar.gz
 cd glu-${gluversion}
+if [ "$mangled" = 1 ] && ! grep -q gluDeleteNurbsTessellatorEXT include/GL/glu_mangle.h; then
+    # glu_mangle.h misses gluDeleteNurbsTessellatorEXT, which would be exported unmangled
+    sed -e '/#define gluNurbsCallbackDataEXT/a\
+#define gluDeleteNurbsTessellatorEXT mgluDeleteNurbsTessellatorEXT
+' include/GL/glu_mangle.h > include/GL/glu_mangle.h.new && mv include/GL/glu_mangle.h.new include/GL/glu_mangle.h
+fi
 echo "* building GLU..."
 confopts="\
     --disable-dependency-tracking \
@@ -1326,7 +1343,12 @@ if [ "$mesonbuild" = 1 ]; then
     ./osmesa_mt_test 8 50 $mtdriver || $allowfail
 else
     # Mesa 18.3.6 with the thread-safety patches can still crash rarely in this test
-    ./osmesa_mt_test 8 50 $mtdriver || echo "Warning: the multithreaded test failed"
+    if ! ./osmesa_mt_test 8 50 $mtdriver; then
+        echo "Warning: the multithreaded test failed"
+        if [ -n "${GITHUB_ACTIONS:-}" ]; then
+            echo "::warning::the multithreaded test failed with Mesa $mesaversion (a known rare crash of Mesa <= 18)"
+        fi
+    fi
 fi
 set +x
 print_elapsed "osdemo build and run" $osdemostart

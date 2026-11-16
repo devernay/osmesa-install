@@ -122,6 +122,14 @@ Mesa 25.0.7 is the last release with OSMesa. It was tested on macOS 27 (Xcode 27
 
 **Redistribution:** LLVM is always linked statically (`-Dshared-llvm=disabled`, `llvm-config --link-static`), and plugins like Shadertoy hide all its symbols. A dynamic `libLLVM` or exported LLVM symbols would clash with the host's or other plugins' LLVM: either a different version gets used, or LLVM aborts with `CommandLine Error: Option ... registered more than once`. For redistributed binaries, use the LLVM built by the script, which has no dependencies besides the system libraries and follows `MACOSX_DEPLOYMENT_TARGET`. `LLVM_SYSTEM=1` uses an installed LLVM, which is fine for local builds.
 
+### C++20 (VFX Reference Platform CY2027)
+
+Mesa 25.0.7 is C++17 by default (`cpp_std=c++17` in its `meson.build`). It also builds as C++20 (`-Dcpp_std=c++20`). This was tested with Apple clang 21 (Xcode 27.2), mangled, llvmpipe, with LLVM 19.1.7. There are no errors, only 16 extra warnings: bitwise operations between different enum types in `src/mesa/main/formats.h`, which C++20 deprecates (`-Wdeprecated-enum-enum-conversion`; C++26 would make them errors). The resulting library passes the multithreaded test, compiled as C++20.
+
+Code that uses OSMesa can be C++20 either way. The installed headers (`GL/gl_mangle.h`, `GL/osmesa.h`, `GL/gl.h`, `GL/glext.h`) compile cleanly with `-std=c++20 -Wall -Wextra -Wpedantic`. A C++20 plugin can also link the default C++17 `libMangledOSMesa32.a` and LLVM, because OSMesa's API is C and both use the same C++ standard library. So the default build is fine for CY2027.
+
+Not tested: gcc in C++20 mode, and LLVM itself built as C++20 (it is C++17 by default, which doesn't matter for code using it).
+
 ### Remaining work
 
 - **Build system:** meson and ninja, plus Python 3 with `mako` and `PyYAML`.
