@@ -1180,6 +1180,18 @@ elif [ "$use_meson" = 1 ]; then
     ninja -C build-meson -j"${mkjobs}"
     echo "* installing Mesa..."
     ninja -C build-meson install
+    case "$osname" in
+        Msys*|MSYS*|MINGW*)
+            # On Windows, Mesa doesn't install the GL headers (it expects the system's), but OSMesa
+            # users need Mesa's (a recent gl.h, glext.h, and gl_mangle.h for the mangled build).
+            mkdir -p "$osmesaprefix/include/GL" "$osmesaprefix/include/KHR"
+            for h in GL/gl.h GL/glext.h GL/glcorearb.h GL/gl_mangle.h KHR/khrplatform.h; do
+                if [ -f "include/$h" ]; then
+                    cp "include/$h" "$osmesaprefix/include/$h"
+                fi
+            done
+            ;;
+    esac
 
     # Mesa only builds OSMesa as a shared library, which links all of Mesa's internal static libraries.
     osmesatarget=$(ninja -C build-meson -t targets all | grep -E '^src/gallium/targets/osmesa/(libOSMesa|osmesa)[^:/]*\.(dylib|so[.0-9]*|dll): .*LINKER' | cut -d: -f1 | head -n 1)

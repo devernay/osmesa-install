@@ -241,4 +241,3 @@ jobs:
           grep -E "^OSMESA_(CFLAGS|LIBS)|^CPPFLAGS|^CFLAGS" build/glu-*/config.log || true
           ls "$HOME/osmesa/include/GL" || true
           ls /mingw64/include/GL/gl.h /mingw64/include/GL/glu.h 2>&1 || true
-          (cd build/glu-* && make V=1 2>&1 | grep -m1 mipmap) || true
