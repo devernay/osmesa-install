@@ -18,7 +18,7 @@ concurrency:
 
 env:
   # Same as in build.yml: bump when the LLVM build in osmesa-install.sh changes.
-  LLVM_CACHE_VERSION: v1
+  CI_LLVM_CACHE_VERSION: v1
 
 jobs:
   # Skip the scheduled run if master didn't change since the previous one
@@ -79,7 +79,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/llvm-${{ matrix.llvm }}
-          key: macos-15-arm64-llvm-${{ matrix.llvm }}-${{ env.LLVM_CACHE_VERSION }}-${{ hashFiles(format('patches/llvm-{0}/*', matrix.llvm)) }}
+          key: macos-15-arm64-llvm-${{ matrix.llvm }}-${{ env.CI_LLVM_CACHE_VERSION }}-${{ hashFiles(format('patches/llvm-{0}/*', matrix.llvm)) }}
 
       - name: Build LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
