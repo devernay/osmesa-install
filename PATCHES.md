@@ -130,8 +130,19 @@ Code that uses OSMesa can be C++20 either way. The installed headers (`GL/gl_man
 
 Not tested: gcc in C++20 mode, and LLVM itself built as C++20 (it is C++17 by default, which doesn't matter for code using it).
 
+### Windows (MSYS2 MINGW64)
+
+Mesa 25.0.7 builds with meson and MinGW gcc. The script works around five Windows-specific problems (the SCons build of Mesa 18.3.6 needs Python 2, which MSYS2 no longer has):
+
+- **Windows platform:** meson is run with `-Dplatforms=windows`. Only then does Mesa define `_GLAPI_NO_EXPORTS` for libmesa, without which `osmesa.dll` fails to link (`__imp__mesa_glapi_get_context`, ...).
+- **DLL exports:** `osmesa.def.in` and libgl-gdi's `opengl32.def.in` list the `gl*` functions, which don't exist in a mangled build (`cannot export glAccum`). They are renamed to `mgl*`, as `mgl_export.patch` does for SCons.
+- **GL headers:** Mesa doesn't install `GL/gl.h`, `glext.h`, ... on Windows, because it expects the system's. Without them, GLU builds against MinGW's GL 1.1 `gl.h`, and there is no `gl_mangle.h`. The script copies Mesa's headers (and `KHR/khrplatform.h`) to the prefix.
+- **dllimport:** GLU's `glu.h` declares `GLAPI __declspec(dllimport)` whenever `_DLL` is defined, which MinGW does. That also applies to the OSMesa functions declared after it, and breaks linking with the static libraries (`__imp_mgluNewQuadric`, `__imp_OSMesaMakeCurrent`). For static builds, dllimport is only used if `GLU_DLL` is defined.
+- **System libraries:** programs linking the static library also need `-lsynchronization` (`WaitOnAddress`, used by Mesa's futex code) and `-lws2_32`. They are listed in `osmesa.pc`.
+
+Paths given to native Windows programs (meson, ar, and `osmesa.pc`, whose output goes to the native compiler) are converted with `cygpath -m`. The OSMesa library's link inputs are read with `ninja -t query`, because on Windows the link command uses a response file. CI uses MSYS2's static LLVM 23.1.5 (`LLVM_PREFIX=/mingw64`); LLVM built by the script on Windows is untested.
+
 ### Remaining work
 
 - **Build system:** meson and ninja, plus Python 3 with `mako` and `PyYAML`.
 - **Exported symbols of the shared library:** on macOS, the dylib also exports all internal LLVM and Mesa symbols. The `osmesa.sym` version script is only used with GNU ld, so macOS needs an `-exported_symbols_list`. This only matters if `SHARED=1`.
-- **Platforms:** test Linux and Windows (MSYS2).
