@@ -289,8 +289,10 @@ pythonbin="${PYTHON:-$(type -P python3 || true)}"
 if [ "$buildosmesa" = 1 ] && [ "$mesonbuild" = 1 ]; then
     case "$osname" in
         Msys*|MSYS*|MINGW*)
-            echo "Error: building Mesa $mesaversion (meson) on Windows is not supported yet"
-            exit 1
+            if [ "$shared" = 1 ]; then
+                echo "Error: SHARED=1 is not supported yet with Mesa $mesaversion on Windows (use the static library)"
+                exit 1
+            fi
             ;;
     esac
     for tool in meson ninja; do
@@ -305,6 +307,16 @@ if [ "$buildosmesa" = 1 ] && [ "$mesonbuild" = 1 ]; then
         exit 1
     fi
 fi
+
+# nativepath PATH: on MSYS2, convert an MSYS path (/mingw64/..., /home/...) to a Windows path
+# (C:/msys64/...) for native Windows programs like meson; elsewhere, print PATH unchanged.
+function nativepath() {
+    if [ -n "$(type -P cygpath)" ]; then
+        cygpath -m "$1"
+    else
+        echo "$1"
+    fi
+}
 
 # llvm_problems LLVM_CONFIG: print why this LLVM can't be used to build this Mesa version, and return 1,
 # or return 0 if it can be used.
@@ -847,6 +859,18 @@ elif [ "$mangled" = 1 ]; then
     fi
     echo "* generating gl_mangle.h..."
     (cd include/GL; sh "$srcdir/patches/mesa-$mesaversion/gl_mangle.h.in" > gl_mangle.h)
+    case "$osname" in
+        Msys*|MSYS*|MINGW*)
+            # the DLLs export the GL functions by name: export the mangled names
+            # (as mgl_export.patch does for the SCons build)
+            for def in src/gallium/targets/osmesa/osmesa.def.in src/gallium/targets/libgl-gdi/opengl32.def.in; do
+                if [ -f "$def" ]; then
+                    echo "* mangling the exports in $def..."
+                    sed -e 's/^gl/mgl/' "$def" > "$def.new" && mv "$def.new" "$def"
+                fi
+            done
+            ;;
+    esac
 fi
 
 echo "* fixing src/mapi/glapi/glapi_getproc.c..."
@@ -860,10 +884,14 @@ use_meson=0
 
 case "$osname" in
     Msys*|MSYS*|MINGW*)
-        use_scons=1
-        if [ "$mangled" = 1 ] && version_gt "$mesaversion" 19.2.1; then
-            echo "Error: mangled GL support was dropped with Mesa 19.2.2"
-            exit 1
+        if [ "$mesonbuild" = 1 ]; then
+            use_meson=1
+        else
+            use_scons=1
+            if [ "$mangled" = 1 ] && version_gt "$mesaversion" 19.2.1; then
+                echo "Error: mangled GL support was dropped with Mesa 19.2.2"
+                exit 1
+            fi
         fi
         ;;
     *)
@@ -1095,11 +1123,17 @@ elif [ "$use_meson" = 1 ]; then
     else
         osmesalib=OSMesa32
     fi
+    # no window system platforms, except windows on Windows: it also sets the Windows-specific glapi
+    # defines (_GLAPI_NO_EXPORTS, ...) needed to link Mesa's static libraries into the OSMesa DLL
+    mesonplatforms=
+    case "$osname" in
+        Msys*|MSYS*|MINGW*) mesonplatforms=windows;;
+    esac
     mesonopts="\
-        --prefix=$osmesaprefix \
+        --prefix=$(nativepath "$osmesaprefix") \
         -Dlibdir=lib \
         -Dosmesa=true \
-        -Dplatforms= \
+        -Dplatforms=$mesonplatforms \
         -Dglx=disabled \
         -Degl=disabled \
         -Dgbm=disabled \
@@ -1119,13 +1153,13 @@ elif [ "$use_meson" = 1 ]; then
     fi
     # the native file gives the python and llvm-config to use
     echo "[binaries]" > meson-native.ini
-    echo "python = '$pythonbin'" >> meson-native.ini
+    echo "python = '$(nativepath "$pythonbin")'" >> meson-native.ini
     if [ "$osmesadriver" = 2 ]; then
         mesonopts="$mesonopts -Dgallium-drivers=softpipe -Dllvm=disabled"
     else
         # llvmpipe (also includes softpipe, which can be selected at run-time)
         mesonopts="$mesonopts -Dgallium-drivers=llvmpipe,softpipe -Dllvm=enabled -Dshared-llvm=disabled"
-        echo "llvm-config = '$llvmconfigbinary'" >> meson-native.ini
+        echo "llvm-config = '$(nativepath "$llvmconfigbinary")'" >> meson-native.ini
     fi
     mesonflags=
     if [ "$mangled" = 1 ]; then
@@ -1146,9 +1180,21 @@ elif [ "$use_meson" = 1 ]; then
     ninja -C build-meson -j"${mkjobs}"
     echo "* installing Mesa..."
     ninja -C build-meson install
+    case "$osname" in
+        Msys*|MSYS*|MINGW*)
+            # On Windows, Mesa doesn't install the GL headers (it expects the system's), but OSMesa
+            # users need Mesa's (a recent gl.h, glext.h, and gl_mangle.h for the mangled build).
+            mkdir -p "$osmesaprefix/include/GL" "$osmesaprefix/include/KHR"
+            for h in GL/gl.h GL/glext.h GL/glcorearb.h GL/gl_mangle.h KHR/khrplatform.h; do
+                if [ -f "include/$h" ]; then
+                    cp "include/$h" "$osmesaprefix/include/$h"
+                fi
+            done
+            ;;
+    esac
 
     # Mesa only builds OSMesa as a shared library, which links all of Mesa's internal static libraries.
-    osmesatarget=$(ninja -C build-meson -t targets all | grep -E '^src/gallium/targets/osmesa/libOSMesa[^:/]*\.(dylib|so[.0-9]*): .*LINKER' | cut -d: -f1 | head -n 1)
+    osmesatarget=$(ninja -C build-meson -t targets all | grep -E '^src/gallium/targets/osmesa/(libOSMesa|osmesa)[^:/]*\.(dylib|so[.0-9]*|dll): .*LINKER' | cut -d: -f1 | head -n 1)
     if [ -z "$osmesatarget" ]; then
         echo "Error: cannot find the OSMesa library target in build-meson"
         exit 1
@@ -1163,10 +1209,12 @@ elif [ "$use_meson" = 1 ]; then
         # into the shared library, and remove the shared library.
         echo "* creating static library lib$osmesalib.a..."
         osmesaobjs=
-        for w in $(ninja -C build-meson -t commands "$osmesatarget" | tail -n 1); do
+        # the inputs of the link (explicit and implicit), from ninja (the link command itself may use
+        # a response file on Windows)
+        for w in $(ninja -C build-meson -t query "$osmesatarget" | awk '/^  input:/ {f=1; next} /^  outputs:/ {f=0} f' | sed -e 's/^ *| *//' -e 's/^ *//'); do
             case "$w" in
-                /*) ;; # external libraries (LLVM, system)
-                *.a|*.o)
+                /*|?:/*) ;; # external libraries (LLVM, system)
+                *.a|*.o|*.obj)
                     if [ -f "build-meson/$w" ]; then
                         osmesaobjs="$osmesaobjs build-meson/$w"
                     fi
@@ -1179,7 +1227,7 @@ elif [ "$use_meson" = 1 ]; then
             libtool -static -c -no_warning_for_no_symbols -o "$osmesaprefix/lib/lib$osmesalib.a" $osmesaobjs
         else
             {
-                echo "create $osmesaprefix/lib/lib$osmesalib.a"
+                echo "create $(nativepath "$osmesaprefix/lib/lib$osmesalib.a")"
                 for f in $osmesaobjs; do
                     case "$f" in
                         *.a) echo "addlib $f";;
@@ -1191,19 +1239,29 @@ elif [ "$use_meson" = 1 ]; then
             } | ar -M
             ranlib "$osmesaprefix/lib/lib$osmesalib.a"
         fi
-        rm -f "$osmesaprefix/lib/"libOSMesa.*dylib "$osmesaprefix/lib/"libOSMesa.so*
+        rm -f "$osmesaprefix/lib/"libOSMesa.*dylib "$osmesaprefix/lib/"libOSMesa.so* \
+            "$osmesaprefix/bin/"osmesa*.dll "$osmesaprefix/lib/"libosmesa*.dll.a \
+            "$osmesaprefix/bin/"opengl32.dll "$osmesaprefix/lib/"libopengl32*.dll.a \
+            "$osmesaprefix/bin/"libgallium_wgl.dll "$osmesaprefix/lib/"libgallium_wgl*.dll.a
         # pkg-config file for the static library
         osmesalibsprivate="-lz -lpthread -lm"
         if [ "$osmesadriver" != 2 ]; then
             osmesalibsprivate="$llvmlibs $osmesalibsprivate"
         fi
+        case "$osname" in
+            Msys*|MSYS*|MINGW*)
+                # Windows system libraries used by Mesa (futex: WaitOnAddress, ...)
+                osmesalibsprivate="$osmesalibsprivate -lsynchronization -lws2_32"
+                ;;
+        esac
         if [ "$osname" = Darwin ]; then
             osmesalibsprivate="$osmesalibsprivate -lc++"
         else
             osmesalibsprivate="$osmesalibsprivate -lstdc++"
         fi
+        # (on Windows, a native path: pkg-config's output is passed as is to the native compiler)
         cat > "$osmesaprefix/lib/pkgconfig/osmesa.pc" <<EOF
-prefix=$osmesaprefix
+prefix=$(nativepath "$osmesaprefix")
 libdir=\${prefix}/lib
 includedir=\${prefix}/include
 
@@ -1243,6 +1301,17 @@ if [ "$mangled" = 1 ] && ! grep -q gluDeleteNurbsTessellatorEXT include/GL/glu_m
 #define gluDeleteNurbsTessellatorEXT mgluDeleteNurbsTessellatorEXT
 ' include/GL/glu_mangle.h > include/GL/glu_mangle.h.new && mv include/GL/glu_mangle.h.new include/GL/glu_mangle.h
 fi
+case "$osname" in
+    Msys*|MSYS*|MINGW*)
+        if [ "$shared" = 0 ]; then
+            # glu.h declares the GLU functions (and, by redefining GLAPI, the OSMesa functions declared
+            # after it) __declspec(dllimport) whenever _DLL is defined, which MinGW does: with the static
+            # libraries, programs then fail to link (undefined __imp_mgluNewQuadric, __imp_OSMesa...).
+            # Only use dllimport if GLU_DLL is defined.
+            sed -e 's/defined(__MINGW32__)) && defined(_DLL)/defined(__MINGW32__)) \&\& defined(GLU_DLL)/' include/GL/glu.h > include/GL/glu.h.new && mv include/GL/glu.h.new include/GL/glu.h
+        fi
+        ;;
+esac
 echo "* building GLU..."
 confopts="\
     --disable-dependency-tracking \
@@ -1304,12 +1373,21 @@ fi
 if [ -z "${OSDEMO_LD:-}" ]; then
     OSDEMO_LD="$CXX"
 fi
-if [ "$osname" = Darwin ] || [ "$osname" = Linux ]; then
+if [ "$osname" = Darwin ] || [ "$osname" = Linux ] || [ "$mesonbuild" = 1 ]; then
     # strange, got 'Undefined symbols for architecture x86_64' without zlib for both llvmpipe and softpipe drivers.
     # missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
     LIBS32="$LIBS32 -lz"
 fi
-if [ "$osname" = Darwin ] || [ "$osname" = Linux ]; then
+if [ "$mesonbuild" = 1 ]; then
+    case "$osname" in
+        Msys*|MSYS*|MINGW*)
+            # Windows system libraries used by Mesa (futex: WaitOnAddress, ...)
+            LIBS32="$LIBS32 -lsynchronization -lws2_32"
+            ;;
+    esac
+fi
+if [ "$osname" = Darwin ] || [ "$osname" = Linux ] || [ "$mesonbuild" = 1 ]; then
+    # (on Windows, Mesa >= 19 is built as a static library, so the problem below doesn't happen)
     allowfail=false
 else
     # build on windows may fail because osmesa is a dll but glu is not, thus:

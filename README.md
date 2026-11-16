@@ -22,6 +22,10 @@ sudo port select --set python python27
 
 On Debian/Ubuntu: `sudo apt-get install build-essential cmake pkg-config xz-utils zlib1g-dev meson ninja-build python3-mako python3-yaml python3-packaging bison flex freeglut3-dev` (`freeglut3-dev` provides `GL/glut.h`, needed to compile the osdemo tests).
 
+## Prerequisites (Windows, Mesa 25.0.7)
+
+In an MSYS2 MINGW64 shell: `pacman -S make patch diffutils tar xz curl bison flex autoconf automake libtool mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-pkgconf mingw-w64-x86_64-cmake mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-python mingw-w64-x86_64-python-mako mingw-w64-x86_64-python-yaml mingw-w64-x86_64-python-packaging mingw-w64-x86_64-zlib mingw-w64-x86_64-llvm mingw-w64-x86_64-freeglut`, then e.g. `env OSMESA_VERSION=25.0.7 LLVM_PREFIX=/mingw64 PYTHON=/mingw64/bin/python3 bash ../osmesa-install.sh` (with MSYS2's static LLVM libraries; building LLVM on Windows takes hours). Only the static library is supported on Windows (no `SHARED=1`). Programs linking it also need `-lsynchronization -lws2_32` (see `pkg-config --static --libs osmesa`).
+
 ## Usage
 
 - edit variables / paths as the beginning of the `osmesa-install.sh`
@@ -61,7 +65,7 @@ OSMesa is used here by applications that render with OpenGL from many threads, w
 
 ## Notes and caveats
 
-The latest Mesa version that can be built using this script with autoconf is 18.3.6, and with meson 25.0.7 (on macOS and Linux for now; both are tested by CI).
+The latest Mesa version that can be built using this script with autoconf is 18.3.6, and with meson 25.0.7 (on macOS, Linux and Windows with MSYS2; all three are tested by CI).
 
 The reasons are:
 - Mesa dropped autoconf support with 19.0, supporting only meson and SCons builds. SCons support was also dropped in 21.1. Mangled OSMesa support was only accessible from autoconf and SCons, but it is just a matter of adding `-DUSE_MGL_NAMESPACE` to `CPPFLAGS`, so it should still be possible to easily get mangled OSMesa using meson.
