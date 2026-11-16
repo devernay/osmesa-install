@@ -1248,6 +1248,12 @@ elif [ "$use_meson" = 1 ]; then
         if [ "$osmesadriver" != 2 ]; then
             osmesalibsprivate="$llvmlibs $osmesalibsprivate"
         fi
+        case "$osname" in
+            Msys*|MSYS*|MINGW*)
+                # Windows system libraries used by Mesa (futex: WaitOnAddress, ...)
+                osmesalibsprivate="$osmesalibsprivate -lsynchronization -lws2_32"
+                ;;
+        esac
         if [ "$osname" = Darwin ]; then
             osmesalibsprivate="$osmesalibsprivate -lc++"
         else
@@ -1371,6 +1377,14 @@ if [ "$osname" = Darwin ] || [ "$osname" = Linux ] || [ "$mesonbuild" = 1 ]; the
     # strange, got 'Undefined symbols for architecture x86_64' without zlib for both llvmpipe and softpipe drivers.
     # missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
     LIBS32="$LIBS32 -lz"
+fi
+if [ "$mesonbuild" = 1 ]; then
+    case "$osname" in
+        Msys*|MSYS*|MINGW*)
+            # Windows system libraries used by Mesa (futex: WaitOnAddress, ...)
+            LIBS32="$LIBS32 -lsynchronization -lws2_32"
+            ;;
+    esac
 fi
 if [ "$osname" = Darwin ] || [ "$osname" = Linux ] || [ "$mesonbuild" = 1 ]; then
     # (on Windows, Mesa >= 19 is built as a static library, so the problem below doesn't happen)
