@@ -1295,6 +1295,17 @@ if [ "$mangled" = 1 ] && ! grep -q gluDeleteNurbsTessellatorEXT include/GL/glu_m
 #define gluDeleteNurbsTessellatorEXT mgluDeleteNurbsTessellatorEXT
 ' include/GL/glu_mangle.h > include/GL/glu_mangle.h.new && mv include/GL/glu_mangle.h.new include/GL/glu_mangle.h
 fi
+case "$osname" in
+    Msys*|MSYS*|MINGW*)
+        if [ "$shared" = 0 ]; then
+            # glu.h declares the GLU functions (and, by redefining GLAPI, the OSMesa functions declared
+            # after it) __declspec(dllimport) whenever _DLL is defined, which MinGW does: with the static
+            # libraries, programs then fail to link (undefined __imp_mgluNewQuadric, __imp_OSMesa...).
+            # Only use dllimport if GLU_DLL is defined.
+            sed -e 's/defined(__MINGW32__)) && defined(_DLL)/defined(__MINGW32__)) \&\& defined(GLU_DLL)/' include/GL/glu.h > include/GL/glu.h.new && mv include/GL/glu.h.new include/GL/glu.h
+        fi
+        ;;
+esac
 echo "* building GLU..."
 confopts="\
     --disable-dependency-tracking \
