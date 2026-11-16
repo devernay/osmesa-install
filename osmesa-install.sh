@@ -1241,8 +1241,9 @@ elif [ "$use_meson" = 1 ]; then
         else
             osmesalibsprivate="$osmesalibsprivate -lstdc++"
         fi
+        # (on Windows, a native path: pkg-config's output is passed as is to the native compiler)
         cat > "$osmesaprefix/lib/pkgconfig/osmesa.pc" <<EOF
-prefix=$osmesaprefix
+prefix=$(nativepath "$osmesaprefix")
 libdir=\${prefix}/lib
 includedir=\${prefix}/include
 
