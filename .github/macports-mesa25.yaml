@@ -1,0 +1,15 @@
+# MacPorts installation for the Mesa 25.0.7 (meson) build, cached by melusina-org/setup-macports
+version: '2.11.5'
+prefix: '/opt/local'
+ports:
+  - name: cmake
+  - name: pkgconfig
+  - name: xz
+  - name: zstd
+  - name: meson
+  - name: ninja
+  - name: bison
+  - name: flex
+  - name: py313-mako
+  - name: py313-yaml
+  - name: py313-packaging
