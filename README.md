@@ -40,6 +40,20 @@ bash ../osmesa-install.sh
 - there is a test program on the `osdemo` directory, with a few checks, and a multithreaded test (`osdemo/osmesa_mt_test.c`), which the script runs at the end
 - LLVM (for the `llvmpipe` driver): by default (`LLVM_BUILD=auto`), the script uses the LLVM in `LLVM_PREFIX` (`/opt/llvm`) if it is suitable for the Mesa version (version, RTTI, static libraries), and downloads and builds it there if `LLVM_PREFIX` contains no LLVM. An existing, unsuitable LLVM is never replaced automatically: the script stops, and you can give another `LLVM_PREFIX` (e.g. `/opt/llvm-15.0.7` for Mesa 25.0.7), or use `LLVM_BUILD=1` to rebuild it in place. `LLVM_BUILD=0` never builds LLVM. With `LLVM_SYSTEM=1`, if `LLVM_PREFIX` has no suitable LLVM, the newest suitable LLVM installed by MacPorts, Homebrew or the system is used instead (skipping those built for a newer macOS than `MACOSX_DEPLOYMENT_TARGET`). LLVM is still linked statically, but the result then depends on that LLVM's own dependencies (e.g. `libzstd`, `libxml2` from MacPorts or Homebrew) and minimum macOS version: use it for local builds, not for redistributed plugins.
 
+## Prebuilt binaries (GitHub releases)
+
+The [releases](https://github.com/devernay/osmesa-install/releases) named `osmesa-mesa-<Mesa version>-llvm-<LLVM version>` have prebuilt, static, mangled OSMesa (llvmpipe and softpipe) with GLU and the static LLVM libraries it needs, so that plug-ins can link OSMesa without building Mesa and LLVM:
+
+| Archive suffix | Platform |
+|---|---|
+| `macos-arm64`, `macos-x86_64` | macOS 14.0 and later (`MACOSX_DEPLOYMENT_TARGET=14.0`), built with Xcode clang and MacPorts |
+| `windows-x86_64-ucrt64` | Windows 10 and later, MSYS2 UCRT64 (MinGW-w64 gcc); only Windows system DLLs are needed |
+| `linux-x86_64-rocky8` | Linux x86_64 with glibc 2.28 or later (Rocky/RHEL 8, gcc-toolset-14); no libdrm |
+
+Each archive has `include/`, `lib/` (`libMangledOSMesa32.a`, `libMangledGLU.a`, `libLLVM*.a`), a relocatable `lib/pkgconfig/osmesa.pc` (`pkg-config --static --libs osmesa`), `link-flags.txt` (the libraries to link, in order), `licenses/`, and a `README.txt` with the versions and build details. `SHA256SUMS` lists the archives' checksums.
+
+They are built by [`.github/workflows/release.yml`](.github/workflows/release.yml): pushing a tag such as `osmesa-mesa-25.0.7-llvm-19.1.7` builds every platform and publishes the release; running the workflow by hand only builds the archives (as workflow artifacts). LLVM is built once per version and platform and cached (on Windows it takes about 2 hours); running the workflow by hand on `master` makes that cache available to all later tags.
+
 ## Mesa 25.0.7
 
 Mesa 25.0.7 is the last Mesa release with OSMesa (it was removed in 25.1). It is thread-safe without patches, and the script adds back mangling support and per-context driver selection (see [PATCHES.md](PATCHES.md)). To build it:

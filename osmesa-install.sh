@@ -461,7 +461,11 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             fi
         fi
         if [ "$llvmproject" = 1 ]; then
-            $xzcat llvm-project-${llvmversion}.src.tar.xz | tar xf -
+            # only extract what is needed to build the LLVM libraries (the other projects are large,
+            # and contain symbolic links that tar can't create on Windows)
+            $xzcat llvm-project-${llvmversion}.src.tar.xz | tar xf - \
+                llvm-project-${llvmversion}.src/llvm llvm-project-${llvmversion}.src/cmake \
+                llvm-project-${llvmversion}.src/third-party llvm-project-${llvmversion}.src/LICENSE.TXT
             cd llvm-project-${llvmversion}.src/llvm
         else
             $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
@@ -577,7 +581,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
             fi
 
-            env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX="${llvmprefix}" \
+            env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX="$(nativepath "${llvmprefix}")" \
                 -DLLVM_TARGETS_TO_BUILD="host" \
                 -DLLVM_ENABLE_RTTI=ON \
                 -DLLVM_REQUIRES_RTTI=ON \
@@ -599,7 +603,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 # tools are not built (LLVM_BUILD_TOOLS=OFF), except llvm-config, which Mesa needs
                 env REQUIRES_RTTI=1 make -j"${mkjobs}" llvm-config
                 mkdir -p "$llvmprefix/bin"
-                cp bin/llvm-config "$llvmprefix/bin/"
+                cp bin/llvm-config* "$llvmprefix/bin/" # llvm-config.exe on Windows
             fi
             cd ..
         fi
