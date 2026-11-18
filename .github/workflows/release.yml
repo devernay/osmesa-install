@@ -140,7 +140,7 @@ jobs:
       - name: Install the build tools
         run: |
           dnf install -y dnf-plugins-core
-          dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz curl which git python3.12
+          dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz which git python3.12
       - uses: actions/checkout@v7
       - name: Look for a cached LLVM
         id: llvm-cache
@@ -230,7 +230,7 @@ jobs:
           echo "  macOS $(sw_vers -productVersion) runner, $(xcodebuild -version | head -1), Apple clang $(clang -dumpversion), MacPorts, MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET" > "out/$NAME.buildinfo"
           bash release/package.sh "$NAME" "$HOME/osmesa" "$HOME/llvm-$CI_LLVM_VERSION" build out \
               "macOS ${MACOSX_DEPLOYMENT_TARGET} and later, ${{ matrix.arch }}"
-          tar tJf "out/$NAME.tar.xz" | head -40
+          tar tJf "out/$NAME.tar.xz" | sed -n 1,40p
       - uses: actions/upload-artifact@v5
         if: github.event_name != 'pull_request'
         with:
@@ -296,7 +296,7 @@ jobs:
           echo "  Windows Server 2025 runner, MSYS2 UCRT64, $(gcc --version | head -1), for Windows 10 and later" > "out/$NAME.buildinfo"
           bash release/package.sh "$NAME" "$HOME/osmesa" "$PWD/llvm-$CI_LLVM_VERSION" build out \
               "Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc, UCRT)"
-          tar tJf "out/$NAME.tar.xz" | head -40
+          tar tJf "out/$NAME.tar.xz" | sed -n 1,40p
       - uses: actions/upload-artifact@v5
         if: github.event_name != 'pull_request'
         with:
@@ -324,7 +324,7 @@ jobs:
         run: |
           dnf install -y dnf-plugins-core epel-release
           dnf config-manager --set-enabled crb
-          dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz bzip2 curl which file git \
+          dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz bzip2 which file git \
               python3.12 python3.12-pip bison flex autoconf automake libtool pkgconfig \
               zlib-devel freeglut-devel
           python3.12 -m pip install meson ninja mako pyyaml packaging
@@ -382,7 +382,7 @@ jobs:
           echo "  Rocky Linux $(rpm -E %rhel) container, $(gcc --version | head -1), glibc $(ldd --version | head -1 | awk '{print $NF}')" > "out/$NAME.buildinfo"
           bash release/package.sh "$NAME" /root/osmesa "/root/llvm-$CI_LLVM_VERSION" build out \
               "Linux ${{ matrix.arch }}, glibc 2.34 and later (Rocky/RHEL 9), gcc-toolset-14"
-          tar tJf "out/$NAME.tar.xz" | head -40
+          tar tJf "out/$NAME.tar.xz" | sed -n 1,40p
       - name: Test the archive with CMake (find_package(OSMesa CONFIG), OSMesa::OSMesa)
         run: |
           source /opt/rh/gcc-toolset-14/enable

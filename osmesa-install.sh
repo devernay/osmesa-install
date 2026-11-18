@@ -1149,6 +1149,7 @@ elif [ "$use_meson" = 1 ]; then
         -Dlibunwind=disabled \
         -Dzstd=disabled \
         -Dzlib=disabled \
+        -Dshader-cache=disabled \
         -Dxmlconfig=disabled \
         -Dexpat=disabled"
     if [ "$debug" = 1 ]; then

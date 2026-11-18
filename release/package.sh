@@ -162,7 +162,7 @@ esac)
 OSMesa build: osmesa-install.sh with OSMESA_VERSION=$mesaversion (meson: -Dosmesa=true
 -Dgallium-drivers=llvmpipe,softpipe -Dllvm=enabled -Dshared-llvm=disabled -Dshared-glapi=disabled
 -Dplatforms= (windows on Windows) -Dglx=disabled -Degl=disabled -Dgbm=disabled -Dgles1=disabled
--Dgles2=disabled -Dvulkan-drivers= -Dzstd=disabled -Dzlib=disabled -Dxmlconfig=disabled -Dexpat=disabled, with
+-Dgles2=disabled -Dvulkan-drivers= -Dzstd=disabled -Dzlib=disabled -Dshader-cache=disabled -Dxmlconfig=disabled -Dexpat=disabled, with
 -DUSE_MGL_NAMESPACE and the patches in patches/mesa-$mesaversion), no libdrm.
 LLVM build: osmesa-install.sh (static, RTTI, host target only, without zlib, zstd, libxml2, libedit).
 
