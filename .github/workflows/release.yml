@@ -10,7 +10,9 @@ name: release
 #    packages them with the LLVM libraries they need.
 #
 # - Tag osmesa-mesa-<mesa version>-llvm-<llvm version> (e.g. osmesa-mesa-25.0.7-llvm-19.1.7): builds
-#   every platform, then publishes a GitHub release with one archive per platform and SHA256SUMS.
+#   Windows and Linux, then publishes a GitHub release with their archives and SHA256SUMS. The macOS
+#   archives are built in macOS 14 VMs by release/macos-vm.sh --upload, which adds them to the
+#   release (GitHub's macOS runners are often unavailable), so the macOS jobs don't run on tags.
 # - workflow_dispatch: builds every platform and keeps the archives as workflow artifacts.
 # - Pull requests changing this workflow or release/: build and check everything, upload nothing.
 
@@ -41,7 +43,8 @@ jobs:
 
   llvm-macos:
     name: LLVM, macOS ${{ matrix.arch }}
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    # not on tags: the macOS release archives are built by release/macos-vm.sh
+    if: github.ref_type != 'tag' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
@@ -409,7 +412,7 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [osmesa-macos, osmesa-windows, osmesa-linux]
+    needs: [osmesa-windows, osmesa-linux]
     if: startsWith(github.ref, 'refs/tags/osmesa-mesa-')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -441,6 +444,8 @@ jobs:
             echo "| \`osmesa-install-$TAG-windows-ucrt64-x86_64.tar.xz\` | Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc), only Windows system DLLs |"
             echo "| \`osmesa-install-$TAG-linux-x86_64.tar.xz\` | Linux x86_64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |"
             echo "| \`osmesa-install-$TAG-linux-aarch64.tar.xz\` | Linux aarch64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |"
+            echo
+            echo "The macOS archives are built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/release/macos-vm.sh) from the same commit, and added to this release (with an updated \`SHA256SUMS\`) after it is created."
             echo
             echo "Each archive has one top-level directory with \`osmesa/include/\`, \`osmesa/lib/\` (\`libMangledOSMesa32.a\`, \`libMangledGLU.a\`), \`osmesa/lib/pkgconfig/osmesa.pc\` (relocatable; \`Libs.private\` lists the LLVM and system libraries), \`llvm/bin/llvm-config\`, \`llvm/lib/libLLVM*.a\`, \`link-flags.txt\`, \`licenses/\` and a \`README.txt\` with the build flags. Verify downloads with \`SHA256SUMS\`."
           } > ../notes.md
