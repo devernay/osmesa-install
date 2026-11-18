@@ -52,7 +52,21 @@ The [releases](https://github.com/devernay/osmesa-install/releases) named `osmes
 
 The archives are named `osmesa-install-<tag>-<platform>.tar.xz`. Each has one top-level directory with `osmesa/include/`, `osmesa/lib/` (`libMangledOSMesa32.a`, `libMangledGLU.a`), `osmesa/lib/pkgconfig/osmesa.pc` (relocatable, for `pkg-config --static --libs osmesa`; `Libs.private` lists the LLVM and system libraries), `llvm/bin/llvm-config` with `llvm/lib/libLLVM*.a` and `llvm/include/`, `link-flags.txt` (the libraries to link, in order), `licenses/`, and a `README.txt` with the versions and build flags. `SHA256SUMS` lists the archives' checksums.
 
-They are built by [`.github/workflows/release.yml`](.github/workflows/release.yml): pushing a tag such as `osmesa-mesa-25.0.7-llvm-19.1.7` builds every platform and publishes the release; running the workflow by hand only builds the archives (as workflow artifacts). LLVM is built once per version and platform and cached (on Windows it takes about 2 hours); running the workflow by hand on `master` makes that cache available to all later tags.
+### Making a release
+
+The releases are built by [`.github/workflows/release.yml`](.github/workflows/release.yml), on GitHub's runners. The binaries are never committed to git: they are attached to the GitHub release as assets.
+
+1. **Set the versions** in `release.yml`: `CI_MESA_VERSION`, `CI_LLVM_VERSION`, and the `NAME` of each archive. The tag must be `osmesa-mesa-<CI_MESA_VERSION>-llvm-<CI_LLVM_VERSION>`; the publish job checks this.
+2. **Merge** the change to `master`. Pull requests that change `release.yml`, `release/` or `.github/macports-mesa25.yaml` build and check every platform, but upload nothing.
+3. **Optionally, run the workflow by hand on `master`** (Actions, release, Run workflow). This builds LLVM once per platform and caches it on `master`, where later tags can use it, and keeps the archives as workflow artifacts for a few days, to inspect them before publishing. Without it, the tag's run builds LLVM itself (about 2 hours longer, for Windows).
+4. **Push the tag**, e.g. `git tag osmesa-mesa-25.0.7-llvm-19.1.7 && git push origin osmesa-mesa-25.0.7-llvm-19.1.7`. The workflow then runs three stages:
+   - **LLVM**, one job per platform: restores LLVM from the cache, or builds it with `osmesa-install.sh` and caches it.
+   - **OSMesa**, one job per platform, after its LLVM: builds and tests OSMesa, GLU and the osdemos; checks the mangling, the macOS architecture and minimum version, that only system libraries are needed, and that there's no libdrm on Linux; and packages `osmesa-install-<tag>-<platform>.tar.xz`.
+   - **Publish**, once all platforms pass: creates the GitHub release with the archives and `SHA256SUMS`, then downloads every asset anonymously to check that it is public and matches `SHA256SUMS`.
+
+   If any job fails, nothing is published: fix the problem, delete the tag (`git push origin :refs/tags/<tag>`), and push it again.
+
+The release is then at `https://github.com/devernay/osmesa-install/releases/tag/<tag>`, and its files at `https://github.com/devernay/osmesa-install/releases/download/<tag>/<file>`. A release can't be published twice under the same tag: to republish the same versions (e.g. after a fix in the script), delete the release and its tag first, or bump the LLVM cache version (`CI_LLVM_CACHE_VERSION`) if the LLVM build changed.
 
 ## Mesa 25.0.7
 
