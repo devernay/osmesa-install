@@ -1172,13 +1172,18 @@ elif [ "$use_meson" = 1 ]; then
         mesonflags="-DUSE_MGL_NAMESPACE"
     fi
     if [ "$osname" = Darwin ]; then
-        mesonflags="$mesonflags -arch $(uname -m)"
+        # architecture (from uname -m, so that running the script under "arch -x86_64" on Apple
+        # Silicon builds for x86_64), minimum macOS version and SDK: also for GLU and the osdemos
+        darwinflags="-arch $(uname -m)"
         if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
-            mesonflags="$mesonflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+            darwinflags="$darwinflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
         fi
         if [ -n "${SDKROOT+x}" ]; then
-            mesonflags="$mesonflags -isysroot $SDKROOT"
+            darwinflags="$darwinflags -isysroot $SDKROOT"
         fi
+        CFLAGS="$CFLAGS $darwinflags"
+        CXXFLAGS="$CXXFLAGS $darwinflags"
+        LDFLAGS="${LDFLAGS:-} $darwinflags"
     fi
     rm -rf build-meson
     env CC="$CC" CXX="$CXX" CFLAGS="$CFLAGS $mesonflags" CXXFLAGS="$CXXFLAGS $mesonflags" LDFLAGS="${LDFLAGS:-} $llvmdepldflags" \
