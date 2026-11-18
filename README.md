@@ -47,10 +47,10 @@ The [releases](https://github.com/devernay/osmesa-install/releases) named `osmes
 | Archive suffix | Platform |
 |---|---|
 | `macos-arm64`, `macos-x86_64` | macOS 14.0 and later (`MACOSX_DEPLOYMENT_TARGET=14.0`), built with Xcode clang and MacPorts |
-| `windows-x86_64-ucrt64` | Windows 10 and later, MSYS2 UCRT64 (MinGW-w64 gcc); only Windows system DLLs are needed |
-| `linux-x86_64-rocky8` | Linux x86_64 with glibc 2.28 or later (Rocky/RHEL 8, gcc-toolset-14); no libdrm |
+| `windows-ucrt64-x86_64` | Windows 10 and later, MSYS2 UCRT64 (MinGW-w64 gcc); only Windows system DLLs are needed |
+| `linux-x86_64` | Linux x86_64 with glibc 2.28 or later (Rocky/RHEL 8, gcc-toolset-14); no libdrm |
 
-Each archive has `include/`, `lib/` (`libMangledOSMesa32.a`, `libMangledGLU.a`, `libLLVM*.a`), a relocatable `lib/pkgconfig/osmesa.pc` (`pkg-config --static --libs osmesa`), `link-flags.txt` (the libraries to link, in order), `licenses/`, and a `README.txt` with the versions and build details. `SHA256SUMS` lists the archives' checksums.
+The archives are named `osmesa-install-<tag>-<platform>.tar.xz`. Each has one top-level directory with `osmesa/include/`, `osmesa/lib/` (`libMangledOSMesa32.a`, `libMangledGLU.a`), `osmesa/lib/pkgconfig/osmesa.pc` (relocatable, for `pkg-config --static --libs osmesa`; `Libs.private` lists the LLVM and system libraries), `llvm/bin/llvm-config` with `llvm/lib/libLLVM*.a` and `llvm/include/`, `link-flags.txt` (the libraries to link, in order), `licenses/`, and a `README.txt` with the versions and build flags. `SHA256SUMS` lists the archives' checksums.
 
 They are built by [`.github/workflows/release.yml`](.github/workflows/release.yml): pushing a tag such as `osmesa-mesa-25.0.7-llvm-19.1.7` builds every platform and publishes the release; running the workflow by hand only builds the archives (as workflow artifacts). LLVM is built once per version and platform and cached (on Windows it takes about 2 hours); running the workflow by hand on `master` makes that cache available to all later tags.
 

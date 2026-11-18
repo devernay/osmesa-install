@@ -175,7 +175,7 @@ jobs:
           - {arch: x86_64, runner: macos-15-intel}
     env:
       MACOSX_DEPLOYMENT_TARGET: '14.0'
-      NAME: osmesa-mesa-25.0.7-llvm-19.1.7-macos-${{ matrix.arch }}
+      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-macos-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v7
       - name: Restore LLVM
@@ -241,7 +241,7 @@ jobs:
       run:
         shell: msys2 {0}
     env:
-      NAME: osmesa-mesa-25.0.7-llvm-19.1.7-windows-x86_64-ucrt64
+      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-windows-ucrt64-x86_64
     steps:
       - uses: actions/checkout@v7
       - name: Restore LLVM
@@ -305,7 +305,7 @@ jobs:
     container: rockylinux:8
     timeout-minutes: 90
     env:
-      NAME: osmesa-mesa-25.0.7-llvm-19.1.7-linux-x86_64-rocky8
+      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-linux-x86_64
     steps:
       - name: Install build dependencies
         # no libdrm: Mesa links it when its headers are found, and OSMesa doesn't need it
@@ -378,6 +378,8 @@ jobs:
           merge-multiple: true
       - name: Create the release
         run: |
+          # the tag must name the Mesa and LLVM versions that this workflow builds
+          test "$TAG" = "osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION"
           cd assets
           ls -la
           sha256sum *.tar.xz > SHA256SUMS
@@ -387,12 +389,12 @@ jobs:
             echo
             echo "| Archive | Platform |"
             echo "|---|---|"
-            echo "| \`osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION-macos-arm64.tar.xz\` | macOS 14.0 and later, arm64 |"
-            echo "| \`osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION-macos-x86_64.tar.xz\` | macOS 14.0 and later, x86_64 |"
-            echo "| \`osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION-windows-x86_64-ucrt64.tar.xz\` | Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc) |"
-            echo "| \`osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION-linux-x86_64-rocky8.tar.xz\` | Linux x86_64, glibc 2.28+ (Rocky/RHEL 8, gcc-toolset-14) |"
+            echo "| \`osmesa-install-$TAG-macos-arm64.tar.xz\` | macOS 14.0 and later, arm64 |"
+            echo "| \`osmesa-install-$TAG-macos-x86_64.tar.xz\` | macOS 14.0 and later, x86_64 |"
+            echo "| \`osmesa-install-$TAG-windows-ucrt64-x86_64.tar.xz\` | Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc), only Windows system DLLs |"
+            echo "| \`osmesa-install-$TAG-linux-x86_64.tar.xz\` | Linux x86_64, glibc 2.28+ (Rocky/RHEL 8, gcc-toolset-14), no libdrm |"
             echo
-            echo "Each archive has \`include/\`, \`lib/\` (OSMesa, GLU and the LLVM static libraries), \`lib/pkgconfig/osmesa.pc\` (relocatable), \`link-flags.txt\`, \`licenses/\` and a \`README.txt\` with the build details. Verify downloads with \`SHA256SUMS\`."
+            echo "Each archive has one top-level directory with \`osmesa/include/\`, \`osmesa/lib/\` (\`libMangledOSMesa32.a\`, \`libMangledGLU.a\`), \`osmesa/lib/pkgconfig/osmesa.pc\` (relocatable; \`Libs.private\` lists the LLVM and system libraries), \`llvm/bin/llvm-config\`, \`llvm/lib/libLLVM*.a\`, \`link-flags.txt\`, \`licenses/\` and a \`README.txt\` with the build flags. Verify downloads with \`SHA256SUMS\`."
           } > ../notes.md
           gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --notes-file ../notes.md *.tar.xz SHA256SUMS
       - name: Check that the assets are public (anonymous download) and match SHA256SUMS
