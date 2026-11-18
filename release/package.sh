@@ -150,10 +150,11 @@ $(case "$(uname)" in
 macOS: built with MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET, so programs and plug-ins using it need
 macOS $MACOSX_DEPLOYMENT_TARGET or later (set CMAKE_OSX_DEPLOYMENT_TARGET / MACOSX_DEPLOYMENT_TARGET to at least that).";;
     Linux) echo "
-Linux: built on Rocky Linux 8 with gcc-toolset-14. The static libraries may use libstdc++ symbols newer
-than Rocky 8's system GCC 8.5: link with gcc-toolset-14 (or newer), whose libstdc++_nonshared.a provides
-them, so that the result only needs the system libc, libstdc++ and libgcc_s (checked: GLIBCXX <= 3.4.25,
-CXXABI <= 1.3.11). Built with -fPIC (static libraries can go into shared objects). No libdrm, zlib or zstd.";;
+Linux: built on Rocky Linux 9 (glibc 2.34) with gcc-toolset-14. The static libraries may use libstdc++
+symbols newer than Rocky 9's system GCC 11: link with gcc-toolset-14 (or newer), whose
+libstdc++_nonshared.a provides them, so that the result only needs the system libc, libstdc++ and
+libgcc_s (checked: GLIBC <= 2.34, GLIBCXX <= 3.4.29, CXXABI <= 1.3.13). Built with -fPIC (static
+libraries can go into shared objects). No libdrm, zlib or zstd.";;
     *) echo "
 Windows: link with -static, so that only Windows system DLLs are needed.";;
 esac)
