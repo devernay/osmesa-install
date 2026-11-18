@@ -366,12 +366,15 @@ jobs:
           # linked with gcc-toolset-14, it must only need the libstdc++ of Rocky 9's GCC 11
           # (GLIBCXX_3.4.29, CXXABI_1.3.13): newer symbols come from libstdc++_nonshared.a;
           # and the glibc of Rocky 9 (GLIBC_2.34)
-          for v in "GLIBCXX_ 3.4.29" "CXXABI_ 1.3.13" "GLIBC_ 2.34"; do
+          gccmax=7.0.0; [ "${{ matrix.arch }}" = aarch64 ] && gccmax=11.0
+          for v in "GLIBCXX_ 3.4.29" "CXXABI_ 1.3.13" "GLIBC_ 2.34" "GCC_ $gccmax"; do
             set -- $v
             newest=$(objdump -T build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -o "$1[0-9.]*" | sed "s/^$1//" | sort -uV | tail -1)
             echo "newest $1: $newest (Rocky 9: $2)"
             test "$(printf '%s\n' "$newest" "$2" | sort -V | tail -1)" = "$2"
           done
+          # no packed relative relocations (DT_RELR), which EL9's loader doesn't support
+          ! readelf -d build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -q RELR
       - name: Package
         run: |
           source /opt/rh/gcc-toolset-14/enable
