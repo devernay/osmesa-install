@@ -342,9 +342,15 @@ jobs:
           test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]' || true)" = 0
           test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
           test "$(nm -g "$lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
-          # no libdrm
+          # no libdrm, no zlib
           test "$(nm -u "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' drm' || true)" = 0
+          test "$(nm -u "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -cE ' (inflate|deflate)' || true)" = 0
+          # the test program only needs the system runtime (libc, libm, libpthread, libdl, librt,
+          # libstdc++, libgcc_s), as plug-in bundles require
           ldd build/mesa-demos-*/src/osdemos/osmesa_mt_test
+          if ldd build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -vE '^\s*(linux-vdso|/lib64/ld-linux|lib(c|m|pthread|dl|rt|stdc\+\+|gcc_s)\.so)'; then
+            echo "::error::osmesa_mt_test depends on non-system libraries"; exit 1
+          fi
       - name: Package
         run: |
           source /opt/rh/gcc-toolset-14/enable
@@ -353,6 +359,20 @@ jobs:
           bash release/package.sh "$NAME" /root/osmesa "/root/llvm-$CI_LLVM_VERSION" build out \
               "Linux x86_64, glibc 2.28 and later (Rocky/RHEL 8), gcc-toolset-14"
           tar tJf "out/$NAME.tar.xz" | head -40
+      - name: Test the archive with CMake (find_package(OSMesa CONFIG), OSMesa::OSMesa)
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          mkdir -p /tmp/unpack /tmp/cmaketest && tar xJf "out/$NAME.tar.xz" -C /tmp/unpack
+          cp osdemo/osmesa_mt_test.c /tmp/cmaketest/
+          printf '%s\n' 'cmake_minimum_required(VERSION 3.16)' 'project(t C CXX)' \
+              'find_package(OSMesa CONFIG REQUIRED)' 'find_package(Threads REQUIRED)' \
+              'add_executable(t osmesa_mt_test.c)' 'target_compile_definitions(t PRIVATE MANGLED)' \
+              'target_link_libraries(t PRIVATE OSMesa::GLU Threads::Threads)' \
+              'set_target_properties(t PROPERTIES LINKER_LANGUAGE CXX)' > /tmp/cmaketest/CMakeLists.txt
+          cmake -S /tmp/cmaketest -B /tmp/cmaketest/build -DOSMesa_DIR="/tmp/unpack/$NAME/osmesa/lib/cmake/OSMesa"
+          cmake --build /tmp/cmaketest/build
+          /tmp/cmaketest/build/t 8 20 2
+          ldd /tmp/cmaketest/build/t
       - uses: actions/upload-artifact@v5
         if: github.event_name != 'pull_request'
         with:

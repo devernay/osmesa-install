@@ -1148,6 +1148,7 @@ elif [ "$use_meson" = 1 ]; then
         -Dvalgrind=disabled \
         -Dlibunwind=disabled \
         -Dzstd=disabled \
+        -Dzlib=disabled \
         -Dxmlconfig=disabled \
         -Dexpat=disabled"
     if [ "$debug" = 1 ]; then
@@ -1248,7 +1249,7 @@ elif [ "$use_meson" = 1 ]; then
             "$osmesaprefix/bin/"opengl32.dll "$osmesaprefix/lib/"libopengl32*.dll.a \
             "$osmesaprefix/bin/"libgallium_wgl.dll "$osmesaprefix/lib/"libgallium_wgl*.dll.a
         # pkg-config file for the static library
-        osmesalibsprivate="-lz -lpthread -lm"
+        osmesalibsprivate="-lpthread -lm"
         if [ "$osmesadriver" != 2 ]; then
             osmesalibsprivate="$llvmlibs $osmesalibsprivate"
         fi
@@ -1377,9 +1378,10 @@ fi
 if [ -z "${OSDEMO_LD:-}" ]; then
     OSDEMO_LD="$CXX"
 fi
-if [ "$osname" = Darwin ] || [ "$osname" = Linux ] || [ "$mesonbuild" = 1 ]; then
+if [ "$mesonbuild" = 0 ] && { [ "$osname" = Darwin ] || [ "$osname" = Linux ]; }; then
     # strange, got 'Undefined symbols for architecture x86_64' without zlib for both llvmpipe and softpipe drivers.
     # missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
+    # (Mesa >= 19 is built without zlib)
     LIBS32="$LIBS32 -lz"
 fi
 if [ "$mesonbuild" = 1 ]; then

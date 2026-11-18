@@ -47,9 +47,9 @@ cp -R "$("$llvmconfig" --includedir)" "$d/llvm/"
 llvmlibs=$("$llvmconfig" --link-static --libs $llvmcomponents | tr '\n' ' ')
 llvmsyslibs=$("$llvmconfig" --link-static --system-libs | tr '\n' ' ')
 case "$(uname)" in
-    Darwin) syslibs="-lz -lc++";;
-    Linux) syslibs="-lz -lpthread -lm -ldl -lstdc++";;
-    *) syslibs="-lz -lsynchronization -lws2_32 -lstdc++";; # MSYS2/MinGW
+    Darwin) syslibs="-lc++";;
+    Linux) syslibs="-lpthread -lm -ldl -lstdc++";;
+    *) syslibs="-lsynchronization -lws2_32 -lstdc++";; # MSYS2/MinGW (link with -static)
 esac
 libs="-lMangledGLU -lMangledOSMesa32 $llvmlibs $llvmsyslibs $syslibs"
 libs=$(echo $libs) # normalize spaces
@@ -72,6 +72,35 @@ Libs: -L\${libdir} -lMangledOSMesa32
 Libs.private: -L\${llvmlibdir} $(echo "$libs" | sed -e 's/-lMangledGLU //' -e 's/-lMangledOSMesa32 //')
 Cflags: -I\${includedir}
 EOF
+
+# CMake config: find_package(OSMesa CONFIG) defines the imported targets OSMesa::OSMesa and OSMesa::GLU
+mkdir -p "$d/osmesa/lib/cmake/OSMesa"
+cmakellvmlibs=
+for l in $llvmlibs; do
+    case "$l" in
+        -lLLVM*) cmakellvmlibs="$cmakellvmlibs \${_osmesa_llvm}/lib/lib${l#-l}.a";;
+    esac
+done
+cmakelinklibs=$(echo $cmakellvmlibs $llvmsyslibs $syslibs | tr ' ' ';')
+cat > "$d/osmesa/lib/cmake/OSMesa/OSMesaConfig.cmake" <<CMAKEEOF
+# OSMesa (static, mangled mgl* symbols) and its static LLVM, from osmesa-install
+get_filename_component(_osmesa_prefix "\${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+get_filename_component(_osmesa_llvm "\${_osmesa_prefix}/../llvm" ABSOLUTE)
+if(NOT TARGET OSMesa::OSMesa)
+  add_library(OSMesa::OSMesa STATIC IMPORTED)
+  set_target_properties(OSMesa::OSMesa PROPERTIES
+    IMPORTED_LOCATION "\${_osmesa_prefix}/lib/libMangledOSMesa32.a"
+    INTERFACE_INCLUDE_DIRECTORIES "\${_osmesa_prefix}/include"
+    INTERFACE_LINK_LIBRARIES "$cmakelinklibs")
+endif()
+if(NOT TARGET OSMesa::GLU)
+  add_library(OSMesa::GLU STATIC IMPORTED)
+  set_target_properties(OSMesa::GLU PROPERTIES
+    IMPORTED_LOCATION "\${_osmesa_prefix}/lib/libMangledGLU.a"
+    INTERFACE_LINK_LIBRARIES OSMesa::OSMesa)
+endif()
+set(OSMesa_FOUND TRUE)
+CMAKEEOF
 
 # licenses
 for f in "$builddir"/mesa-*/docs/license.rst; do
@@ -104,6 +133,7 @@ Contents:
   osmesa/lib/libMangledGLU.a      GLU
   osmesa/lib/pkgconfig/osmesa.pc  pkg-config --static --cflags --libs osmesa (relocatable; Libs.private
                                   has the LLVM and system libraries)
+  osmesa/lib/cmake/OSMesa/        find_package(OSMesa CONFIG): imported targets OSMesa::OSMesa, OSMesa::GLU
   llvm/bin/llvm-config            LLVM $llvmversion: llvm-config, static libraries (llvm/lib/libLLVM*.a)
   llvm/lib/, llvm/include/        and headers
   link-flags.txt                  all the libraries to link, in order
@@ -116,7 +146,7 @@ Link line:
 OSMesa build: osmesa-install.sh with OSMESA_VERSION=$mesaversion (meson: -Dosmesa=true
 -Dgallium-drivers=llvmpipe,softpipe -Dllvm=enabled -Dshared-llvm=disabled -Dshared-glapi=disabled
 -Dplatforms= (windows on Windows) -Dglx=disabled -Degl=disabled -Dgbm=disabled -Dgles1=disabled
--Dgles2=disabled -Dvulkan-drivers= -Dzstd=disabled -Dxmlconfig=disabled -Dexpat=disabled, with
+-Dgles2=disabled -Dvulkan-drivers= -Dzstd=disabled -Dzlib=disabled -Dxmlconfig=disabled -Dexpat=disabled, with
 -DUSE_MGL_NAMESPACE and the patches in patches/mesa-$mesaversion), no libdrm.
 LLVM build: osmesa-install.sh (static, RTTI, host target only, without zlib, zstd, libxml2, libedit).
 
