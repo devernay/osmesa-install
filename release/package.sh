@@ -91,6 +91,7 @@ if(NOT TARGET OSMesa::OSMesa)
   set_target_properties(OSMesa::OSMesa PROPERTIES
     IMPORTED_LOCATION "\${_osmesa_prefix}/lib/libMangledOSMesa32.a"
     INTERFACE_INCLUDE_DIRECTORIES "\${_osmesa_prefix}/include"
+    INTERFACE_COMPILE_DEFINITIONS USE_MGL_NAMESPACE
     INTERFACE_LINK_LIBRARIES "$cmakelinklibs")
 endif()
 if(NOT TARGET OSMesa::GLU)
@@ -141,7 +142,21 @@ Contents:
                                   with LLVM exceptions)
 
 Link line:
-  -I<dir>/osmesa/include ... -L<dir>/osmesa/lib -L<dir>/llvm/lib $libs
+  -I<dir>/osmesa/include -DUSE_MGL_NAMESPACE ... -L<dir>/osmesa/lib -L<dir>/llvm/lib $libs
+(OSMesa::OSMesa defines USE_MGL_NAMESPACE, which makes GL/gl.h include GL/gl_mangle.h, and GL/glu.h
+GL/glu_mangle.h.)
+$(case "$(uname)" in
+    Darwin) echo "
+macOS: built with MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET, so programs and plug-ins using it need
+macOS $MACOSX_DEPLOYMENT_TARGET or later (set CMAKE_OSX_DEPLOYMENT_TARGET / MACOSX_DEPLOYMENT_TARGET to at least that).";;
+    Linux) echo "
+Linux: built on Rocky Linux 8 with gcc-toolset-14. The static libraries may use libstdc++ symbols newer
+than Rocky 8's system GCC 8.5: link with gcc-toolset-14 (or newer), whose libstdc++_nonshared.a provides
+them, so that the result only needs the system libc, libstdc++ and libgcc_s (checked: GLIBCXX <= 3.4.25,
+CXXABI <= 1.3.11). Built with -fPIC (static libraries can go into shared objects). No libdrm, zlib or zstd.";;
+    *) echo "
+Windows: link with -static, so that only Windows system DLLs are needed.";;
+esac)
 
 OSMesa build: osmesa-install.sh with OSMESA_VERSION=$mesaversion (meson: -Dosmesa=true
 -Dgallium-drivers=llvmpipe,softpipe -Dllvm=enabled -Dshared-llvm=disabled -Dshared-glapi=disabled
