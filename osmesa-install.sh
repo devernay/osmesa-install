@@ -1385,8 +1385,9 @@ fi
 if [ "$mesonbuild" = 1 ]; then
     case "$osname" in
         Msys*|MSYS*|MINGW*)
-            # Windows system libraries used by Mesa (futex: WaitOnAddress, ...)
-            LIBS32="$LIBS32 -lsynchronization -lws2_32"
+            # Windows system libraries used by Mesa (futex: WaitOnAddress, ...), and link statically
+            # (libstdc++, zlib, winpthreads), as plug-ins do: only Windows system DLLs are needed
+            LIBS32="$LIBS32 -lsynchronization -lws2_32 -static"
             ;;
     esac
 fi

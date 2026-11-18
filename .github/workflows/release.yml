@@ -316,7 +316,10 @@ jobs:
               python3.12 python3.12-pip bison flex autoconf automake libtool pkgconfig \
               zlib-devel freeglut-devel
           python3.12 -m pip install meson ninja mako pyyaml packaging
-          ! rpm -q libdrm-devel
+          # freeglut-devel (GL/glut.h, for the osdemos) pulls in mesa-libGL-devel and libdrm-devel:
+          # remove libdrm's headers and pkg-config file, so that Mesa can't find and link libdrm
+          rpm -e --nodeps libdrm-devel
+          ! pkg-config --exists libdrm
       - uses: actions/checkout@v7
       - name: Restore LLVM
         uses: actions/cache/restore@v6
