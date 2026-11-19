@@ -7,9 +7,11 @@
 # Usage: release/macos-vm.sh [--upload] [TAG]
 #   TAG: osmesa-mesa-<mesa version>-llvm-<llvm version> (default: the versions in release.yml). The
 #        sources are "git archive TAG" (or HEAD if the tag doesn't exist yet and --upload isn't given).
-#   --upload: add the archives to the existing release TAG with gh (as the account gh is logged in
-#        with), update SHA256SUMS, and check that anonymous downloads match it. Without it, the
-#        archives are only left in $WORK/out.
+#   --upload: add the archives, with ARCHIVE.sha256, to the release TAG with gh (as the account gh is
+#        logged in with; see release/publish.sh and release/finalize.sh), update SHA256SUMS, check
+#        anonymous downloads, and make it a full release if every platform is there. Architectures
+#        already in the release (built on GitHub) are skipped. Without it, the archives are only left
+#        in $WORK/out.
 #
 # The VM is a clone of ghcr.io/cirruslabs/macos-sonoma-base, which has the Xcode Command Line Tools
 # (Apple clang, the macOS 14 and 15 SDKs, python3, bison, flex) and Rosetta. Nothing is installed in
@@ -72,11 +74,18 @@ commit=$(git -C "$repo" rev-parse "$rev^{commit}")
 
 if [ "$upload" = 1 ]; then
     command -v gh >/dev/null || die "gh not found"
-    gh release view "$tag" --repo devernay/osmesa-install >/dev/null \
-        || die "release $tag doesn't exist yet: set CI_MACOS_ON_VM=1, push the tag and let the release workflow publish it first"
-    if gh release view "$tag" --repo devernay/osmesa-install --json assets --jq '.assets[].name' | grep -q -- '-macos-'; then
-        die "release $tag already has macOS archives (built on GitHub): not replacing them"
-    fi
+    # don't replace archives built on GitHub (the release may not exist yet: publish.sh creates it)
+    present=$(gh release view "$tag" --repo devernay/osmesa-install --json assets --jq '.assets[].name' 2>/dev/null || true)
+    archs=
+    for arch in $ARCHS; do
+        if echo "$present" | grep -qx "osmesa-install-$tag-macos-$arch.tar.xz"; then
+            log "$arch: already in release $tag, skipping"
+        else
+            archs="$archs $arch"
+        fi
+    done
+    ARCHS=$archs
+    [ -n "$ARCHS" ] || { log "nothing to build"; exit 0; }
 fi
 
 mkdir -p "$WORK"
@@ -230,25 +239,14 @@ done
 ls -la "$WORK"/out/*.tar.xz
 
 if [ "$upload" = 1 ]; then
-    # add the archives to the release, then rebuild SHA256SUMS from all its archives
+    # add the archives (and their .sha256) to the release, creating it as a pre-release if needed,
+    # then check it and make it a full release if every platform is there
     log "uploading to release $tag"
     files=
     for arch in $ARCHS; do files="$files $WORK/out/osmesa-install-$tag-macos-$arch.tar.xz"; done
-    gh release upload "$tag" --repo devernay/osmesa-install --clobber $files
-    rm -rf "$WORK/check" && mkdir -p "$WORK/check"
-    cd "$WORK/check"
-    assets=$(gh release view "$tag" --repo devernay/osmesa-install --json assets --jq '.assets[].name' | grep '\.tar\.xz$')
-    for f in $assets; do
-        curl -fsSL --retry 5 -o "$f" "https://github.com/devernay/osmesa-install/releases/download/$tag/$f"
-    done
-    shasum -a 256 $assets > SHA256SUMS
-    cat SHA256SUMS
-    gh release upload "$tag" --repo devernay/osmesa-install --clobber SHA256SUMS
-    # check that everything is public (anonymous download) and matches SHA256SUMS
-    rm -rf "$WORK/check2" && mkdir -p "$WORK/check2" && cd "$WORK/check2"
-    for f in $assets SHA256SUMS; do
-        curl -fsSL --retry 5 -o "$f" "https://github.com/devernay/osmesa-install/releases/download/$tag/$f"
-    done
-    shasum -a 256 -c SHA256SUMS
+    bash "$repo/release/publish.sh" "$tag" $files
+    status=0
+    bash "$repo/release/finalize.sh" "$tag" || status=$?
+    [ "$status" = 0 ] || [ "$status" = 2 ] || die "release check failed"
     log "release $tag: macOS archives uploaded and verified"
 fi
