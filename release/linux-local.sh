@@ -6,7 +6,8 @@
 #
 # Usage: release/linux-local.sh [--upload] [TAG]
 #   TAG: osmesa-mesa-<mesa version>-llvm-<llvm version> (default: the versions in release.yml). The
-#        sources are "git archive TAG" (or HEAD if the tag doesn't exist yet and --upload isn't given).
+#        sources are "git archive TAG" (or HEAD if the tag doesn't exist yet and --upload isn't given;
+#        REV=<commit> for a test build of another commit).
 #   --upload: add the archives, with ARCHIVE.sha256, to the release TAG with gh (see
 #        release/publish.sh and release/finalize.sh), and make it a full release if every platform is
 #        there. Architectures already in the release (built on GitHub) are skipped. Without it, the
@@ -55,7 +56,11 @@ case "$WORK" in "$HOME"/Documents*) die "WORK must not be in ~/Documents (the co
 command -v "$CONTAINER" >/dev/null || die "$CONTAINER not found"
 
 # sources: the tagged commit (HEAD for a test build before the tag exists)
-if git -C "$repo" rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null; then
+if [ -n "${REV:-}" ]; then
+    # test build of another commit (e.g. REV=HEAD to test a branch once the tag exists)
+    [ "$upload" = 0 ] || die "REV is only for test builds (without --upload)"
+    rev=$REV
+elif git -C "$repo" rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null; then
     rev=$tag
 elif [ "$upload" = 0 ]; then
     rev=HEAD
