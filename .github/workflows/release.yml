@@ -18,6 +18,9 @@ name: release
 #   CI_MACOS_ON_VM=1 before pushing the tag. The macOS jobs then don't run on tags, and
 #   release/macos-vm.sh --upload builds the macOS archives in local macOS 14 VMs and adds them. It
 #   can also add the macOS archives if the GitHub macOS jobs failed.
+#   Likewise for Linux: CI_LINUX_LOCAL=1 skips the Linux jobs on tags, and release/linux-local.sh
+#   --upload builds the Linux archives in local rockylinux:9 containers (release/linux-build.sh,
+#   the same steps as the Linux jobs) and adds them.
 # - workflow_dispatch: builds every platform and keeps the archives as workflow artifacts.
 # - Pull requests changing this workflow or release/: build and check everything, upload nothing.
 
@@ -134,7 +137,8 @@ jobs:
 
   llvm-linux:
     name: LLVM, Linux ${{ matrix.arch }} (Rocky 9, gcc-toolset-14)
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    # with CI_LINUX_LOCAL=1, not on tags: the Linux release archives are built by release/linux-local.sh
+    if: (github.ref_type != 'tag' || vars.CI_LINUX_LOCAL != '1') && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ${{ matrix.runner }}
     container: rockylinux:9
     timeout-minutes: 180
@@ -443,11 +447,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the archives, update SHA256SUMS, publish
-        # with CI_MACOS_ON_VM=1, release/macos-vm.sh --upload adds the macOS archives and finalizes
         run: |
-          # with CI_MACOS_ON_VM=1, the macOS archives may be missing: release/macos-vm.sh --upload adds
-          # them and finalizes the release
+          # with CI_MACOS_ON_VM=1 or CI_LINUX_LOCAL=1, those archives may be missing:
+          # release/macos-vm.sh --upload or release/linux-local.sh --upload adds them and finalizes
+          ALLOW_MISSING=
           if [ "${{ vars.CI_MACOS_ON_VM }}" = 1 ]; then
-            export ALLOW_MISSING="macos-arm64 macos-x86_64"
+            ALLOW_MISSING="$ALLOW_MISSING macos-arm64 macos-x86_64"
           fi
+          if [ "${{ vars.CI_LINUX_LOCAL }}" = 1 ]; then
+            ALLOW_MISSING="$ALLOW_MISSING linux-x86_64 linux-aarch64"
+          fi
+          export ALLOW_MISSING
           bash release/finalize.sh "$TAG"
