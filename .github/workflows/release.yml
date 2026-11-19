@@ -145,11 +145,11 @@ jobs:
           - {arch: x86_64, runner: ubuntu-24.04}
           - {arch: aarch64, runner: ubuntu-24.04-arm}
     steps:
-      - name: Install the build tools
-        run: |
-          dnf install -y dnf-plugins-core
-          dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz which git python3.12
+      - name: Install git (for actions/checkout)
+        run: dnf install -y git
       - uses: actions/checkout@v7
+      - name: Install the build tools
+        run: bash release/linux-build.sh deps-llvm
       - name: Look for a cached LLVM
         id: llvm-cache
         uses: actions/cache/restore@v6
@@ -159,13 +159,7 @@ jobs:
           lookup-only: true
       - name: Build LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
-        run: |
-          source /opt/rh/gcc-toolset-14/enable
-          mkdir -p build /root/osmesa "/root/llvm-$CI_LLVM_VERSION"
-          cd build
-          env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX=/root/osmesa LLVM_PREFIX="/root/llvm-$CI_LLVM_VERSION" \
-              BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(nproc) \
-              bash ../osmesa-install.sh
+        run: bash release/linux-build.sh llvm
       - name: Cache LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -331,20 +325,11 @@ jobs:
     env:
       NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-linux-${{ matrix.arch }}
     steps:
-      - name: Install build dependencies
-        # no libdrm: Mesa links it when its headers are found, and OSMesa doesn't need it
-        run: |
-          dnf install -y dnf-plugins-core epel-release
-          dnf config-manager --set-enabled crb
-          dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz bzip2 which file git \
-              python3.12 python3.12-pip bison flex autoconf automake libtool pkgconfig \
-              zlib-devel freeglut-devel
-          python3.12 -m pip install meson ninja mako pyyaml packaging
-          # freeglut-devel (GL/glut.h, for the osdemos) pulls in mesa-libGL-devel and libdrm-devel:
-          # remove libdrm's headers and pkg-config file, so that Mesa can't find and link libdrm
-          rpm -e --nodeps libdrm-devel
-          ! pkg-config --exists libdrm
+      - name: Install git (for actions/checkout)
+        run: dnf install -y git
       - uses: actions/checkout@v7
+      - name: Install build dependencies
+        run: bash release/linux-build.sh deps
       # if the cache is missing (e.g. its save failed), osmesa-install.sh builds LLVM (LLVM_BUILD=auto)
       - name: Restore LLVM
         uses: actions/cache/restore@v6
@@ -352,72 +337,13 @@ jobs:
           path: /root/llvm-${{ env.CI_LLVM_VERSION }}
           key: release-linux-rocky9-gcc14-${{ matrix.arch }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
       - name: Build OSMesa, GLU and osdemo
-        run: |
-          source /opt/rh/gcc-toolset-14/enable
-          export PATH="/usr/local/bin:$PATH" # meson and ninja from pip
-          mkdir -p build /root/osmesa "/root/llvm-$CI_LLVM_VERSION"
-          cd build
-          env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX=/root/osmesa LLVM_PREFIX="/root/llvm-$CI_LLVM_VERSION" \
-              PYTHON=/usr/bin/python3.12 MKJOBS=$(nproc) \
-              bash ../osmesa-install.sh
+        run: bash release/linux-build.sh osmesa
       - name: Check the libraries
-        run: |
-          lib=/root/osmesa/lib
-          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]' || true)" = 0
-          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
-          test "$(nm -g "$lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
-          # no libdrm, no zlib
-          test "$(nm -u "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' drm' || true)" = 0
-          test "$(nm -u "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -cE ' (inflate|deflate)' || true)" = 0
-          # the test program only needs the system runtime (libc, libm, libpthread, libdl, librt,
-          # libstdc++, libgcc_s), as plug-in bundles require
-          ldd build/mesa-demos-*/src/osdemos/osmesa_mt_test
-          if ldd build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -vE '^\s*(linux-vdso|/lib(64)?/ld-linux|lib(c|m|pthread|dl|rt|stdc\+\+|gcc_s)\.so)'; then
-            echo "::error::osmesa_mt_test depends on non-system libraries"; exit 1
-          fi
-          # linked with gcc-toolset-14, it must only need the libstdc++ of Rocky 9's GCC 11
-          # (GLIBCXX_3.4.29, CXXABI_1.3.13): newer symbols come from libstdc++_nonshared.a;
-          # and the glibc of Rocky 9 (GLIBC_2.34)
-          gccmax=7.0.0; [ "${{ matrix.arch }}" = aarch64 ] && gccmax=11.0
-          for v in "GLIBCXX_ 3.4.29" "CXXABI_ 1.3.13" "GLIBC_ 2.34" "GCC_ $gccmax"; do
-            set -- $v
-            newest=$(objdump -T build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -o "$1[0-9.]*" | sed "s/^$1//" | sort -uV | tail -1)
-            echo "newest $1: $newest (Rocky 9: $2)"
-            test "$(printf '%s\n' "$newest" "$2" | sort -V | tail -1)" = "$2"
-          done
-          # no packed relative relocations (DT_RELR), which EL9's loader doesn't support
-          ! readelf -d build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -q RELR
+        run: bash release/linux-build.sh check ${{ matrix.arch }}
       - name: Package
-        run: |
-          source /opt/rh/gcc-toolset-14/enable
-          mkdir -p out
-          echo "  Rocky Linux $(rpm -E %rhel) container, $(gcc --version | head -1), glibc $(ldd --version | head -1 | awk '{print $NF}')" > "out/$NAME.buildinfo"
-          bash release/package.sh "$NAME" /root/osmesa "/root/llvm-$CI_LLVM_VERSION" build out \
-              "Linux ${{ matrix.arch }}, glibc 2.34 and later (Rocky/RHEL 9), gcc-toolset-14"
-          tar tJf "out/$NAME.tar.xz" | sed -n 1,40p
-      - name: Test the archive with CMake (find_package(OSMesa CONFIG), OSMesa::OSMesa)
-        run: |
-          source /opt/rh/gcc-toolset-14/enable
-          mkdir -p /tmp/unpack /tmp/cmaketest && tar xJf "out/$NAME.tar.xz" -C /tmp/unpack
-          cp osdemo/osmesa_mt_test.c /tmp/cmaketest/
-          printf '%s\n' 'cmake_minimum_required(VERSION 3.16)' 'project(t C CXX)' \
-              'find_package(OSMesa CONFIG REQUIRED)' 'find_package(Threads REQUIRED)' \
-              'add_executable(t osmesa_mt_test.c)' 'target_compile_definitions(t PRIVATE MANGLED)' \
-              'target_link_libraries(t PRIVATE OSMesa::GLU Threads::Threads)' \
-              'set_target_properties(t PROPERTIES LINKER_LANGUAGE CXX)' > /tmp/cmaketest/CMakeLists.txt
-          cmake -S /tmp/cmaketest -B /tmp/cmaketest/build -DOSMesa_DIR="/tmp/unpack/$NAME/osmesa/lib/cmake/OSMesa"
-          cmake --build /tmp/cmaketest/build
-          /tmp/cmaketest/build/t 8 20 2
-          ldd /tmp/cmaketest/build/t
-      - name: Test the archive with pkg-config (pkg-config --static --cflags --libs osmesa)
-        run: |
-          source /opt/rh/gcc-toolset-14/enable
-          # without -DMANGLED: the .pc file's Cflags must select the mgl* names (USE_MGL_NAMESPACE)
-          export PKG_CONFIG_PATH="/tmp/unpack/$NAME/osmesa/lib/pkgconfig"
-          pkg-config --static --cflags --libs osmesa
-          gcc -c osdemo/osmesa_mt_test.c -o /tmp/pctest.o $(pkg-config --cflags osmesa)
-          g++ /tmp/pctest.o -o /tmp/pctest $(pkg-config --static --libs osmesa) -lpthread
-          /tmp/pctest 8 20 2
+        run: bash release/linux-build.sh package "$NAME" ${{ matrix.arch }}
+      - name: Test the archive with CMake and pkg-config
+        run: bash release/linux-build.sh test "$NAME"
       - uses: actions/upload-artifact@v5
         if: github.event_name != 'pull_request'
         with:
