@@ -10,11 +10,14 @@ name: release
 #    packages them with the LLVM libraries they need.
 #
 # - Tag osmesa-mesa-<mesa version>-llvm-<llvm version> (e.g. osmesa-mesa-25.0.7-llvm-19.1.7): builds
-#   every platform, then publishes a GitHub release with one archive per platform and SHA256SUMS.
+#   every platform. Each platform adds its archives (with ARCHIVE.sha256) to the GitHub release as
+#   soon as they pass, the first one creating it as a pre-release, so that no binary is lost if
+#   another platform fails. The release job then checks every archive, writes SHA256SUMS and makes it
+#   a full release if all five archives are there (release/publish.sh, release/finalize.sh).
 #   Fallback when GitHub's macOS runners are unavailable: set the repository variable
-#   CI_MACOS_ON_VM=1 before pushing the tag. The macOS jobs then don't run on tags, the release is
-#   published with the Windows and Linux archives, and release/macos-vm.sh --upload builds the macOS
-#   archives in local macOS 14 VMs and adds them to it.
+#   CI_MACOS_ON_VM=1 before pushing the tag. The macOS jobs then don't run on tags, and
+#   release/macos-vm.sh --upload builds the macOS archives in local macOS 14 VMs and adds them. It
+#   can also add the macOS archives if the GitHub macOS jobs failed.
 # - workflow_dispatch: builds every platform and keeps the archives as workflow artifacts.
 # - Pull requests changing this workflow or release/: build and check everything, upload nothing.
 
@@ -77,7 +80,7 @@ jobs:
           export PATH=/opt/local/bin:/opt/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin # MacPorts only
           mkdir -p build "$HOME/osmesa" "$HOME/llvm-$CI_LLVM_VERSION"
           cd build
-          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-$CI_LLVM_VERSION" \
+          env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-$CI_LLVM_VERSION" \
               BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(sysctl -n hw.ncpu) \
               bash ../osmesa-install.sh
       - name: Cache LLVM
@@ -119,7 +122,7 @@ jobs:
           llvm="$PWD/llvm-$CI_LLVM_VERSION"
           mkdir -p build "$HOME/osmesa" "$llvm"
           cd build
-          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
+          env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
               BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(nproc) \
               bash ../osmesa-install.sh
       - name: Cache LLVM
@@ -160,7 +163,7 @@ jobs:
           source /opt/rh/gcc-toolset-14/enable
           mkdir -p build /root/osmesa "/root/llvm-$CI_LLVM_VERSION"
           cd build
-          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX=/root/osmesa LLVM_PREFIX="/root/llvm-$CI_LLVM_VERSION" \
+          env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX=/root/osmesa LLVM_PREFIX="/root/llvm-$CI_LLVM_VERSION" \
               BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(nproc) \
               bash ../osmesa-install.sh
       - name: Cache LLVM
@@ -176,8 +179,10 @@ jobs:
   osmesa-macos:
     name: OSMesa, macOS ${{ matrix.arch }}
     needs: llvm-macos
+    # also when the other architecture's LLVM failed (LLVM is then built here if not cached)
+    if: ${{ !cancelled() && needs.llvm-macos.result != 'skipped' }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: 240 # 90 min, plus LLVM if its cache is missing
     strategy:
       fail-fast: false
       matrix:
@@ -189,12 +194,12 @@ jobs:
       NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-macos-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v7
+      # if the cache is missing (e.g. its save failed), osmesa-install.sh builds LLVM (LLVM_BUILD=auto)
       - name: Restore LLVM
         uses: actions/cache/restore@v6
         with:
           path: ~/llvm-${{ env.CI_LLVM_VERSION }}
           key: release-macos-${{ matrix.arch }}-${{ env.MACOSX_DEPLOYMENT_TARGET }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
-          fail-on-cache-miss: true
       - name: Install MacPorts (cached)
         uses: melusina-org/setup-macports@v1
         with:
@@ -203,9 +208,9 @@ jobs:
         run: echo "PATH=/opt/local/bin:/opt/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" >> "$GITHUB_ENV"
       - name: Build OSMesa, GLU and osdemo
         run: |
-          mkdir -p build "$HOME/osmesa"
+          mkdir -p build "$HOME/osmesa" "$HOME/llvm-$CI_LLVM_VERSION"
           cd build
-          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-$CI_LLVM_VERSION" \
+          env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-$CI_LLVM_VERSION" \
               PYTHON=/opt/local/bin/python3.13 MKJOBS=$(sysctl -n hw.ncpu) \
               bash ../osmesa-install.sh
       - name: Check the libraries
@@ -247,7 +252,7 @@ jobs:
     name: OSMesa, Windows x86_64 (MSYS2 UCRT64)
     needs: llvm-windows
     runs-on: windows-2025
-    timeout-minutes: 60
+    timeout-minutes: 360 # 60 min, plus LLVM if its cache is missing
     defaults:
       run:
         shell: msys2 {0}
@@ -255,12 +260,12 @@ jobs:
       NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-windows-ucrt64-x86_64
     steps:
       - uses: actions/checkout@v7
+      # if the cache is missing (e.g. its save failed), osmesa-install.sh builds LLVM (LLVM_BUILD=auto)
       - name: Restore LLVM
         uses: actions/cache/restore@v6
         with:
           path: llvm-${{ env.CI_LLVM_VERSION }}
           key: release-windows-ucrt64-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
-          fail-on-cache-miss: true
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -275,9 +280,9 @@ jobs:
       - name: Build OSMesa, GLU and osdemo
         run: |
           llvm="$PWD/llvm-$CI_LLVM_VERSION"
-          mkdir -p build "$HOME/osmesa"
+          mkdir -p build "$HOME/osmesa" "$llvm"
           cd build
-          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
+          env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
               PYTHON="$MSYSTEM_PREFIX/bin/python3" MKJOBS=$(nproc) \
               bash ../osmesa-install.sh
       - name: Check the libraries
@@ -312,9 +317,11 @@ jobs:
   osmesa-linux:
     name: OSMesa, Linux ${{ matrix.arch }} (Rocky 9, gcc-toolset-14)
     needs: llvm-linux
+    # also when the other architecture's LLVM failed (LLVM is then built here if not cached)
+    if: ${{ !cancelled() && needs.llvm-linux.result != 'skipped' }}
     runs-on: ${{ matrix.runner }}
     container: rockylinux:9
-    timeout-minutes: 90
+    timeout-minutes: 240 # 90 min, plus LLVM if its cache is missing
     strategy:
       fail-fast: false
       matrix:
@@ -338,19 +345,19 @@ jobs:
           rpm -e --nodeps libdrm-devel
           ! pkg-config --exists libdrm
       - uses: actions/checkout@v7
+      # if the cache is missing (e.g. its save failed), osmesa-install.sh builds LLVM (LLVM_BUILD=auto)
       - name: Restore LLVM
         uses: actions/cache/restore@v6
         with:
           path: /root/llvm-${{ env.CI_LLVM_VERSION }}
           key: release-linux-rocky9-gcc14-${{ matrix.arch }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
-          fail-on-cache-miss: true
       - name: Build OSMesa, GLU and osdemo
         run: |
           source /opt/rh/gcc-toolset-14/enable
           export PATH="/usr/local/bin:$PATH" # meson and ninja from pip
-          mkdir -p build /root/osmesa
+          mkdir -p build /root/osmesa "/root/llvm-$CI_LLVM_VERSION"
           cd build
-          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX=/root/osmesa LLVM_PREFIX="/root/llvm-$CI_LLVM_VERSION" \
+          env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX=/root/osmesa LLVM_PREFIX="/root/llvm-$CI_LLVM_VERSION" \
               PYTHON=/usr/bin/python3.12 MKJOBS=$(nproc) \
               bash ../osmesa-install.sh
       - name: Check the libraries
@@ -402,6 +409,15 @@ jobs:
           cmake --build /tmp/cmaketest/build
           /tmp/cmaketest/build/t 8 20 2
           ldd /tmp/cmaketest/build/t
+      - name: Test the archive with pkg-config (pkg-config --static --cflags --libs osmesa)
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          # without -DMANGLED: the .pc file's Cflags must select the mgl* names (USE_MGL_NAMESPACE)
+          export PKG_CONFIG_PATH="/tmp/unpack/$NAME/osmesa/lib/pkgconfig"
+          pkg-config --static --cflags --libs osmesa
+          gcc -c osdemo/osmesa_mt_test.c -o /tmp/pctest.o $(pkg-config --cflags osmesa)
+          g++ /tmp/pctest.o -o /tmp/pctest $(pkg-config --static --libs osmesa) -lpthread
+          /tmp/pctest 8 20 2
       - uses: actions/upload-artifact@v5
         if: github.event_name != 'pull_request'
         with:
@@ -410,16 +426,15 @@ jobs:
           if-no-files-found: error
 
   ##################################################################################################
-  # Publish (tags only)
+  # Publish (tags only): each platform adds its archives to the release as soon as they are built
+  # (the first one creates it as a pre-release), even if another platform fails, so that no binary
+  # is lost; then the release job checks everything and makes it a full release.
 
-  publish:
-    name: Publish the release
-    needs: [osmesa-macos, osmesa-windows, osmesa-linux]
-    # every platform must pass, except macOS when CI_MACOS_ON_VM=1 (built by release/macos-vm.sh)
-    if: >-
-      always() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') &&
-      needs.osmesa-windows.result == 'success' && needs.osmesa-linux.result == 'success' &&
-      (needs.osmesa-macos.result == 'success' || (vars.CI_MACOS_ON_VM == '1' && needs.osmesa-macos.result == 'skipped'))
+  publish-macos:
+    name: Publish, macOS
+    needs: osmesa-macos
+    # !cancelled(): also publish one architecture if the other one failed
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') && needs.osmesa-macos.result != 'skipped' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -428,40 +443,85 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.ref_name }}
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v5
         with:
+          pattern: '*-macos-*'
           path: assets
           merge-multiple: true
-      - name: Create the release
+      - name: Add the archives to the release
         run: |
-          # the tag must name the Mesa and LLVM versions that this workflow builds
           test "$TAG" = "osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION"
-          cd assets
-          ls -la
-          sha256sum *.tar.xz > SHA256SUMS
-          cat SHA256SUMS
-          {
-            echo "Prebuilt OSMesa: Mesa $CI_MESA_VERSION, static, mangled (mgl*), llvmpipe and softpipe, with GLU 9.0.1 and the static LLVM $CI_LLVM_VERSION libraries it needs. Built by [release.yml](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/.github/workflows/release.yml) from ${{ github.sha }}."
-            echo
-            echo "| Archive | Platform |"
-            echo "|---|---|"
-            echo "| \`osmesa-install-$TAG-macos-arm64.tar.xz\` | macOS 14.0 and later, arm64 |"
-            echo "| \`osmesa-install-$TAG-macos-x86_64.tar.xz\` | macOS 14.0 and later, x86_64 |"
-            echo "| \`osmesa-install-$TAG-windows-ucrt64-x86_64.tar.xz\` | Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc), only Windows system DLLs |"
-            echo "| \`osmesa-install-$TAG-linux-x86_64.tar.xz\` | Linux x86_64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |"
-            echo "| \`osmesa-install-$TAG-linux-aarch64.tar.xz\` | Linux aarch64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |"
-            echo
-            if ! ls *-macos-*.tar.xz >/dev/null 2>&1; then
-              echo "The macOS archives are built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/release/macos-vm.sh) from the same commit, and added to this release (with an updated \`SHA256SUMS\`) after it is created."
-              echo
-            fi
-            echo "Each archive has one top-level directory with \`osmesa/include/\`, \`osmesa/lib/\` (\`libMangledOSMesa32.a\`, \`libMangledGLU.a\`), \`osmesa/lib/pkgconfig/osmesa.pc\` (relocatable; \`Libs.private\` lists the LLVM and system libraries), \`llvm/bin/llvm-config\`, \`llvm/lib/libLLVM*.a\`, \`link-flags.txt\`, \`licenses/\` and a \`README.txt\` with the build flags. Verify downloads with \`SHA256SUMS\`."
-          } > ../notes.md
-          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --notes-file ../notes.md *.tar.xz SHA256SUMS
-      - name: Check that the assets are public (anonymous download) and match SHA256SUMS
+          ls assets/*.tar.xz || { echo "::error::no macOS archive was built"; exit 1; }
+          bash release/publish.sh "$TAG" assets/*.tar.xz
+
+  publish-windows:
+    name: Publish, Windows
+    needs: osmesa-windows
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') && needs.osmesa-windows.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: '*-windows-*'
+          path: assets
+          merge-multiple: true
+      - name: Add the archive to the release
         run: |
-          mkdir check && cd check
-          for f in $(cd ../assets && ls *.tar.xz) SHA256SUMS; do
-            curl -fsSL --retry 5 -o "$f" "https://github.com/${{ github.repository }}/releases/download/$TAG/$f"
-          done
-          sha256sum -c SHA256SUMS
+          test "$TAG" = "osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION"
+          ls assets/*.tar.xz || { echo "::error::no Windows archive was built"; exit 1; }
+          bash release/publish.sh "$TAG" assets/*.tar.xz
+
+  publish-linux:
+    name: Publish, Linux
+    needs: osmesa-linux
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') && needs.osmesa-linux.result != 'skipped' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: '*-linux-*'
+          path: assets
+          merge-multiple: true
+      - name: Add the archives to the release
+        run: |
+          test "$TAG" = "osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION"
+          ls assets/*.tar.xz || { echo "::error::no Linux archive was built"; exit 1; }
+          bash release/publish.sh "$TAG" assets/*.tar.xz
+
+  release:
+    name: Check the release, and make it a full release if every platform is there
+    needs: [publish-macos, publish-windows, publish-linux]
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the archives, update SHA256SUMS, publish
+        # with CI_MACOS_ON_VM=1, release/macos-vm.sh --upload adds the macOS archives and finalizes
+        run: |
+          # with CI_MACOS_ON_VM=1, the macOS archives may be missing: release/macos-vm.sh --upload adds
+          # them and finalizes the release
+          if [ "${{ vars.CI_MACOS_ON_VM }}" = 1 ]; then
+            export ALLOW_MISSING="macos-arm64 macos-x86_64"
+          fi
+          bash release/finalize.sh "$TAG"
