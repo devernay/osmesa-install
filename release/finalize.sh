@@ -36,13 +36,20 @@ for attempt in 1 2 3; do
     assets=$(archives) || { echo "Error: can't read release $tag"; exit 1; }
     [ -n "$assets" ] || { echo "Error: release $tag has no archives"; exit 1; }
     curl -fsSL --retry 5 -o SHA256SUMS.old "$url/SHA256SUMS" 2>/dev/null || : > SHA256SUMS.old
+    nochecksum=
     for f in $assets; do
         curl -fsSL --retry 5 -o "$f" "$url/$f"
         if ! curl -fsSL --retry 5 -o "$f.sha256" "$url/$f.sha256" 2>/dev/null; then
-            grep "  $f\$" SHA256SUMS.old > "$f.sha256" || { echo "Error: no checksum for $f"; exit 1; }
+            # older release without ARCHIVE.sha256 (use SHA256SUMS), or publish.sh still uploading it
+            grep "  $f\$" SHA256SUMS.old > "$f.sha256" || { nochecksum=$f; break; }
         fi
         sha256 -c "$f.sha256"
     done
+    if [ -n "$nochecksum" ]; then
+        [ "$attempt" = 3 ] && { echo "Error: no checksum for $nochecksum"; exit 1; }
+        echo "no checksum for $nochecksum yet, checking again in a minute"
+        rm -f ./*; sleep 60; continue
+    fi
     sha256 $assets > SHA256SUMS
     cat SHA256SUMS
     gh release upload "$tag" --repo "$repo" --clobber SHA256SUMS

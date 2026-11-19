@@ -259,7 +259,7 @@ if [ "$upload" = 1 ]; then
     bash "$repo/release/publish.sh" "$tag" $files
     # say in the release notes which archives were built here
     notes=$(gh release view "$tag" --repo devernay/osmesa-install --json body --jq .body)
-    line="The macOS archives ($(echo $ARCHS | sed 's/ /, /g')) were built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/devernay/osmesa-install/blob/$commit/release/macos-vm.sh)."
+    line="Some macOS archives were built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/devernay/osmesa-install/blob/$commit/release/macos-vm.sh) (see \"Built with\" in their README.txt)."
     case "$notes" in *"release/macos-vm.sh"*) ;; *)
         printf '%s\n\n%s\n' "$notes" "$line" > "$WORK/notes.md"
         gh release edit "$tag" --repo devernay/osmesa-install --notes-file "$WORK/notes.md";;

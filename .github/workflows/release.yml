@@ -251,8 +251,6 @@ jobs:
   osmesa-windows:
     name: OSMesa, Windows x86_64 (MSYS2 UCRT64)
     needs: llvm-windows
-    # also when the other architecture's LLVM failed (LLVM is then built here if not cached)
-    if: ${{ !cancelled() && needs.llvm-windows.result != 'skipped' }}
     runs-on: windows-2025
     timeout-minutes: 360 # 60 min, plus LLVM if its cache is missing
     defaults:
@@ -460,7 +458,7 @@ jobs:
   publish-windows:
     name: Publish, Windows
     needs: osmesa-windows
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') && needs.osmesa-windows.result != 'skipped' }}
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') && needs.osmesa-windows.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
