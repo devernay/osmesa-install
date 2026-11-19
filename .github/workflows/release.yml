@@ -405,6 +405,15 @@ jobs:
           cmake --build /tmp/cmaketest/build
           /tmp/cmaketest/build/t 8 20 2
           ldd /tmp/cmaketest/build/t
+      - name: Test the archive with pkg-config (pkg-config --static --cflags --libs osmesa)
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          # without -DMANGLED: the .pc file's Cflags must select the mgl* names (USE_MGL_NAMESPACE)
+          export PKG_CONFIG_PATH="/tmp/unpack/$NAME/osmesa/lib/pkgconfig"
+          pkg-config --static --cflags --libs osmesa
+          gcc -c osdemo/osmesa_mt_test.c -o /tmp/pctest.o $(pkg-config --cflags osmesa)
+          g++ /tmp/pctest.o -o /tmp/pctest $(pkg-config --static --libs osmesa) -lpthread
+          /tmp/pctest 8 20 2
       - uses: actions/upload-artifact@v5
         if: github.event_name != 'pull_request'
         with:

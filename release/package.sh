@@ -70,7 +70,7 @@ Description: Mesa Off-screen Rendering Library (static, mangled mgl* symbols, ll
 Version: $(sed -n 's/^Version: //p' "$osmesaprefix/lib/pkgconfig/osmesa.pc")
 Libs: -L\${libdir} -lMangledOSMesa32
 Libs.private: -L\${llvmlibdir} $(echo "$libs" | sed -e 's/-lMangledGLU //' -e 's/-lMangledOSMesa32 //')
-Cflags: -I\${includedir}
+Cflags: -I\${includedir} -DUSE_MGL_NAMESPACE
 EOF
 
 # CMake config: find_package(OSMesa CONFIG) defines the imported targets OSMesa::OSMesa and OSMesa::GLU
