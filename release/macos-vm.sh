@@ -75,7 +75,14 @@ commit=$(git -C "$repo" rev-parse "$rev^{commit}")
 if [ "$upload" = 1 ]; then
     command -v gh >/dev/null || die "gh not found"
     # don't replace archives built on GitHub (the release may not exist yet: publish.sh creates it)
-    present=$(gh release view "$tag" --repo devernay/osmesa-install --json assets --jq '.assets[].name' 2>/dev/null || true)
+    if gh api "repos/devernay/osmesa-install/releases/tags/$tag" --silent 2>"$WORK.err"; then
+        present=$(gh release view "$tag" --repo devernay/osmesa-install --json assets --jq '.assets[].name')
+    elif grep -q 'HTTP 404' "$WORK.err"; then
+        present=   # no release yet: publish.sh creates it
+    else
+        cat "$WORK.err" >&2; die "can't read release $tag"
+    fi
+    rm -f "$WORK.err"
     archs=
     for arch in $ARCHS; do
         if echo "$present" | grep -qx "osmesa-install-$tag-macos-$arch.tar.xz"; then
@@ -85,7 +92,11 @@ if [ "$upload" = 1 ]; then
         fi
     done
     ARCHS=$archs
-    [ -n "$ARCHS" ] || { log "nothing to build"; exit 0; }
+    if [ -z "$ARCHS" ]; then
+        log "nothing to build, checking the release"
+        ALLOW_MISSING="windows-ucrt64-x86_64 linux-x86_64 linux-aarch64" bash "$repo/release/finalize.sh" "$tag"
+        exit 0
+    fi
 fi
 
 mkdir -p "$WORK"
@@ -244,9 +255,17 @@ if [ "$upload" = 1 ]; then
     log "uploading to release $tag"
     files=
     for arch in $ARCHS; do files="$files $WORK/out/osmesa-install-$tag-macos-$arch.tar.xz"; done
+    # publish.sh never replaces an archive already in the release (e.g. built on GitHub meanwhile)
     bash "$repo/release/publish.sh" "$tag" $files
-    status=0
-    bash "$repo/release/finalize.sh" "$tag" || status=$?
-    [ "$status" = 0 ] || [ "$status" = 2 ] || die "release check failed"
+    # say in the release notes which archives were built here
+    notes=$(gh release view "$tag" --repo devernay/osmesa-install --json body --jq .body)
+    line="The macOS archives ($(echo $ARCHS | sed 's/ /, /g')) were built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/devernay/osmesa-install/blob/$commit/release/macos-vm.sh)."
+    case "$notes" in *"release/macos-vm.sh"*) ;; *)
+        printf '%s\n\n%s\n' "$notes" "$line" > "$WORK/notes.md"
+        gh release edit "$tag" --repo devernay/osmesa-install --notes-file "$WORK/notes.md";;
+    esac
+    # Windows or Linux may still be building on GitHub: the workflow's release job finalizes then
+    ALLOW_MISSING="windows-ucrt64-x86_64 linux-x86_64 linux-aarch64" bash "$repo/release/finalize.sh" "$tag" \
+        || die "release check failed"
     log "release $tag: macOS archives uploaded and verified"
 fi

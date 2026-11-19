@@ -1,46 +1,74 @@
 #!/bin/bash
 # Check the GitHub release TAG and, if it has every platform's archive, make it a full release.
-# Every archive in the release is downloaded anonymously and checked against its .sha256, and
-# SHA256SUMS is rebuilt from them. Exits with status 2 (and leaves it a pre-release) if a platform is
-# missing, 1 on other errors.
+# Every archive in the release is downloaded anonymously and checked against its ARCHIVE.sha256 (or,
+# for older releases without it, against the release's SHA256SUMS), and SHA256SUMS is rebuilt from
+# them. If a platform is missing, the release stays a pre-release, and this fails unless all the
+# missing platforms are in ALLOW_MISSING.
 #
 # Usage: release/finalize.sh TAG
 # Needs gh (logged in, or GH_TOKEN) and curl. GITHUB_REPOSITORY: owner/repo (devernay/osmesa-install).
-# PLATFORMS: the expected archive suffixes.
+# PLATFORMS: the expected archive suffixes. ALLOW_MISSING: platforms that may be missing (e.g. the
+# macOS ones, added later by release/macos-vm.sh). Exit status: 0 if the release is complete or only
+# allowed platforms are missing, 1 otherwise.
 
 set -eu
 set -o pipefail
 
 tag=$1
 repo=${GITHUB_REPOSITORY:-devernay/osmesa-install}
+url="https://github.com/$repo/releases/download/$tag"
 PLATFORMS=${PLATFORMS:-"macos-arm64 macos-x86_64 windows-ucrt64-x86_64 linux-x86_64 linux-aarch64"}
+ALLOW_MISSING=${ALLOW_MISSING:-}
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
-
 check=$(mktemp -d)
+trap 'rm -rf "$check"' EXIT
 cd "$check"
-assets=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' | grep '\.tar\.xz$' || true)
-[ -n "$assets" ] || { echo "Error: release $tag has no archives"; exit 1; }
-for f in $assets; do
-    for g in "$f" "$f.sha256"; do
-        curl -fsSL --retry 5 -o "$g" "https://github.com/$repo/releases/download/$tag/$g"
+
+archives() { # the release's archives, sorted (fails if the release can't be read)
+    local names
+    names=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name') || return 1
+    echo "$names" | grep '\.tar\.xz$' | sort || true
+}
+
+# another finalize.sh (e.g. the workflow's and macos-vm.sh's) may add archives meanwhile: redo
+# until the list of archives is the same before and after writing SHA256SUMS
+for attempt in 1 2 3; do
+    assets=$(archives) || { echo "Error: can't read release $tag"; exit 1; }
+    [ -n "$assets" ] || { echo "Error: release $tag has no archives"; exit 1; }
+    curl -fsSL --retry 5 -o SHA256SUMS.old "$url/SHA256SUMS" 2>/dev/null || : > SHA256SUMS.old
+    for f in $assets; do
+        curl -fsSL --retry 5 -o "$f" "$url/$f"
+        if ! curl -fsSL --retry 5 -o "$f.sha256" "$url/$f.sha256" 2>/dev/null; then
+            grep "  $f\$" SHA256SUMS.old > "$f.sha256" || { echo "Error: no checksum for $f"; exit 1; }
+        fi
+        sha256 -c "$f.sha256"
     done
-    sha256 -c "$f.sha256"
+    sha256 $assets > SHA256SUMS
+    cat SHA256SUMS
+    gh release upload "$tag" --repo "$repo" --clobber SHA256SUMS
+    [ "$(archives)" = "$assets" ] && break
+    [ "$attempt" = 3 ] && { echo "Error: the release's archives keep changing"; exit 1; }
+    echo "the release's archives changed meanwhile, checking again"
+    rm -f ./*
 done
-sha256 $assets > SHA256SUMS
-cat SHA256SUMS
-gh release upload "$tag" --repo "$repo" --clobber SHA256SUMS
 rm -f SHA256SUMS
-curl -fsSL --retry 5 -o SHA256SUMS "https://github.com/$repo/releases/download/$tag/SHA256SUMS"
+curl -fsSL --retry 5 -o SHA256SUMS "$url/SHA256SUMS"
 sha256 -c SHA256SUMS
 
 missing=
 for p in $PLATFORMS; do
-    echo "$assets" | grep -qx "osmesa-install-$tag-$p.tar.xz" || missing="$missing $p"
+    echo "$assets" | grep -qxF "osmesa-install-$tag-$p.tar.xz" || missing="$missing $p"
 done
-cd / && rm -rf "$check"
 if [ -n "$missing" ]; then
     echo "Release $tag stays a pre-release, missing:$missing"
-    exit 2
+    for p in $missing; do
+        case " $ALLOW_MISSING " in *" $p "*) ;; *) exit 1;; esac
+    done
+    exit 0
 fi
-gh release edit "$tag" --repo "$repo" --prerelease=false --latest
+# "Latest" only if no newer osmesa-mesa-* release exists (an older tag may be completed later)
+newest=$(gh release list --repo "$repo" --limit 100 --json tagName --jq '.[].tagName' | grep '^osmesa-mesa-' | sort -V | tail -n 1)
+latest=false
+[ "$newest" = "$tag" ] && latest=true
+gh release edit "$tag" --repo "$repo" --prerelease=false --latest=$latest
 echo "Release $tag: every platform is there, published as a full release"
