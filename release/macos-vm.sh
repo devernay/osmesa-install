@@ -22,7 +22,8 @@
 # Line Tools' /usr/bin/python3 by default), and gh for --upload.
 # Environment: WORK (/tmp/osmesa-macos-vm, must not be in ~/Documents), ARCHS ("arm64 x86_64"),
 # BASE_IMAGE, VM_CPU (4), VM_MEMORY (8192 MB), MKJOBS (4), HOST_PYTHON (/usr/bin/python3), KEEP_VM (0),
-# MAX_LOAD (number of CPUs: each VM waits until the host load average is below it).
+# MAX_LOAD (number of CPUs: each VM waits until the host load average is below it), MIN_FREE_GB (30:
+# and until that much disk space is free).
 
 set -eu
 set -o pipefail
@@ -46,6 +47,7 @@ VM_MEMORY=${VM_MEMORY:-8192}
 MKJOBS=${MKJOBS:-4}
 HOST_PYTHON=${HOST_PYTHON:-/usr/bin/python3}
 KEEP_VM=${KEEP_VM:-0}
+MIN_FREE_GB=${MIN_FREE_GB:-30}
 deploymenttarget=14.0
 gluversion=9.0.1
 demoversion=8.4.0
@@ -198,6 +200,11 @@ for arch in $ARCHS; do
     while load=$(sysctl -n vm.loadavg | awk '{print int($2)}'); [ "$load" -ge "$maxload" ]; do
         log "host load $load >= $maxload (MAX_LOAD), waiting"
         sleep 120
+    done
+    # the clone grows by up to ~20 GB during the build
+    while free=$(df -g "$WORK" | awk 'NR==2 {print $4}'); [ "$free" -lt "$MIN_FREE_GB" ]; do
+        log "only $free GB free on the disk of $WORK (< MIN_FREE_GB=$MIN_FREE_GB), waiting"
+        sleep 300
     done
     vm="osmesa-macos-vm-$arch-$$"
     log "$arch: cloning $BASE_IMAGE as $vm"
