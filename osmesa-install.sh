@@ -461,7 +461,11 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
             fi
         fi
         if [ "$llvmproject" = 1 ]; then
-            $xzcat llvm-project-${llvmversion}.src.tar.xz | tar xf -
+            # only extract what is needed to build the LLVM libraries (the other projects are large,
+            # and contain symbolic links that tar can't create on Windows)
+            $xzcat llvm-project-${llvmversion}.src.tar.xz | tar xf - \
+                llvm-project-${llvmversion}.src/llvm llvm-project-${llvmversion}.src/cmake \
+                llvm-project-${llvmversion}.src/third-party llvm-project-${llvmversion}.src/LICENSE.TXT
             cd llvm-project-${llvmversion}.src/llvm
         else
             $xzcat llvm-${llvmversion}.src.tar.$archsuffix | tar xf -
@@ -577,7 +581,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 debugopts="-DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF"
             fi
 
-            env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX="${llvmprefix}" \
+            env CC="$CC" CXX="$CXX" REQUIRES_RTTI=1 cmake -G "$cmakegen" .. -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_INSTALL_PREFIX="$(nativepath "${llvmprefix}")" \
                 -DLLVM_TARGETS_TO_BUILD="host" \
                 -DLLVM_ENABLE_RTTI=ON \
                 -DLLVM_REQUIRES_RTTI=ON \
@@ -599,7 +603,7 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                 # tools are not built (LLVM_BUILD_TOOLS=OFF), except llvm-config, which Mesa needs
                 env REQUIRES_RTTI=1 make -j"${mkjobs}" llvm-config
                 mkdir -p "$llvmprefix/bin"
-                cp bin/llvm-config "$llvmprefix/bin/"
+                cp bin/llvm-config* "$llvmprefix/bin/" # llvm-config.exe on Windows
             fi
             cd ..
         fi
@@ -1144,6 +1148,8 @@ elif [ "$use_meson" = 1 ]; then
         -Dvalgrind=disabled \
         -Dlibunwind=disabled \
         -Dzstd=disabled \
+        -Dzlib=disabled \
+        -Dshader-cache=disabled \
         -Dxmlconfig=disabled \
         -Dexpat=disabled"
     if [ "$debug" = 1 ]; then
@@ -1166,13 +1172,18 @@ elif [ "$use_meson" = 1 ]; then
         mesonflags="-DUSE_MGL_NAMESPACE"
     fi
     if [ "$osname" = Darwin ]; then
-        mesonflags="$mesonflags -arch $(uname -m)"
+        # architecture (from uname -m, so that running the script under "arch -x86_64" on Apple
+        # Silicon builds for x86_64), minimum macOS version and SDK: also for GLU and the osdemos
+        darwinflags="-arch $(uname -m)"
         if [ -n "${MACOSX_DEPLOYMENT_TARGET+x}" ]; then
-            mesonflags="$mesonflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
+            darwinflags="$darwinflags -mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET"
         fi
         if [ -n "${SDKROOT+x}" ]; then
-            mesonflags="$mesonflags -isysroot $SDKROOT"
+            darwinflags="$darwinflags -isysroot $SDKROOT"
         fi
+        CFLAGS="$CFLAGS $darwinflags"
+        CXXFLAGS="$CXXFLAGS $darwinflags"
+        LDFLAGS="${LDFLAGS:-} $darwinflags"
     fi
     rm -rf build-meson
     env CC="$CC" CXX="$CXX" CFLAGS="$CFLAGS $mesonflags" CXXFLAGS="$CXXFLAGS $mesonflags" LDFLAGS="${LDFLAGS:-} $llvmdepldflags" \
@@ -1244,7 +1255,7 @@ elif [ "$use_meson" = 1 ]; then
             "$osmesaprefix/bin/"opengl32.dll "$osmesaprefix/lib/"libopengl32*.dll.a \
             "$osmesaprefix/bin/"libgallium_wgl.dll "$osmesaprefix/lib/"libgallium_wgl*.dll.a
         # pkg-config file for the static library
-        osmesalibsprivate="-lz -lpthread -lm"
+        osmesalibsprivate="-lpthread -lm"
         if [ "$osmesadriver" != 2 ]; then
             osmesalibsprivate="$llvmlibs $osmesalibsprivate"
         fi
@@ -1373,16 +1384,18 @@ fi
 if [ -z "${OSDEMO_LD:-}" ]; then
     OSDEMO_LD="$CXX"
 fi
-if [ "$osname" = Darwin ] || [ "$osname" = Linux ] || [ "$mesonbuild" = 1 ]; then
+if [ "$mesonbuild" = 0 ] && { [ "$osname" = Darwin ] || [ "$osname" = Linux ]; }; then
     # strange, got 'Undefined symbols for architecture x86_64' without zlib for both llvmpipe and softpipe drivers.
     # missing symbols are _deflate, _deflateEnd, _deflateInit_, _inflate, _inflateEnd and _inflateInit
+    # (Mesa >= 19 is built without zlib)
     LIBS32="$LIBS32 -lz"
 fi
 if [ "$mesonbuild" = 1 ]; then
     case "$osname" in
         Msys*|MSYS*|MINGW*)
-            # Windows system libraries used by Mesa (futex: WaitOnAddress, ...)
-            LIBS32="$LIBS32 -lsynchronization -lws2_32"
+            # Windows system libraries used by Mesa (futex: WaitOnAddress, ...), and link statically
+            # (libstdc++, zlib, winpthreads), as plug-ins do: only Windows system DLLs are needed
+            LIBS32="$LIBS32 -lsynchronization -lws2_32 -static"
             ;;
     esac
 fi

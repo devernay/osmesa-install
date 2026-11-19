@@ -40,6 +40,35 @@ bash ../osmesa-install.sh
 - there is a test program on the `osdemo` directory, with a few checks, and a multithreaded test (`osdemo/osmesa_mt_test.c`), which the script runs at the end
 - LLVM (for the `llvmpipe` driver): by default (`LLVM_BUILD=auto`), the script uses the LLVM in `LLVM_PREFIX` (`/opt/llvm`) if it is suitable for the Mesa version (version, RTTI, static libraries), and downloads and builds it there if `LLVM_PREFIX` contains no LLVM. An existing, unsuitable LLVM is never replaced automatically: the script stops, and you can give another `LLVM_PREFIX` (e.g. `/opt/llvm-15.0.7` for Mesa 25.0.7), or use `LLVM_BUILD=1` to rebuild it in place. `LLVM_BUILD=0` never builds LLVM. With `LLVM_SYSTEM=1`, if `LLVM_PREFIX` has no suitable LLVM, the newest suitable LLVM installed by MacPorts, Homebrew or the system is used instead (skipping those built for a newer macOS than `MACOSX_DEPLOYMENT_TARGET`). LLVM is still linked statically, but the result then depends on that LLVM's own dependencies (e.g. `libzstd`, `libxml2` from MacPorts or Homebrew) and minimum macOS version: use it for local builds, not for redistributed plugins.
 
+## Prebuilt binaries (GitHub releases)
+
+The [releases](https://github.com/devernay/osmesa-install/releases) named `osmesa-mesa-<Mesa version>-llvm-<LLVM version>` have prebuilt, static, mangled OSMesa (llvmpipe and softpipe) with GLU and the static LLVM libraries it needs, so that plug-ins can link OSMesa without building Mesa and LLVM:
+
+| Archive suffix | Platform |
+|---|---|
+| `macos-arm64`, `macos-x86_64` | macOS 14.0 and later (`MACOSX_DEPLOYMENT_TARGET=14.0`), built in a macOS 14 VM with the Command Line Tools' clang and the macOS 14 SDK |
+| `windows-ucrt64-x86_64` | Windows 10 and later, MSYS2 UCRT64 (MinGW-w64 gcc); only Windows system DLLs are needed |
+| `linux-x86_64`, `linux-aarch64` | Linux with glibc 2.34 or later (Rocky/RHEL 9, gcc-toolset-14; link with gcc-toolset-14 or newer); no libdrm |
+
+The archives are named `osmesa-install-<tag>-<platform>.tar.xz`. Each has one top-level directory with `osmesa/include/`, `osmesa/lib/` (`libMangledOSMesa32.a`, `libMangledGLU.a`), `osmesa/lib/pkgconfig/osmesa.pc` (relocatable, for `pkg-config --static --libs osmesa`; `Libs.private` lists the LLVM and system libraries), `llvm/bin/llvm-config` with `llvm/lib/libLLVM*.a` and `llvm/include/`, `link-flags.txt` (the libraries to link, in order), `licenses/`, and a `README.txt` with the versions and build flags. `SHA256SUMS` lists the archives' checksums.
+
+### Making a release
+
+The releases are built by [`.github/workflows/release.yml`](.github/workflows/release.yml), on GitHub's runners. If GitHub's macOS runners are unavailable (it happens for open-source projects), the macOS archives can instead be built locally by [`release/macos-vm.sh`](release/macos-vm.sh) in macOS 14 [tart](https://tart.run) VMs (step 5). The binaries are never committed to git: they are attached to the GitHub release as assets.
+
+1. **Set the versions** in `release.yml`: `CI_MESA_VERSION`, `CI_LLVM_VERSION`, and the `NAME` of each archive. The tag must be `osmesa-mesa-<CI_MESA_VERSION>-llvm-<CI_LLVM_VERSION>`; the publish job checks this.
+2. **Merge** the change to `master`. Pull requests that change `release.yml`, `release/` or `.github/macports-mesa25.yaml` build and check every platform, but upload nothing.
+3. **Optionally, run the workflow by hand on `master`** (Actions, release, Run workflow). This builds LLVM once per platform and caches it on `master`, where later tags can use it, and keeps the archives as workflow artifacts for a few days, to inspect them before publishing. Without it, the tag's run builds LLVM itself (about 2 hours longer, for Windows).
+4. **Push the tag**, e.g. `git tag osmesa-mesa-25.0.7-llvm-19.1.7 && git push origin osmesa-mesa-25.0.7-llvm-19.1.7`. The workflow then runs three stages:
+   - **LLVM**, one job per platform: restores LLVM from the cache, or builds it with `osmesa-install.sh` and caches it.
+   - **OSMesa**, one job per platform, after its LLVM: builds and tests OSMesa, GLU and the osdemos; checks the mangling, the macOS architecture and minimum version, that only system libraries are needed, and that there's no libdrm on Linux; and packages `osmesa-install-<tag>-<platform>.tar.xz`.
+   - **Publish**, once all platforms pass: creates the GitHub release with the archives and `SHA256SUMS`, then downloads every asset anonymously to check that it is public and matches `SHA256SUMS`.
+
+   If any job fails, nothing is published: fix the problem, delete the tag (`git push origin :refs/tags/<tag>`), and push it again.
+5. **Only if GitHub's macOS runners are unavailable** (the macOS jobs stay queued): cancel the run, delete the tag, set the repository variable `CI_MACOS_ON_VM` to `1` (Settings, Secrets and variables, Actions, Variables), and push the tag again. The macOS jobs are then skipped on tags and the release is published with the Windows and Linux archives. Then add the macOS archives, on a Mac with Apple Silicon and [tart](https://tart.run): `release/macos-vm.sh --upload <tag>`. For each architecture, it clones `ghcr.io/cirruslabs/macos-sonoma-base` (macOS 14, the Command Line Tools and Rosetta) into a throwaway VM, builds LLVM, OSMesa, GLU and the osdemos from `git archive <tag>` (x86_64 under Rosetta), runs the same checks as the workflow, and packages the archive. Nothing is installed in the VM: the sources, the tarballs and the Python build tools (meson, ninja, cmake, pkgconf, mako, pyyaml, from PyPI wheels) are prepared on the host in a directory shared with the VM (`/tmp/osmesa-macos-vm`), and the VM needs no network. It then uploads both archives to the release with `gh`, rebuilds `SHA256SUMS` from all the release's archives, and checks anonymous downloads against it. This takes about 1h15 on Apple Silicon (arm64: 20 min; x86_64 under Rosetta: 50 min, mostly LLVM). Each VM uses 4 CPUs, 8 GB of memory and up to ~20 GB of disk, and starts only when the host load is below `MAX_LOAD` and `MIN_FREE_GB` (30) GB are free. Without `--upload`, it only builds the archives into `/tmp/osmesa-macos-vm/out` (from HEAD if the tag doesn't exist yet), to test the build. Delete the variable afterwards, so that the next release is built on GitHub again.
+
+The release is then at `https://github.com/devernay/osmesa-install/releases/tag/<tag>`, and its files at `https://github.com/devernay/osmesa-install/releases/download/<tag>/<file>`. A release can't be published twice under the same tag: to republish the same versions (e.g. after a fix in the script), delete the release and its tag first, or bump the LLVM cache version (`CI_LLVM_CACHE_VERSION`) if the LLVM build changed.
+
 ## Mesa 25.0.7
 
 Mesa 25.0.7 is the last Mesa release with OSMesa (it was removed in 25.1). It is thread-safe without patches, and the script adds back mangling support and per-context driver selection (see [PATCHES.md](PATCHES.md)). To build it:

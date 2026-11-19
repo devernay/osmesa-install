@@ -1,0 +1,467 @@
+name: release
+
+# Prebuilt OSMesa (static, mangled, llvmpipe + softpipe) with its static LLVM, for openfx-misc's
+# Shadertoy and other plug-ins that can't build Mesa and LLVM in their own CI.
+#
+# Two stages per platform:
+# 1. llvm-*: builds LLVM with osmesa-install.sh, only if it is not already cached, and caches it
+#    (15 min to 2 h, so it is done once per LLVM version and platform).
+# 2. osmesa-*: restores that LLVM from the cache, builds and tests OSMesa, GLU and the osdemos, and
+#    packages them with the LLVM libraries they need.
+#
+# - Tag osmesa-mesa-<mesa version>-llvm-<llvm version> (e.g. osmesa-mesa-25.0.7-llvm-19.1.7): builds
+#   every platform, then publishes a GitHub release with one archive per platform and SHA256SUMS.
+#   Fallback when GitHub's macOS runners are unavailable: set the repository variable
+#   CI_MACOS_ON_VM=1 before pushing the tag. The macOS jobs then don't run on tags, the release is
+#   published with the Windows and Linux archives, and release/macos-vm.sh --upload builds the macOS
+#   archives in local macOS 14 VMs and adds them to it.
+# - workflow_dispatch: builds every platform and keeps the archives as workflow artifacts.
+# - Pull requests changing this workflow or release/: build and check everything, upload nothing.
+
+on:
+  push:
+    tags: ['osmesa-mesa-*-llvm-*']
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['.github/workflows/release.yml', '.github/macports-mesa25.yaml', 'release/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI_MESA_VERSION: 25.0.7
+  CI_LLVM_VERSION: 19.1.7
+  # Bump when the LLVM build in osmesa-install.sh changes, to rebuild the cached LLVMs.
+  CI_LLVM_CACHE_VERSION: v1
+
+jobs:
+  ##################################################################################################
+  # Stage 1: LLVM
+
+  llvm-macos:
+    name: LLVM, macOS ${{ matrix.arch }}
+    # with CI_MACOS_ON_VM=1, not on tags: the macOS release archives are built by release/macos-vm.sh
+    if: (github.ref_type != 'tag' || vars.CI_MACOS_ON_VM != '1') && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: arm64, runner: macos-15}
+          - {arch: x86_64, runner: macos-15-intel}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Look for a cached LLVM
+        id: llvm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/llvm-${{ env.CI_LLVM_VERSION }}
+          key: release-macos-${{ matrix.arch }}-${{ env.MACOSX_DEPLOYMENT_TARGET }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
+          lookup-only: true
+      - name: Install MacPorts (cached)
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: melusina-org/setup-macports@v1
+        with:
+          parameters: .github/macports-mesa25.yaml
+      - name: Build LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          export PATH=/opt/local/bin:/opt/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin # MacPorts only
+          mkdir -p build "$HOME/osmesa" "$HOME/llvm-$CI_LLVM_VERSION"
+          cd build
+          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-$CI_LLVM_VERSION" \
+              BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(sysctl -n hw.ncpu) \
+              bash ../osmesa-install.sh
+      - name: Cache LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/llvm-${{ env.CI_LLVM_VERSION }}
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
+
+  llvm-windows:
+    name: LLVM, Windows x86_64 (MSYS2 UCRT64)
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: windows-2025
+    # building LLVM takes 1.5-2 h on a Windows runner
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Look for a cached LLVM
+        id: llvm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: llvm-${{ env.CI_LLVM_VERSION }}
+          key: release-windows-ucrt64-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
+          lookup-only: true
+      - uses: msys2/setup-msys2@v2
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        with:
+          msystem: UCRT64
+          update: true
+          cache: true
+          install: make patch diffutils tar xz curl
+          pacboy: gcc:p binutils:p cmake:p python:p
+      - name: Build LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          llvm="$PWD/llvm-$CI_LLVM_VERSION"
+          mkdir -p build "$HOME/osmesa" "$llvm"
+          cd build
+          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
+              BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(nproc) \
+              bash ../osmesa-install.sh
+      - name: Cache LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: llvm-${{ env.CI_LLVM_VERSION }}
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
+
+  llvm-linux:
+    name: LLVM, Linux ${{ matrix.arch }} (Rocky 9, gcc-toolset-14)
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ${{ matrix.runner }}
+    container: rockylinux:9
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x86_64, runner: ubuntu-24.04}
+          - {arch: aarch64, runner: ubuntu-24.04-arm}
+    steps:
+      - name: Install the build tools
+        run: |
+          dnf install -y dnf-plugins-core
+          dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz which git python3.12
+      - uses: actions/checkout@v7
+      - name: Look for a cached LLVM
+        id: llvm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: /root/llvm-${{ env.CI_LLVM_VERSION }}
+          key: release-linux-rocky9-gcc14-${{ matrix.arch }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
+          lookup-only: true
+      - name: Build LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          mkdir -p build /root/osmesa "/root/llvm-$CI_LLVM_VERSION"
+          cd build
+          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX=/root/osmesa LLVM_PREFIX="/root/llvm-$CI_LLVM_VERSION" \
+              BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(nproc) \
+              bash ../osmesa-install.sh
+      - name: Cache LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /root/llvm-${{ env.CI_LLVM_VERSION }}
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
+
+  ##################################################################################################
+  # Stage 2: OSMesa, with the cached LLVM
+
+  osmesa-macos:
+    name: OSMesa, macOS ${{ matrix.arch }}
+    needs: llvm-macos
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: arm64, runner: macos-15}
+          - {arch: x86_64, runner: macos-15-intel}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-macos-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Restore LLVM
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/llvm-${{ env.CI_LLVM_VERSION }}
+          key: release-macos-${{ matrix.arch }}-${{ env.MACOSX_DEPLOYMENT_TARGET }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
+          fail-on-cache-miss: true
+      - name: Install MacPorts (cached)
+        uses: melusina-org/setup-macports@v1
+        with:
+          parameters: .github/macports-mesa25.yaml
+      - name: MacPorts only (no Homebrew)
+        run: echo "PATH=/opt/local/bin:/opt/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin" >> "$GITHUB_ENV"
+      - name: Build OSMesa, GLU and osdemo
+        run: |
+          mkdir -p build "$HOME/osmesa"
+          cd build
+          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$HOME/llvm-$CI_LLVM_VERSION" \
+              PYTHON=/opt/local/bin/python3.13 MKJOBS=$(sysctl -n hw.ncpu) \
+              bash ../osmesa-install.sh
+      - name: Check the libraries
+        run: |
+          set -o pipefail
+          lib="$HOME/osmesa/lib"
+          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T _gl[A-Z]' || true)" = 0
+          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T _mgl[A-Z]' || true)" -gt 1000
+          test "$(nm -g "$lib/libMangledGLU.a" 2>/dev/null | grep -c ' T _glu[A-Z]' || true)" = 0
+          # architecture and minimum macOS version of every object
+          lipo -info "$lib/libMangledOSMesa32.a" | grep -w "${{ matrix.arch }}"
+          for a in "$lib/libMangledOSMesa32.a" "$lib/libMangledGLU.a" "$HOME/llvm-$CI_LLVM_VERSION/lib/libLLVMCore.a"; do
+            minos=$(otool -l "$a" | awk '/minos/ {print $2}' | sort -u | tr '\n' ' ')
+            echo "$a: minos $minos"
+            test "$minos" = "$MACOSX_DEPLOYMENT_TARGET "
+          done
+          # the test programs only depend on system libraries
+          for f in osdemo osdemo16 osdemo32 osmesa_mt_test; do
+            p=$(ls build/mesa-demos-*/src/osdemos/$f)
+            if otool -L "$p" | tail -n +2 | grep -Ev '^[[:space:]]*(/usr/lib/|/System/)'; then
+              echo "::error::$f depends on non-system libraries"; exit 1
+            fi
+          done
+      - name: Package
+        run: |
+          mkdir -p out
+          echo "  macOS $(sw_vers -productVersion) runner, $(xcodebuild -version | head -1), Apple clang $(clang -dumpversion), MacPorts, MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET" > "out/$NAME.buildinfo"
+          bash release/package.sh "$NAME" "$HOME/osmesa" "$HOME/llvm-$CI_LLVM_VERSION" build out \
+              "macOS ${MACOSX_DEPLOYMENT_TARGET} and later, ${{ matrix.arch }}"
+          tar tJf "out/$NAME.tar.xz" | sed -n 1,40p
+      - uses: actions/upload-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          name: ${{ env.NAME }}
+          path: out/${{ env.NAME }}.tar.xz
+          if-no-files-found: error
+
+  osmesa-windows:
+    name: OSMesa, Windows x86_64 (MSYS2 UCRT64)
+    needs: llvm-windows
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-windows-ucrt64-x86_64
+    steps:
+      - uses: actions/checkout@v7
+      - name: Restore LLVM
+        uses: actions/cache/restore@v6
+        with:
+          path: llvm-${{ env.CI_LLVM_VERSION }}
+          key: release-windows-ucrt64-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
+          fail-on-cache-miss: true
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          cache: true
+          install: >-
+            make patch diffutils tar xz curl bison flex autoconf automake libtool
+          pacboy: >-
+            gcc:p binutils:p pkgconf:p cmake:p meson:p ninja:p
+            python:p python-mako:p python-yaml:p python-packaging:p
+            zlib:p freeglut:p
+      - name: Build OSMesa, GLU and osdemo
+        run: |
+          llvm="$PWD/llvm-$CI_LLVM_VERSION"
+          mkdir -p build "$HOME/osmesa"
+          cd build
+          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
+              PYTHON="$MSYSTEM_PREFIX/bin/python3" MKJOBS=$(nproc) \
+              bash ../osmesa-install.sh
+      - name: Check the libraries
+        run: |
+          lib="$HOME/osmesa/lib"
+          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]' || true)" = 0
+          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
+          test "$(nm -g "$lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
+          # the test programs only need Windows system DLLs (no MSYS2 DLLs)
+          for f in osdemo osdemo16 osdemo32 osmesa_mt_test; do
+            p=$(ls build/mesa-demos-*/src/osdemos/$f.exe)
+            deps=$(objdump -p "$p" | sed -n 's/^\s*DLL Name: //p')
+            echo "$f:" $deps
+            if echo "$deps" | grep -viE '^(kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|uuid|ws2_32|psapi|dbghelp|ntdll|bcrypt|synchronization|msvcrt|ucrtbase|opengl32|api-ms-win-.*)\.dll$'; then
+              echo "::error::$f depends on non-system DLLs"; exit 1
+            fi
+          done
+      - name: Package
+        run: |
+          mkdir -p out
+          echo "  Windows Server 2025 runner, MSYS2 UCRT64, $(gcc --version | head -1), for Windows 10 and later" > "out/$NAME.buildinfo"
+          bash release/package.sh "$NAME" "$HOME/osmesa" "$PWD/llvm-$CI_LLVM_VERSION" build out \
+              "Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc, UCRT)"
+          tar tJf "out/$NAME.tar.xz" | sed -n 1,40p
+      - uses: actions/upload-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          name: ${{ env.NAME }}
+          path: out/${{ env.NAME }}.tar.xz
+          if-no-files-found: error
+
+  osmesa-linux:
+    name: OSMesa, Linux ${{ matrix.arch }} (Rocky 9, gcc-toolset-14)
+    needs: llvm-linux
+    runs-on: ${{ matrix.runner }}
+    container: rockylinux:9
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x86_64, runner: ubuntu-24.04}
+          - {arch: aarch64, runner: ubuntu-24.04-arm}
+    env:
+      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-linux-${{ matrix.arch }}
+    steps:
+      - name: Install build dependencies
+        # no libdrm: Mesa links it when its headers are found, and OSMesa doesn't need it
+        run: |
+          dnf install -y dnf-plugins-core epel-release
+          dnf config-manager --set-enabled crb
+          dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz bzip2 which file git \
+              python3.12 python3.12-pip bison flex autoconf automake libtool pkgconfig \
+              zlib-devel freeglut-devel
+          python3.12 -m pip install meson ninja mako pyyaml packaging
+          # freeglut-devel (GL/glut.h, for the osdemos) pulls in mesa-libGL-devel and libdrm-devel:
+          # remove libdrm's headers and pkg-config file, so that Mesa can't find and link libdrm
+          rpm -e --nodeps libdrm-devel
+          ! pkg-config --exists libdrm
+      - uses: actions/checkout@v7
+      - name: Restore LLVM
+        uses: actions/cache/restore@v6
+        with:
+          path: /root/llvm-${{ env.CI_LLVM_VERSION }}
+          key: release-linux-rocky9-gcc14-${{ matrix.arch }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
+          fail-on-cache-miss: true
+      - name: Build OSMesa, GLU and osdemo
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          export PATH="/usr/local/bin:$PATH" # meson and ninja from pip
+          mkdir -p build /root/osmesa
+          cd build
+          env OSMESA_VERSION=$CI_MESA_VERSION OSMESA_PREFIX=/root/osmesa LLVM_PREFIX="/root/llvm-$CI_LLVM_VERSION" \
+              PYTHON=/usr/bin/python3.12 MKJOBS=$(nproc) \
+              bash ../osmesa-install.sh
+      - name: Check the libraries
+        run: |
+          lib=/root/osmesa/lib
+          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]' || true)" = 0
+          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
+          test "$(nm -g "$lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
+          # no libdrm, no zlib
+          test "$(nm -u "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' drm' || true)" = 0
+          test "$(nm -u "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -cE ' (inflate|deflate)' || true)" = 0
+          # the test program only needs the system runtime (libc, libm, libpthread, libdl, librt,
+          # libstdc++, libgcc_s), as plug-in bundles require
+          ldd build/mesa-demos-*/src/osdemos/osmesa_mt_test
+          if ldd build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -vE '^\s*(linux-vdso|/lib(64)?/ld-linux|lib(c|m|pthread|dl|rt|stdc\+\+|gcc_s)\.so)'; then
+            echo "::error::osmesa_mt_test depends on non-system libraries"; exit 1
+          fi
+          # linked with gcc-toolset-14, it must only need the libstdc++ of Rocky 9's GCC 11
+          # (GLIBCXX_3.4.29, CXXABI_1.3.13): newer symbols come from libstdc++_nonshared.a;
+          # and the glibc of Rocky 9 (GLIBC_2.34)
+          gccmax=7.0.0; [ "${{ matrix.arch }}" = aarch64 ] && gccmax=11.0
+          for v in "GLIBCXX_ 3.4.29" "CXXABI_ 1.3.13" "GLIBC_ 2.34" "GCC_ $gccmax"; do
+            set -- $v
+            newest=$(objdump -T build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -o "$1[0-9.]*" | sed "s/^$1//" | sort -uV | tail -1)
+            echo "newest $1: $newest (Rocky 9: $2)"
+            test "$(printf '%s\n' "$newest" "$2" | sort -V | tail -1)" = "$2"
+          done
+          # no packed relative relocations (DT_RELR), which EL9's loader doesn't support
+          ! readelf -d build/mesa-demos-*/src/osdemos/osmesa_mt_test | grep -q RELR
+      - name: Package
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          mkdir -p out
+          echo "  Rocky Linux $(rpm -E %rhel) container, $(gcc --version | head -1), glibc $(ldd --version | head -1 | awk '{print $NF}')" > "out/$NAME.buildinfo"
+          bash release/package.sh "$NAME" /root/osmesa "/root/llvm-$CI_LLVM_VERSION" build out \
+              "Linux ${{ matrix.arch }}, glibc 2.34 and later (Rocky/RHEL 9), gcc-toolset-14"
+          tar tJf "out/$NAME.tar.xz" | sed -n 1,40p
+      - name: Test the archive with CMake (find_package(OSMesa CONFIG), OSMesa::OSMesa)
+        run: |
+          source /opt/rh/gcc-toolset-14/enable
+          mkdir -p /tmp/unpack /tmp/cmaketest && tar xJf "out/$NAME.tar.xz" -C /tmp/unpack
+          cp osdemo/osmesa_mt_test.c /tmp/cmaketest/
+          printf '%s\n' 'cmake_minimum_required(VERSION 3.16)' 'project(t C CXX)' \
+              'find_package(OSMesa CONFIG REQUIRED)' 'find_package(Threads REQUIRED)' \
+              'add_executable(t osmesa_mt_test.c)' 'target_compile_definitions(t PRIVATE MANGLED)' \
+              'target_link_libraries(t PRIVATE OSMesa::GLU Threads::Threads)' \
+              'set_target_properties(t PROPERTIES LINKER_LANGUAGE CXX)' > /tmp/cmaketest/CMakeLists.txt
+          cmake -S /tmp/cmaketest -B /tmp/cmaketest/build -DOSMesa_DIR="/tmp/unpack/$NAME/osmesa/lib/cmake/OSMesa"
+          cmake --build /tmp/cmaketest/build
+          /tmp/cmaketest/build/t 8 20 2
+          ldd /tmp/cmaketest/build/t
+      - uses: actions/upload-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          name: ${{ env.NAME }}
+          path: out/${{ env.NAME }}.tar.xz
+          if-no-files-found: error
+
+  ##################################################################################################
+  # Publish (tags only)
+
+  publish:
+    name: Publish the release
+    needs: [osmesa-macos, osmesa-windows, osmesa-linux]
+    # every platform must pass, except macOS when CI_MACOS_ON_VM=1 (built by release/macos-vm.sh)
+    if: >-
+      always() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') &&
+      needs.osmesa-windows.result == 'success' && needs.osmesa-linux.result == 'success' &&
+      (needs.osmesa-macos.result == 'success' || (vars.CI_MACOS_ON_VM == '1' && needs.osmesa-macos.result == 'skipped'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Create the release
+        run: |
+          # the tag must name the Mesa and LLVM versions that this workflow builds
+          test "$TAG" = "osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION"
+          cd assets
+          ls -la
+          sha256sum *.tar.xz > SHA256SUMS
+          cat SHA256SUMS
+          {
+            echo "Prebuilt OSMesa: Mesa $CI_MESA_VERSION, static, mangled (mgl*), llvmpipe and softpipe, with GLU 9.0.1 and the static LLVM $CI_LLVM_VERSION libraries it needs. Built by [release.yml](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/.github/workflows/release.yml) from ${{ github.sha }}."
+            echo
+            echo "| Archive | Platform |"
+            echo "|---|---|"
+            echo "| \`osmesa-install-$TAG-macos-arm64.tar.xz\` | macOS 14.0 and later, arm64 |"
+            echo "| \`osmesa-install-$TAG-macos-x86_64.tar.xz\` | macOS 14.0 and later, x86_64 |"
+            echo "| \`osmesa-install-$TAG-windows-ucrt64-x86_64.tar.xz\` | Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc), only Windows system DLLs |"
+            echo "| \`osmesa-install-$TAG-linux-x86_64.tar.xz\` | Linux x86_64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |"
+            echo "| \`osmesa-install-$TAG-linux-aarch64.tar.xz\` | Linux aarch64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |"
+            echo
+            if ! ls *-macos-*.tar.xz >/dev/null 2>&1; then
+              echo "The macOS archives are built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/release/macos-vm.sh) from the same commit, and added to this release (with an updated \`SHA256SUMS\`) after it is created."
+              echo
+            fi
+            echo "Each archive has one top-level directory with \`osmesa/include/\`, \`osmesa/lib/\` (\`libMangledOSMesa32.a\`, \`libMangledGLU.a\`), \`osmesa/lib/pkgconfig/osmesa.pc\` (relocatable; \`Libs.private\` lists the LLVM and system libraries), \`llvm/bin/llvm-config\`, \`llvm/lib/libLLVM*.a\`, \`link-flags.txt\`, \`licenses/\` and a \`README.txt\` with the build flags. Verify downloads with \`SHA256SUMS\`."
+          } > ../notes.md
+          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --notes-file ../notes.md *.tar.xz SHA256SUMS
+      - name: Check that the assets are public (anonymous download) and match SHA256SUMS
+        run: |
+          mkdir check && cd check
+          for f in $(cd ../assets && ls *.tar.xz) SHA256SUMS; do
+            curl -fsSL --retry 5 -o "$f" "https://github.com/${{ github.repository }}/releases/download/$TAG/$f"
+          done
+          sha256sum -c SHA256SUMS
