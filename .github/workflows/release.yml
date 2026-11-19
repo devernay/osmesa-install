@@ -10,9 +10,11 @@ name: release
 #    packages them with the LLVM libraries they need.
 #
 # - Tag osmesa-mesa-<mesa version>-llvm-<llvm version> (e.g. osmesa-mesa-25.0.7-llvm-19.1.7): builds
-#   Windows and Linux, then publishes a GitHub release with their archives and SHA256SUMS. The macOS
-#   archives are built in macOS 14 VMs by release/macos-vm.sh --upload, which adds them to the
-#   release (GitHub's macOS runners are often unavailable), so the macOS jobs don't run on tags.
+#   every platform, then publishes a GitHub release with one archive per platform and SHA256SUMS.
+#   Fallback when GitHub's macOS runners are unavailable: set the repository variable
+#   CI_MACOS_ON_VM=1 before pushing the tag. The macOS jobs then don't run on tags, the release is
+#   published with the Windows and Linux archives, and release/macos-vm.sh --upload builds the macOS
+#   archives in local macOS 14 VMs and adds them to it.
 # - workflow_dispatch: builds every platform and keeps the archives as workflow artifacts.
 # - Pull requests changing this workflow or release/: build and check everything, upload nothing.
 
@@ -43,8 +45,8 @@ jobs:
 
   llvm-macos:
     name: LLVM, macOS ${{ matrix.arch }}
-    # not on tags: the macOS release archives are built by release/macos-vm.sh
-    if: github.ref_type != 'tag' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    # with CI_MACOS_ON_VM=1, not on tags: the macOS release archives are built by release/macos-vm.sh
+    if: (github.ref_type != 'tag' || vars.CI_MACOS_ON_VM != '1') && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
@@ -412,8 +414,12 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [osmesa-windows, osmesa-linux]
-    if: startsWith(github.ref, 'refs/tags/osmesa-mesa-')
+    needs: [osmesa-macos, osmesa-windows, osmesa-linux]
+    # every platform must pass, except macOS when CI_MACOS_ON_VM=1 (built by release/macos-vm.sh)
+    if: >-
+      always() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') &&
+      needs.osmesa-windows.result == 'success' && needs.osmesa-linux.result == 'success' &&
+      (needs.osmesa-macos.result == 'success' || (vars.CI_MACOS_ON_VM == '1' && needs.osmesa-macos.result == 'skipped'))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -445,8 +451,10 @@ jobs:
             echo "| \`osmesa-install-$TAG-linux-x86_64.tar.xz\` | Linux x86_64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |"
             echo "| \`osmesa-install-$TAG-linux-aarch64.tar.xz\` | Linux aarch64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |"
             echo
-            echo "The macOS archives are built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/release/macos-vm.sh) from the same commit, and added to this release (with an updated \`SHA256SUMS\`) after it is created."
-            echo
+            if ! ls *-macos-*.tar.xz >/dev/null 2>&1; then
+              echo "The macOS archives are built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/release/macos-vm.sh) from the same commit, and added to this release (with an updated \`SHA256SUMS\`) after it is created."
+              echo
+            fi
             echo "Each archive has one top-level directory with \`osmesa/include/\`, \`osmesa/lib/\` (\`libMangledOSMesa32.a\`, \`libMangledGLU.a\`), \`osmesa/lib/pkgconfig/osmesa.pc\` (relocatable; \`Libs.private\` lists the LLVM and system libraries), \`llvm/bin/llvm-config\`, \`llvm/lib/libLLVM*.a\`, \`link-flags.txt\`, \`licenses/\` and a \`README.txt\` with the build flags. Verify downloads with \`SHA256SUMS\`."
           } > ../notes.md
           gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --notes-file ../notes.md *.tar.xz SHA256SUMS

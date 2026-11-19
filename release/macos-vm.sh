@@ -1,7 +1,8 @@
 #!/bin/bash
-# Build the macOS release archives (arm64 and x86_64) in throwaway macOS 14 Sonoma tart VMs, because
-# GitHub's macOS runners are often unavailable for open-source projects. Optionally upload them to
-# the GitHub release made by .github/workflows/release.yml (which builds Windows and Linux).
+# Fallback for when GitHub's macOS runners are unavailable: build the macOS release archives (arm64
+# and x86_64) in throwaway macOS 14 Sonoma tart VMs, and optionally upload them to the GitHub release
+# made by .github/workflows/release.yml with the repository variable CI_MACOS_ON_VM=1 (which then
+# builds and publishes only Windows and Linux). See "Making a release" in README.md.
 #
 # Usage: release/macos-vm.sh [--upload] [TAG]
 #   TAG: osmesa-mesa-<mesa version>-llvm-<llvm version> (default: the versions in release.yml). The
@@ -72,7 +73,10 @@ commit=$(git -C "$repo" rev-parse "$rev^{commit}")
 if [ "$upload" = 1 ]; then
     command -v gh >/dev/null || die "gh not found"
     gh release view "$tag" --repo devernay/osmesa-install >/dev/null \
-        || die "release $tag doesn't exist yet: push the tag and let the release workflow publish it first"
+        || die "release $tag doesn't exist yet: set CI_MACOS_ON_VM=1, push the tag and let the release workflow publish it first"
+    if gh release view "$tag" --repo devernay/osmesa-install --json assets --jq '.assets[].name' | grep -q -- '-macos-'; then
+        die "release $tag already has macOS archives (built on GitHub): not replacing them"
+    fi
 fi
 
 mkdir -p "$WORK"
