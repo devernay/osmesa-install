@@ -41,6 +41,7 @@ MEMORY_GB=${MEMORY_GB:-6}
 MKJOBS=${MKJOBS:-4}
 # the build needs about 10 GB in the container storage (podman machine's disk, or podman's storage)
 CONTAINER_MIN_FREE_GB=${CONTAINER_MIN_FREE_GB:-15}
+# (MIN_FREE_GB isn't used here: WORK only holds the sources, the tarballs and the output)
 # podman: pull the image if a newer one exists; docker has no "newer"
 PULL=newer; [ "$CONTAINER" = podman ] || PULL=always
 
