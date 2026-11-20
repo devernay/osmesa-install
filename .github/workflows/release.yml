@@ -346,8 +346,10 @@ jobs:
         run: bash release/linux-build.sh check ${{ matrix.arch }}
       - name: Package
         run: bash release/linux-build.sh package "$NAME" ${{ matrix.arch }}
-      - name: Test the archive with CMake and pkg-config
-        run: bash release/linux-build.sh test "$NAME"
+      - name: Test the archive with CMake (find_package(OSMesa CONFIG), OSMesa::OSMesa)
+        run: bash release/linux-build.sh test-cmake "$NAME"
+      - name: Test the archive with pkg-config (pkg-config --static --cflags --libs osmesa)
+        run: bash release/linux-build.sh test-pkgconfig "$NAME"
       - uses: actions/upload-artifact@v5
         if: github.event_name != 'pull_request'
         with:
