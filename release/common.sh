@@ -6,7 +6,7 @@
 #   skip_published      with --upload: drops the architectures already in the release
 #   prepare_sources     $WORK/src (git archive $commit), $WORK/dl (tarballs, kept), $WORK/out
 #   wait_for_host DIR   waits until the host load is below MAX_LOAD and DIR has MIN_FREE_GB free
-#                       (or -c COMMAND...: a command printing the free space in GB)
+#                       (or -c MIN_GB COMMAND...: a command printing the free space in GB)
 #   publish_archives SCRIPT  with --upload: adds $WORK/out's archives to the release and checks it
 
 set -eu
@@ -36,10 +36,14 @@ init() {
     WORK=${WORK:-$DEFAULT_WORK}
     ARCHS=${ARCHS:-$DEFAULT_ARCHS}
     MIN_FREE_GB=${MIN_FREE_GB:-30}
+    # the VM or container reads it: macOS would ask for access to ~/Documents (checked before
+    # creating it, and again after resolving symlinks)
+    local docs
+    docs=$(cd "$HOME" && pwd -P)/Documents
+    case "$WORK" in "$HOME"/Documents*|"$docs"*) die "WORK must not be in ~/Documents";; esac
     mkdir -p "$WORK"
     WORK=$(cd "$WORK" && pwd -P) # e.g. /private/tmp/...: podman machine shares /private, not /tmp
-    # the VM or container reads it: macOS would ask for access to ~/Documents
-    case "$WORK" in "$(cd "$HOME" && pwd -P)"/Documents*) die "WORK must not be in ~/Documents";; esac
+    case "$WORK" in "$docs"*) die "WORK must not be in ~/Documents";; esac
     [ "$upload" = 0 ] || command -v gh >/dev/null || die "gh not found"
 }
 
@@ -71,10 +75,10 @@ skip_published() {
     [ "$upload" = 1 ] || return 0
     local present archs arch
     # don't replace archives already in the release (the release may not exist yet: publish.sh
-    # creates it); an asset whose upload broke off counts as missing (publish.sh then says what to do)
+    # creates it)
     if gh api "repos/$github_repo/releases/tags/$tag" --silent 2>"$WORK/gh.err"; then
         present=$(gh release view "$tag" --repo "$github_repo" --json assets \
-            --jq '.assets[] | select(.state == "uploaded") | .name')
+            --jq '.assets[] | "\(.name) \(.state)"')
     elif grep -q 'HTTP 404' "$WORK/gh.err"; then
         present=
     else
@@ -82,8 +86,14 @@ skip_published() {
     fi
     rm -f "$WORK/gh.err"
     archs=
+    local name state
     for arch in $ARCHS; do
-        if echo "$present" | grep -qxF "osmesa-install-$tag-$OS-$arch.tar.xz"; then
+        name="osmesa-install-$tag-$OS-$arch.tar.xz"
+        state=$(echo "$present" | awk -v n="$name" '$1 == n {print $2}')
+        if [ -n "$state" ] && [ "$state" != uploaded ]; then
+            # its upload broke off: publish.sh would refuse it after the build
+            die "$name is in release $tag but its upload didn't finish (state $state): gh release delete-asset $tag $name"
+        elif [ -n "$state" ]; then
             log "$arch: already in release $tag, skipping"
         else
             archs="$archs $arch"
@@ -114,19 +124,26 @@ fetch() { # file url (kept between runs)
     curl -fL --retry 3 -o "$WORK/dl/$1.part" "$2" && mv "$WORK/dl/$1.part" "$WORK/dl/$1"
 }
 
-wait_for_host() { # DIR, or -c COMMAND...: where the build's free space is measured, or a command printing it in GB
+wait_for_host() { # DIR, or -c MIN_GB COMMAND...: where the build's free space is measured (MIN_FREE_GB),
+                   # or a command printing it in GB, and its minimum
     local maxload load free
     maxload=${MAX_LOAD:-$(sysctl -n hw.ncpu 2>/dev/null || nproc)}
     while load=$(awk '{print int($1)}' /proc/loadavg 2>/dev/null || sysctl -n vm.loadavg | awk '{print int($2)}')
-          [ "$load" -ge "$maxload" ]; do
+          number "$load" "the host load"; [ "$load" -ge "$maxload" ]; do
         log "host load $load >= $maxload (MAX_LOAD), waiting"
         sleep 120
     done
+    local minfree=$MIN_FREE_GB
+    if [ "$1" = -c ]; then minfree=$2; set -- -c "${@:3}"; fi
     while free=$(if [ "$1" = -c ]; then "${@:2}"; else df -Pk "$1" | awk 'NR==2 {print int($4 / 1048576)}'; fi)
-          [ "$free" -lt "$MIN_FREE_GB" ]; do
-        log "only $free GB free for the build (< MIN_FREE_GB=$MIN_FREE_GB), waiting"
+          number "$free" "the free space"; [ "$free" -lt "$minfree" ]; do
+        log "only $free GB free for the build (< $minfree), waiting"
         sleep 300
     done
+}
+
+number() { # value what: stop (fail closed) if a measurement isn't a number
+    case "$1" in ''|*[!0-9]*) die "can't measure $2 (got '$1')";; esac
 }
 
 finalize_release() {
@@ -149,7 +166,7 @@ publish_archives() { # script: the fallback's name, for the release notes
     bash "$repo/release/publish.sh" "$tag" "${files[@]}"
     # say in the release notes that some archives were built here
     notes=$(gh release view "$tag" --repo "$github_repo" --json body --jq .body)
-    line="Some $OS archives were built locally by [release/$1](https://github.com/$github_repo/blob/$commit/release/$1) (see \"Built with\" in their README.txt)."
+    line="Some $OSNAME archives were built locally by [release/$1](https://github.com/$github_repo/blob/$commit/release/$1) (see \"Built with\" in their README.txt)."
     case "$notes" in *"release/$1"*) ;; *)
         printf '%s\n\n%s\n' "$notes" "$line" > "$WORK/notes.md"
         gh release edit "$tag" --repo "$github_repo" --notes-file "$WORK/notes.md";;

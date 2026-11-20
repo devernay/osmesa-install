@@ -30,6 +30,7 @@
 # and until that much disk space is free).
 
 OS=macos
+OSNAME=macOS
 DEFAULT_ARCHS="arm64 x86_64"
 DEFAULT_WORK=/tmp/osmesa-macos-vm
 # shellcheck source=release/common.sh
