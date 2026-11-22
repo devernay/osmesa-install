@@ -23,7 +23,7 @@
 # Environment: WORK (/tmp/osmesa-linux-local, must not be in ~/Documents), ARCHS ("aarch64 x86_64"),
 # CONTAINER (podman), IMAGE (docker.io/library/rockylinux:9), CPUS (4), MEMORY_GB (6), MKJOBS (4),
 # MAX_LOAD (number of CPUs: each build waits until the host load average is below it), MIN_FREE_GB
-# (30: and until that much disk space is free on the host).
+# (30: and until that much space is free on WORK's disk).
 
 OS=linux
 OSNAME=Linux
@@ -37,6 +37,7 @@ IMAGE=${IMAGE:-docker.io/library/rockylinux:9}
 CPUS=${CPUS:-4}
 MEMORY_GB=${MEMORY_GB:-6}
 MKJOBS=${MKJOBS:-4}
+storage_gb=15 # free space needed in the container storage
 
 command -v "$CONTAINER" >/dev/null || die "$CONTAINER not found"
 resolve_source
@@ -49,9 +50,10 @@ for arch in $ARCHS; do
     wait_for_host "$WORK"
     # podman machine's disk (40 GB by default) is separate from the host's, and the build needs
     # about 10 GB there
-    free=$("$CONTAINER" run --rm --platform "$platform" "$IMAGE" df -Pk / | awk 'NR==2 {print int($4 / 1048576)}')
+    free=$("$CONTAINER" run --rm --platform "$platform" "$IMAGE" df -Pk / | awk 'NR==2 {print int($4 / 1048576)}') \
+        || die "can't run a $IMAGE container for $platform (is the container engine running?)"
     number "$free" "the container storage's free space"
-    [ "$free" -ge 15 ] || die "only $free GB free in the container storage, 15 GB needed"
+    [ "$free" -ge "$storage_gb" ] || die "only $free GB free in the container storage, $storage_gb GB needed"
     name="osmesa-install-$tag-linux-$arch"
     log "$arch: building in a $IMAGE container ($platform; log: $WORK/out/build-$arch.log)"
     # the build runs in the container's own filesystem; only the sources, the tarballs and the
