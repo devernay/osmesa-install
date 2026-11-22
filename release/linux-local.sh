@@ -6,26 +6,24 @@
 #
 # Usage: release/linux-local.sh [--upload] [TAG]
 #   TAG: osmesa-mesa-<mesa version>-llvm-<llvm version> (default: the versions in release.yml). The
-#        sources are "git archive TAG" (or HEAD if the tag doesn't exist yet and --upload isn't given;
-#        REV=<commit> for a test build of another commit).
+#        sources are "git archive TAG" (or HEAD if the tag doesn't exist yet and --upload isn't given).
 #   --upload: add the archives, with ARCHIVE.sha256, to the release TAG with gh (see
 #        release/publish.sh and release/finalize.sh), and make it a full release if every platform is
-#        there. Architectures already in the release (built on GitHub) are skipped. The local tag must
-#        be GitHub's. Without it, the archives are only left in $WORK/out.
+#        there. Architectures already in the release (built on GitHub) are skipped. Without it, the
+#        archives are only left in $WORK/out.
 #
 # Each architecture is built in its own throwaway container (--rm), one at a time; the container
 # needs network access (dnf, pip). The architecture that isn't the host's runs under emulation
 # (binfmt): with qemu (podman machine's default on Apple Silicon; qemu-user-static on Linux) LLVM
 # takes hours, with Rosetta (podman machine with Rosetta enabled, or OrbStack) it is much faster.
-# The container engine (e.g. podman machine) needs at least CPUS CPUs, MEMORY_GB of memory, and
-# CONTAINER_MIN_FREE_GB of free space in its storage: this is checked before each build.
+# The container engine (e.g. podman machine) needs at least CPUS CPUs and MEMORY_GB of memory
+# (podman machine set --cpus 4 --memory 8192), and 15 GB free in its storage (checked).
 #
 # Host requirements: podman (or CONTAINER=docker), git, curl, and gh for --upload.
 # Environment: WORK (/tmp/osmesa-linux-local, must not be in ~/Documents), ARCHS ("aarch64 x86_64"),
-# CONTAINER (podman), IMAGE (docker.io/library/rockylinux:9, pulled if newer), CPUS (4), MEMORY_GB
-# (6), MKJOBS (4), MAX_LOAD (number of CPUs: each build waits until the host load average is below
-# it), CONTAINER_MIN_FREE_GB (15: and until the container storage has that much free space),
-# WAIT_IDLE (1: and until no other container is running, for at most WAIT_IDLE_HOURS, 4).
+# CONTAINER (podman), IMAGE (docker.io/library/rockylinux:9), CPUS (4), MEMORY_GB (6), MKJOBS (4),
+# MAX_LOAD (number of CPUs: each build waits until the host load average is below it), MIN_FREE_GB
+# (30: and until that much disk space is free on the host).
 
 OS=linux
 OSNAME=Linux
@@ -39,50 +37,26 @@ IMAGE=${IMAGE:-docker.io/library/rockylinux:9}
 CPUS=${CPUS:-4}
 MEMORY_GB=${MEMORY_GB:-6}
 MKJOBS=${MKJOBS:-4}
-# the build needs about 10 GB in the container storage (podman machine's disk, or podman's storage)
-CONTAINER_MIN_FREE_GB=${CONTAINER_MIN_FREE_GB:-15}
-# (MIN_FREE_GB isn't used here: WORK only holds the sources, the tarballs and the output)
-# podman: pull the image if a newer one exists; docker has no "newer"
-PULL=newer; [ "$CONTAINER" = podman ] || PULL=always
 
 command -v "$CONTAINER" >/dev/null || die "$CONTAINER not found"
 resolve_source
 skip_published
 prepare_sources
 
-# what a container of this architecture sees: CPUs, memory (GB) and free space in its storage (GB)
-probe() { # platform [pull policy]
-    # label=disable: SELinux hosts would deny access to the shared directory (podman and docker)
-    # shellcheck disable=SC2016 # expanded in the container
-    "$CONTAINER" run --rm --pull="${2:-never}" --platform "$1" --security-opt label=disable "$IMAGE" \
-        sh -c 'echo "$(nproc) $(awk "/MemTotal/ {print int(\$2 / 1048576)}" /proc/meminfo) $(df -Pk / | awk "NR==2 {print int(\$4 / 1048576)}")"'
-}
-probe_free() { # platform
-    probe "$1" | awk '{print $3}'
-}
-
 # one container at a time, started only when the host isn't overloaded
 for arch in $ARCHS; do
     case "$arch" in aarch64) platform=linux/arm64;; x86_64) platform=linux/amd64;; *) die "unknown arch $arch";; esac
-    # podman machine's memory is shared with other containers: wait until none is running
-    waited=0
-    while [ "${WAIT_IDLE:-1}" = 1 ] && [ -n "$("$CONTAINER" ps -q)" ]; do
-        [ "$waited" -ge $((${WAIT_IDLE_HOURS:-4} * 3600)) ] && die "other containers are still running (WAIT_IDLE=0 to skip)"
-        log "other containers are running ($("$CONTAINER" ps --format '{{.Names}}' | tr '\n' ' ')), waiting (WAIT_IDLE=0 to skip)"
-        sleep 120; waited=$((waited + 120))
-    done
-    read -r ncpu memgb freegb <<EOF
-$(probe "$platform" "$PULL")
-EOF
-    number "$ncpu" "the container's CPUs"; number "$memgb" "the container's memory"; number "$freegb" "the container's free space"
-    log "$arch: the container sees $ncpu CPUs, $memgb GB of memory (rounded down), $freegb GB free"
-    [ "$ncpu" -ge "$CPUS" ] || die "the container engine has $ncpu CPUs, $CPUS needed (e.g. podman machine set --cpus $CPUS, or CPUS=$ncpu)"
-    [ "$memgb" -ge "$MEMORY_GB" ] || die "the container engine has $memgb GB of memory, $MEMORY_GB needed (e.g. podman machine set --memory 8192)"
-    wait_for_host -c "$CONTAINER_MIN_FREE_GB" probe_free "$platform"
+    wait_for_host "$WORK"
+    # podman machine's disk (40 GB by default) is separate from the host's, and the build needs
+    # about 10 GB there
+    free=$("$CONTAINER" run --rm --platform "$platform" "$IMAGE" df -Pk / | awk 'NR==2 {print int($4 / 1048576)}')
+    number "$free" "the container storage's free space"
+    [ "$free" -ge 15 ] || die "only $free GB free in the container storage, 15 GB needed"
     name="osmesa-install-$tag-linux-$arch"
     log "$arch: building in a $IMAGE container ($platform; log: $WORK/out/build-$arch.log)"
     # the build runs in the container's own filesystem; only the sources, the tarballs and the
     # output are on the shared directory
+    # label=disable: SELinux hosts would deny access to the shared directory (podman and docker)
     # shellcheck disable=SC2016 # expanded in the container
     "$CONTAINER" run --rm --platform "$platform" --security-opt label=disable \
         --cpus "$CPUS" --memory "${MEMORY_GB}g" -v "$WORK:/host" \

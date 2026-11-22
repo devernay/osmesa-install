@@ -2,11 +2,10 @@
 # Shared by the local release fallbacks, release/macos-vm.sh and release/linux-local.sh (sourced).
 # The caller sets OS (macos or linux), DEFAULT_ARCHS and DEFAULT_WORK, then calls, in order:
 #   init "$@"           parses [--upload] [TAG]; sets upload, tag, mesaversion, llvmversion, WORK, ARCHS
-#   resolve_source      sets commit: the tag (checked against GitHub's with --upload), REV, or HEAD
+#   resolve_source      sets commit: the tag, or HEAD for a test build (without --upload)
 #   skip_published      with --upload: drops the architectures already in the release
 #   prepare_sources     $WORK/src (git archive $commit), $WORK/dl (tarballs, kept), $WORK/out
 #   wait_for_host DIR   waits until the host load is below MAX_LOAD and DIR has MIN_FREE_GB free
-#                       (or -c MIN_GB COMMAND...: a command printing the free space in GB)
 #   publish_archives SCRIPT  with --upload: adds $WORK/out's archives to the release and checks it
 
 set -eu
@@ -36,24 +35,16 @@ init() {
     WORK=${WORK:-$DEFAULT_WORK}
     ARCHS=${ARCHS:-$DEFAULT_ARCHS}
     MIN_FREE_GB=${MIN_FREE_GB:-30}
-    # the VM or container reads it: macOS would ask for access to ~/Documents (checked before
-    # creating it, and again after resolving symlinks)
-    local docs
-    docs=$(cd "$HOME" && pwd -P)/Documents
-    case "$WORK" in "$HOME"/Documents*|"$docs"*) die "WORK must not be in ~/Documents";; esac
+    # the VM or container reads it: macOS would ask for access to ~/Documents
+    case "$WORK" in "$HOME"/Documents*) die "WORK must not be in ~/Documents";; esac
     mkdir -p "$WORK"
     WORK=$(cd "$WORK" && pwd -P) # e.g. /private/tmp/...: podman machine shares /private, not /tmp
-    case "$WORK" in "$docs"*) die "WORK must not be in ~/Documents";; esac
     [ "$upload" = 0 ] || command -v gh >/dev/null || die "gh not found"
 }
 
 resolve_source() {
-    local rev remote
-    if [ -n "${REV:-}" ]; then
-        # test build of another commit (e.g. REV=HEAD to test a branch once the tag exists)
-        [ "$upload" = 0 ] || die "REV is only for test builds (without --upload)"
-        rev=$REV
-    elif git -C "$repo" rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null; then
+    local rev
+    if git -C "$repo" rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null; then
         rev=$tag
     elif [ "$upload" = 0 ]; then
         rev=HEAD
@@ -62,13 +53,6 @@ resolve_source() {
         die "tag $tag not found (git fetch --tags)"
     fi
     commit=$(git -C "$repo" rev-parse "$rev^{commit}")
-    if [ "$upload" = 1 ]; then
-        # the tag may have been moved (deleted and pushed again) since it was fetched here
-        remote=$(git -C "$repo" ls-remote "https://github.com/$github_repo.git" "refs/tags/$tag^{}" "refs/tags/$tag" \
-            | awk '/\^\{\}$/ {peeled=$1} !/\^\{\}$/ {plain=$1} END {print peeled ? peeled : plain}')
-        [ -n "$remote" ] || die "tag $tag is not on GitHub"
-        [ "$remote" = "$commit" ] || die "the local tag $tag ($commit) isn't GitHub's ($remote): git fetch --tags --force"
-    fi
 }
 
 skip_published() {
@@ -124,8 +108,7 @@ fetch() { # file url (kept between runs)
     curl -fL --retry 3 -o "$WORK/dl/$1.part" "$2" && mv "$WORK/dl/$1.part" "$WORK/dl/$1"
 }
 
-wait_for_host() { # DIR, or -c MIN_GB COMMAND...: where the build's free space is measured (MIN_FREE_GB),
-                   # or a command printing it in GB, and its minimum
+wait_for_host() { # DIR: where the build's free space is measured
     local maxload load free
     maxload=${MAX_LOAD:-$(sysctl -n hw.ncpu 2>/dev/null || nproc)}
     while load=$(awk '{print int($1)}' /proc/loadavg 2>/dev/null || sysctl -n vm.loadavg | awk '{print int($2)}')
@@ -133,11 +116,9 @@ wait_for_host() { # DIR, or -c MIN_GB COMMAND...: where the build's free space i
         log "host load $load >= $maxload (MAX_LOAD), waiting"
         sleep 120
     done
-    local minfree=$MIN_FREE_GB
-    if [ "$1" = -c ]; then minfree=$2; set -- -c "${@:3}"; fi
-    while free=$(if [ "$1" = -c ]; then "${@:2}"; else df -Pk "$1" | awk 'NR==2 {print int($4 / 1048576)}'; fi)
-          number "$free" "the free space"; [ "$free" -lt "$minfree" ]; do
-        log "only $free GB free for the build (< $minfree), waiting"
+    while free=$(df -Pk "$1" | awk 'NR==2 {print int($4 / 1048576)}')
+          number "$free" "the free space"; [ "$free" -lt "$MIN_FREE_GB" ]; do
+        log "only $free GB free for the build (< $MIN_FREE_GB), waiting"
         sleep 300
     done
 }

@@ -6,8 +6,7 @@
 #
 # Usage: release/macos-vm.sh [--upload] [TAG]
 #   TAG: osmesa-mesa-<mesa version>-llvm-<llvm version> (default: the versions in release.yml). The
-#        sources are "git archive TAG" (or HEAD if the tag doesn't exist yet and --upload isn't given;
-#        REV=<commit> for a test build of another commit).
+#        sources are "git archive TAG" (or HEAD if the tag doesn't exist yet and --upload isn't given).
 #   --upload: add the archives, with ARCHIVE.sha256, to the release TAG with gh (as the account gh is
 #        logged in with; see release/publish.sh and release/finalize.sh), update SHA256SUMS, check
 #        anonymous downloads, and make it a full release if every platform is there. Architectures
