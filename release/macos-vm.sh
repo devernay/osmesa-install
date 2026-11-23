@@ -28,93 +28,26 @@
 # MAX_LOAD (number of CPUs: each VM waits until the host load average is below it), MIN_FREE_GB (30:
 # and until that much disk space is free).
 
-set -eu
-set -o pipefail
-
-upload=0
-if [ "${1:-}" = --upload ]; then upload=1; shift; fi
-repo=$(cd "$(dirname "$0")/.." && pwd)
-wf="$repo/.github/workflows/release.yml"
-mesaversion=$(sed -n 's/^  CI_MESA_VERSION: *//p' "$wf")
-llvmversion=$(sed -n 's/^  CI_LLVM_VERSION: *//p' "$wf")
-tag="${1:-osmesa-mesa-$mesaversion-llvm-$llvmversion}"
-case "$tag" in
-    osmesa-mesa-*-llvm-*) mesaversion=${tag#osmesa-mesa-}; mesaversion=${mesaversion%%-llvm-*}; llvmversion=${tag##*-llvm-};;
-    *) echo "Error: TAG must be osmesa-mesa-<mesa version>-llvm-<llvm version>" >&2; exit 1;;
-esac
-WORK=${WORK:-/tmp/osmesa-macos-vm}
-ARCHS=${ARCHS:-"arm64 x86_64"}
+OS=macos
+OSNAME=macOS
+DEFAULT_ARCHS="arm64 x86_64"
+DEFAULT_WORK=/tmp/osmesa-macos-vm
+# shellcheck source=release/common.sh
+. "$(dirname "$0")/common.sh"
+init "$@"
 BASE_IMAGE=${BASE_IMAGE:-ghcr.io/cirruslabs/macos-sonoma-base:latest}
 VM_CPU=${VM_CPU:-4}
 VM_MEMORY=${VM_MEMORY:-8192}
 MKJOBS=${MKJOBS:-4}
 HOST_PYTHON=${HOST_PYTHON:-/usr/bin/python3}
 KEEP_VM=${KEEP_VM:-0}
-MIN_FREE_GB=${MIN_FREE_GB:-30}
 deploymenttarget=14.0
-gluversion=9.0.1
-demoversion=8.4.0
 
-log() { echo "[$(date '+%F %T')] $*"; }
-die() { echo "Error: $*" >&2; exit 1; }
-
-case "$WORK" in "$HOME"/Documents*) die "WORK must not be in ~/Documents (the VM reads it)";; esac
 command -v tart >/dev/null || die "tart not found"
-
-# sources: the tagged commit (HEAD for a test build before the tag exists)
-if git -C "$repo" rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null; then
-    rev=$tag
-elif [ "$upload" = 0 ]; then
-    rev=HEAD
-    log "tag $tag not found, building HEAD (test build)"
-else
-    die "tag $tag not found (git fetch --tags)"
-fi
-commit=$(git -C "$repo" rev-parse "$rev^{commit}")
-
-if [ "$upload" = 1 ]; then
-    command -v gh >/dev/null || die "gh not found"
-    # don't replace archives built on GitHub (the release may not exist yet: publish.sh creates it)
-    if gh api "repos/devernay/osmesa-install/releases/tags/$tag" --silent 2>"$WORK.err"; then
-        present=$(gh release view "$tag" --repo devernay/osmesa-install --json assets --jq '.assets[].name')
-    elif grep -q 'HTTP 404' "$WORK.err"; then
-        present=   # no release yet: publish.sh creates it
-    else
-        cat "$WORK.err" >&2; die "can't read release $tag"
-    fi
-    rm -f "$WORK.err"
-    archs=
-    for arch in $ARCHS; do
-        if echo "$present" | grep -qx "osmesa-install-$tag-macos-$arch.tar.xz"; then
-            log "$arch: already in release $tag, skipping"
-        else
-            archs="$archs $arch"
-        fi
-    done
-    ARCHS=$archs
-    if [ -z "$ARCHS" ]; then
-        log "nothing to build, checking the release"
-        ALLOW_MISSING="windows-ucrt64-x86_64 linux-x86_64 linux-aarch64" bash "$repo/release/finalize.sh" "$tag"
-        exit 0
-    fi
-fi
-
-mkdir -p "$WORK"
-WORK=$(cd "$WORK" && pwd)
-rm -rf "$WORK/src" "$WORK/out" "$WORK"/py-* "$WORK"/guest-build.sh
-mkdir -p "$WORK/src" "$WORK/dl" "$WORK/out"
-git -C "$repo" archive "$commit" | tar -x -C "$WORK/src"
-
-# tarballs (kept between runs)
-fetch() { # file url
-    [ -f "$WORK/dl/$1" ] && return 0
-    log "downloading $1"
-    curl -fL --retry 3 -o "$WORK/dl/$1.part" "$2" && mv "$WORK/dl/$1.part" "$WORK/dl/$1"
-}
-fetch "llvm-project-$llvmversion.src.tar.xz" "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmversion/llvm-project-$llvmversion.src.tar.xz"
-fetch "mesa-$mesaversion.tar.xz" "https://archive.mesa3d.org/mesa-$mesaversion.tar.xz"
-fetch "glu-$gluversion.tar.gz" "https://archive.mesa3d.org/glu/glu-$gluversion.tar.gz"
-fetch "mesa-demos-$demoversion.tar.bz2" "https://archive.mesa3d.org/demos/$demoversion/mesa-demos-$demoversion.tar.bz2"
+resolve_source
+skip_published
+rm -rf "$WORK"/py-* "$WORK"/guest-build.sh
+prepare_sources
 
 # Python build tools for the CLT's python3 (3.9), one directory per architecture
 for arch in $ARCHS; do
@@ -218,18 +151,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# one VM at a time, started only when the host isn't overloaded
-maxload=${MAX_LOAD:-$(sysctl -n hw.ncpu)}
+# one VM at a time, started only when the host isn't overloaded (the clone grows by up to ~20 GB)
 for arch in $ARCHS; do
-    while load=$(sysctl -n vm.loadavg | awk '{print int($2)}'); [ "$load" -ge "$maxload" ]; do
-        log "host load $load >= $maxload (MAX_LOAD), waiting"
-        sleep 120
-    done
-    # the clone grows by up to ~20 GB during the build
-    while free=$(df -g "$WORK" | awk 'NR==2 {print $4}'); [ "$free" -lt "$MIN_FREE_GB" ]; do
-        log "only $free GB free on the disk of $WORK (< MIN_FREE_GB=$MIN_FREE_GB), waiting"
-        sleep 300
-    done
+    wait_for_host "$WORK"
     vm="osmesa-macos-vm-$arch-$$"
     log "$arch: cloning $BASE_IMAGE as $vm"
     tart clone "$BASE_IMAGE" "$vm"
@@ -249,23 +173,4 @@ for arch in $ARCHS; do
 done
 ls -la "$WORK"/out/*.tar.xz
 
-if [ "$upload" = 1 ]; then
-    # add the archives (and their .sha256) to the release, creating it as a pre-release if needed,
-    # then check it and make it a full release if every platform is there
-    log "uploading to release $tag"
-    files=
-    for arch in $ARCHS; do files="$files $WORK/out/osmesa-install-$tag-macos-$arch.tar.xz"; done
-    # publish.sh never replaces an archive already in the release (e.g. built on GitHub meanwhile)
-    bash "$repo/release/publish.sh" "$tag" $files
-    # say in the release notes which archives were built here
-    notes=$(gh release view "$tag" --repo devernay/osmesa-install --json body --jq .body)
-    line="Some macOS archives were built in macOS 14 VMs by [release/macos-vm.sh](https://github.com/devernay/osmesa-install/blob/$commit/release/macos-vm.sh) (see \"Built with\" in their README.txt)."
-    case "$notes" in *"release/macos-vm.sh"*) ;; *)
-        printf '%s\n\n%s\n' "$notes" "$line" > "$WORK/notes.md"
-        gh release edit "$tag" --repo devernay/osmesa-install --notes-file "$WORK/notes.md";;
-    esac
-    # Windows or Linux may still be building on GitHub: the workflow's release job finalizes then
-    ALLOW_MISSING="windows-ucrt64-x86_64 linux-x86_64 linux-aarch64" bash "$repo/release/finalize.sh" "$tag" \
-        || die "release check failed"
-    log "release $tag: macOS archives uploaded and verified"
-fi
+publish_archives macos-vm.sh
