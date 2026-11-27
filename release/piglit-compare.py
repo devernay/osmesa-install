@@ -16,6 +16,8 @@ results.json.bz2).
     them that passes is an error too, so that these lists don't go stale and
     hide a later regression of the same test. (Mesa's lists, given with
     --fails, can't be edited here: their unexpected passes are only listed.)
+    The status may give alternatives, e.g. "Crash|Fail", for a test whose
+    failure varies from run to run.
 --flakes, --skips: one regular expression per line, searched in the test
     name, ignoring case, as deqp-runner and "piglit run -x" do. Results of
     matching tests are ignored.
@@ -61,15 +63,19 @@ def read_lines(path):
 
 
 def read_expected(paths):
-    """Returns {lowercase test name: piglit status} from expectation files."""
+    """Returns {lowercase test name: expected statuses} from expectation files.
+
+    The status may give alternatives, e.g. "Crash|Fail", for a test whose
+    failure varies from run to run (only in our own files).
+    """
     expected = {}
     for path in paths:
         for line in read_lines(path):
             name, _, status = line.rpartition(",")
             if not name:
                 raise Error("%s: bad line %r" % (path, line))
-            status = status.strip().lower()
-            expected[name.lower()] = STATUS.get(status, status)
+            expected[name.lower()] = "|".join(
+                STATUS.get(s, s) for s in status.strip().lower().split("|"))
     return expected
 
 
@@ -108,7 +114,10 @@ class Comparison:
         if status in BAD:
             if any(r.search(name) for r in self.ignore):
                 self.ignored.append((name, status))
-            elif exp != status:
+            elif exp is None or status not in exp.split("|"):
+                if exp is not None and name in self.ours:
+                    # e.g. a crash that became Mesa's expected failure: our entry is stale
+                    self.fixed.append((name, status, exp))
                 self.new.append((name, status, exp))
             else:
                 self.as_expected.append(name)

@@ -196,10 +196,13 @@ do_build() {
     # create a context as skipped, which would make every test skip
     local info
     info=$("$p/bin/glinfo" -auto) || die "glinfo failed"
-    echo "$info" | sed -n '1,/^GL_EXTENSIONS/p' | grep -v '^GL_EXTENSIONS'
-    echo "$info" | grep -q "^GL_RENDERER = $GALLIUM_DRIVER" || die "glinfo: not $GALLIUM_DRIVER"
-    echo "$info" | grep -q '^GL_VERSION = 4\.5 (Compatibility Profile)' \
-        || die "glinfo: not an OpenGL 4.5 compatibility context"
+    sed -n '/^Extensions:/q;p' <<< "$info"
+    # (no "echo | grep -q": with pipefail, grep -q exiting early could fail the pipe)
+    case "$info" in *"GL_RENDERER = $GALLIUM_DRIVER"*) ;; *) die "glinfo: not $GALLIUM_DRIVER";; esac
+    if [ "$GALLIUM_DRIVER" = llvmpipe ]; then
+        case "$info" in *"GL_VERSION = 4.5 (Compatibility Profile)"*) ;;
+            *) die "glinfo: not an OpenGL 4.5 compatibility context";; esac
+    fi
 }
 
 # Mesa's CI expectations for llvmpipe (and its skips for every driver), from the Mesa release
