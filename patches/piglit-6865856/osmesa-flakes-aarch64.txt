@@ -1,7 +1,0 @@
-# Results ignored on AArch64: their status differs between Linux aarch64 and macOS arm64 (and they
-# pass, or fail differently, on x86_64), so they aren't stable expected failures. Regular
-# expressions, as Mesa's *-flakes.txt.
-# Linux aarch64: crash, macOS arm64 and x86_64: fail (Mesa expects a failure)
-^spec@!opengl 1\.1@polygon-mode-facing$
-# Linux aarch64: fail, macOS arm64 and x86_64: pass
-^spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex$

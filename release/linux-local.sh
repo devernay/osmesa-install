@@ -76,6 +76,9 @@ for arch in $ARCHS; do
             bash release/linux-build.sh package "$NAME" "$ARCH"
             bash release/linux-build.sh test-cmake "$NAME"
             bash release/linux-build.sh test-pkgconfig "$NAME"
+            # the release gate, as in the release workflow (release/piglit.sh)
+            bash release/piglit.sh deps > /root/piglit-deps.log 2>&1 || { tail -n 30 /root/piglit-deps.log; exit 1; }
+            WORK=/root/piglit-work JOBS=$(nproc) bash release/piglit.sh all "out/$NAME.tar.xz" sanity llvmpipe_gl
             cp "out/$NAME.tar.xz" /host/out/
             echo "container build $ARCH: OK"' > "$WORK/out/build-$arch.log" 2>&1 \
         || die "$arch build failed, see $WORK/out/build-$arch.log"

@@ -1,6 +1,6 @@
-# Expected failures on macOS, on top of osmesa-fails.txt and osmesa-fails-aarch64.txt: they pass
-# on Linux aarch64 and x86_64 (Mesa built with gcc and libstdc++), so they come from the macOS build
-# (Apple clang, libc++).
+# Expected failures on macOS, on top of osmesa-fails.txt and osmesa-fails-aarch64.txt. They pass on
+# Linux aarch64 with the same framework and LLVM, so the macOS build renders them wrongly; the
+# cause isn't known yet: https://github.com/devernay/osmesa-install/issues/30
 spec@arb_sample_shading@builtin-gl-sample-mask-simple 0,Fail
 spec@arb_sample_shading@builtin-gl-sample-mask-simple 2,Fail
 spec@arb_sample_shading@builtin-gl-sample-mask-simple 4,Fail

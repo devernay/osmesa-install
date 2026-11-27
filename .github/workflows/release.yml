@@ -29,7 +29,7 @@ on:
     tags: ['osmesa-mesa-*-llvm-*']
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: ['.github/workflows/release.yml', '.github/macports-mesa25.yaml', 'release/**']
+    paths: ['.github/workflows/release.yml', '.github/macports-mesa25.yaml', 'release/**', 'patches/piglit-*/**']
   workflow_dispatch:
 
 permissions:
@@ -319,7 +319,7 @@ jobs:
     if: ${{ !cancelled() && needs.llvm-linux.result != 'skipped' }}
     runs-on: ${{ matrix.runner }}
     container: rockylinux:9
-    timeout-minutes: 240 # 90 min, plus LLVM if its cache is missing
+    timeout-minutes: 300 # 90 min, plus LLVM if its cache is missing, plus piglit (up to 60 min)
     strategy:
       fail-fast: false
       matrix:
@@ -354,6 +354,8 @@ jobs:
       # llvmpipe CI expectations and ours (patches/piglit-*/osmesa-*.txt): new failures fail the job,
       # so the archive isn't published
       - name: piglit (OpenGL tests on OSMesa)
+        # about 10-15 min on GitHub's 4-CPU runners (piglit's build, sanity and llvmpipe_gl)
+        timeout-minutes: 60
         run: |
           bash release/piglit.sh deps > /tmp/piglit-deps.log 2>&1 || { tail -n 30 /tmp/piglit-deps.log; exit 1; }
           WORK=/root/piglit-work JOBS=$(nproc) bash release/piglit.sh all "out/$NAME.tar.xz" sanity llvmpipe_gl

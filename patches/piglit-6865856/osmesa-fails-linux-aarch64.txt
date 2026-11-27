@@ -1,0 +1,6 @@
+# Expected failures on Linux aarch64 only, on top of osmesa-fails.txt and osmesa-fails-aarch64.txt
+# (macOS arm64 and x86_64 give Mesa's expected failure, or pass). To be fixed:
+# https://github.com/devernay/osmesa-install/issues/29
+# crashes, where Mesa expects a failure (which x86_64 and macOS arm64 give)
+spec@!opengl 1.1@polygon-mode-facing,Crash
+spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail

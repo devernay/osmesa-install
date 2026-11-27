@@ -1,6 +1,7 @@
 # piglit failures that are expected with OSMesa, on top of Mesa's CI expectations for llvmpipe
 # (src/gallium/drivers/llvmpipe/ci/llvmpipe-fails.txt), which are made with a window system.
-# Format: test name,Fail (as Mesa's *-fails.txt). See release/piglit.sh.
+# Format: test name,Fail (as Mesa's *-fails.txt). See release/piglit.sh: an entry that passes is an
+# error (remove it), so that this list doesn't hide a later regression.
 
 # OSMesa renders into a single (front) buffer supplied by the application: there is no back
 # buffer, so GL_BACK and GL_FRONT are the same buffer, and "window" blits between them can't work
@@ -12,11 +13,5 @@ spec@ext_framebuffer_blit@fbo-sys-blit,Fail
 spec@ext_framebuffer_blit@fbo-sys-sub-blit,Fail
 spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 
-# OSMesa can't create forward-compatible contexts (no such attribute)
-spec@!opengl 3.0@forward-compatible-bit yes,Fail
-
 # osmesa-install builds Mesa with -Dshader-cache=disabled: no program binary formats
 spec@arb_get_program_binary@restore-sso-program,Fail
-
-# needs spirv-as (SPIRV-Tools), which isn't installed where piglit runs
-spec@arb_gpu_shader5@arb_gpu_shader5-xfb-streams-without-invocations spirv,Fail

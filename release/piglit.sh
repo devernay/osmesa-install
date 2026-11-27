@@ -25,8 +25,7 @@
 # Environment: WORK (/root/piglit-work; for "local", on the host: /tmp/osmesa-piglit-local),
 # PROFILE (llvmpipe_gl), JOBS (4: tests run in parallel), MKJOBS (4), TIMEOUT (300 s per test),
 # GALLIUM_DRIVER (llvmpipe; or softpipe), PYTHON (python3: runs piglit and piglit-compare.py),
-# CMAKE_PREFIX_PATH (/opt/local on macOS, for libpng), MESA_VERSION (from the archive's README.txt, else
-# 25.0.7: the Mesa release whose CI expectations are used).
+# CMAKE_PREFIX_PATH (/opt/local on macOS, for libpng).
 # "local" only: CONTAINER (podman), IMAGE (docker.io/library/rockylinux:9), PLATFORM (the host's:
 # linux/arm64 or linux/amd64), CPUS (4), MEMORY_GB (6).
 
@@ -83,11 +82,9 @@ archive_dir() {
     (cd "$d" && pwd)
 }
 
-mesa_version() {
-    local v=""
-    [ -f "$WORK/archive-dir" ] && v=$(sed -n 's/^- Mesa \([0-9.]*\) OSMesa.*/\1/p' "$(cat "$WORK/archive-dir")/README.txt")
-    echo "${MESA_VERSION:-${v:-25.0.7}}"
-}
+# the Mesa release whose CI expectations are used: PIGLIT_COMMIT and the patches are pinned to it
+MESA_VERSION=25.0.7
+MESA_SHA256=592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6
 
 piglit_dir() { echo "$WORK/piglit"; }
 
@@ -97,6 +94,9 @@ do_deps() {
     # piglit: cmake, python3 with mako and numpy, libpng (to write images), git to fetch it
     dnf install -y gcc-toolset-14 cmake make patch diffutils tar xz bzip2 which file git \
         python3 python3-mako python3-numpy libpng-devel zlib-devel pkgconfig
+    # spirv-as, for piglit's SPIR-V tests, where it is packaged (else they are expected to fail,
+    # see osmesa-fails-nospirv.txt)
+    dnf install -y spirv-tools || log "spirv-tools not available: SPIR-V tests are expected to fail"
 }
 
 do_fetch() {
@@ -107,8 +107,16 @@ do_fetch() {
     [ -d "$d" ] || die "no patches for piglit $short ($d)"
     rm -rf "$p"
     mkdir -p "$WORK"
-    git clone --quiet --no-checkout "$PIGLIT_URL" "$p"
-    git -C "$p" checkout --quiet "$PIGLIT_COMMIT"
+    # only the pinned commit, with retries (gitlab.freedesktop.org is sometimes unavailable)
+    git init --quiet "$p"
+    local try
+    for try in 1 2 3 4; do
+        git -C "$p" fetch --quiet --depth 1 "$PIGLIT_URL" "$PIGLIT_COMMIT" && break
+        [ "$try" = 4 ] && die "can't fetch piglit $PIGLIT_COMMIT from $PIGLIT_URL"
+        log "piglit: fetch failed, retrying in $((try * 30)) s"
+        sleep $((try * 30))
+    done
+    git -C "$p" checkout --quiet FETCH_HEAD
     for patch in $PIGLIT_PATCHES; do
         log "piglit: applying $patch"
         patch -d "$p" -p1 < "$d/$patch"
@@ -184,15 +192,20 @@ do_build() {
         || { tail -n 50 "$WORK/piglit-build.log"; die "piglit build failed, see $WORK/piglit-build.log"; }
     tail -n 3 "$WORK/piglit-build.log"
     echo "piglit: $(find "$p/bin" -type f | wc -l) programs in $p/bin"
-    # a quick check that a test runs
-    "$p/bin/glinfo" -auto | sed -n '1,/^GL_EXTENSIONS/p' | grep -v '^GL_EXTENSIONS' || true
+    # a quick check that a test runs and gets the expected context: piglit reports tests that can't
+    # create a context as skipped, which would make every test skip
+    local info
+    info=$("$p/bin/glinfo" -auto) || die "glinfo failed"
+    echo "$info" | sed -n '1,/^GL_EXTENSIONS/p' | grep -v '^GL_EXTENSIONS'
+    echo "$info" | grep -q "^GL_RENDERER = $GALLIUM_DRIVER" || die "glinfo: not $GALLIUM_DRIVER"
+    echo "$info" | grep -q '^GL_VERSION = 4\.5 (Compatibility Profile)' \
+        || die "glinfo: not an OpenGL 4.5 compatibility context"
 }
 
 # Mesa's CI expectations for llvmpipe (and its skips for every driver), from the Mesa release
 # tarball (gitlab.freedesktop.org refuses scripted downloads)
 do_expectations() {
-    local v e t ci
-    v=$(mesa_version)
+    local v=$MESA_VERSION e t ci
     e=$WORK/expectations
     t=$WORK/dl/mesa-$v.tar.xz
     if [ -f "$e/mesa-$v" ]; then return 0; fi
@@ -201,9 +214,7 @@ do_expectations() {
         curl -fL --retry 3 -o "$t.part" "https://archive.mesa3d.org/mesa-$v.tar.xz"
         mv "$t.part" "$t"
     fi
-    if [ "$v" = 25.0.7 ]; then
-        echo "592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6  $t" | sha256 -c -
-    fi
+    echo "$MESA_SHA256  $t" | sha256 -c -
     ci=mesa-$v/src/gallium/drivers/llvmpipe/ci
     rm -rf "$WORK/mesa-ci" && mkdir -p "$WORK/mesa-ci"
     tar xJf "$t" -C "$WORK/mesa-ci" "$ci/llvmpipe-fails.txt" "$ci/llvmpipe-flakes.txt" \
@@ -215,7 +226,7 @@ do_expectations() {
 }
 
 do_run() {
-    local profile=${1:-$PROFILE} p r excludes f line short
+    local profile=${1:-$PROFILE} p r excludes f line
     p=$(piglit_dir)
     r=$WORK/results/$profile
     do_expectations
@@ -226,14 +237,6 @@ do_run() {
             excludes+=(-x "$line")
         done < "$WORK/expectations/$f"
     done
-    # ours (patches/piglit-*/osmesa-skips.txt): tests that can't work without a window system
-    short=$(echo "$PIGLIT_COMMIT" | cut -c1-7)
-    if [ -f "$repo/patches/piglit-$short/osmesa-skips.txt" ]; then
-        while IFS= read -r line; do
-            case "$line" in ''|'#'*) continue;; esac
-            excludes+=(-x "$line")
-        done < "$repo/patches/piglit-$short/osmesa-skips.txt"
-    fi
     rm -rf "$r"
     mkdir -p "$WORK/results"
     log "piglit: running $profile with $GALLIUM_DRIVER ($JOBS jobs, ${TIMEOUT}s timeout) into $r"
@@ -242,30 +245,44 @@ do_run() {
     # PIGLIT_NO_FAST_SKIP: piglit's runner pre-filters tests with wflinfo (waffle), which has no
     # OSMesa backend; without it, every test with a GL or GLSL version requirement would be skipped
     # as needing more than "0.0". Each test then checks its own requirements when it runs.
-    (cd "$p" && PIGLIT_PLATFORM=osmesa PIGLIT_NO_FAST_SKIP=1 "$PYTHON" ./piglit run -p osmesa -j "$JOBS" --timeout "$TIMEOUT" \
+    (cd "$p" && PIGLIT_NO_FAST_SKIP=1 "$PYTHON" ./piglit run -p osmesa -j "$JOBS" --timeout "$TIMEOUT" \
         -l verbose "${excludes[@]}" "$profile" "$r") > "$WORK/results/$profile.log" 2>&1 \
         || { tail -n 30 "$WORK/results/$profile.log"; die "piglit run failed, see $WORK/results/$profile.log"; }
     log "piglit: $profile ran in $((SECONDS - start)) s"
 }
 
+# this platform, as in the expectation file names: linux-x86_64, linux-aarch64, macos-aarch64
+platform() {
+    local arch
+    case "$(uname -m)" in arm64|aarch64) arch=aarch64;; *) arch=$(uname -m);; esac
+    case "$osname" in Darwin) echo "macos-$arch";; *) echo "linux-$arch";; esac
+}
+
 do_compare() {
-    local profile=${1:-$PROFILE} short e args kind f
+    local profile=${1:-$PROFILE} short e args f suffix plat minpass
     short=$(echo "$PIGLIT_COMMIT" | cut -c1-7)
     e=$WORK/expectations
+    plat=$(platform)
     args=(--fails "$e/llvmpipe-fails.txt" --flakes "$e/llvmpipe-flakes.txt"
           --skips "$e/llvmpipe-skips.txt" --skips "$e/all-skips.txt")
-    # ours: failures with OSMesa that Mesa's CI (with a window system, on x86_64 Linux) doesn't have,
-    # in general (osmesa-KIND.txt), on AArch64 (osmesa-KIND-aarch64.txt) and on macOS
-    # (osmesa-KIND-macos.txt)
-    local arch os suffix
-    case "$(uname -m)" in arm64|aarch64) arch=aarch64;; *) arch=$(uname -m);; esac
-    case "$osname" in Darwin) os=macos;; Linux) os=linux;; *) os=windows;; esac
-    for kind in fails flakes skips; do
-        for suffix in "" "-$arch" "-$os"; do
-            f=$repo/patches/piglit-$short/osmesa-$kind$suffix.txt
-            [ ! -f "$f" ] || args+=("--$kind" "$f")
-        done
+    # ours: failures with OSMesa that Mesa's CI (with a window system, on x86_64 Linux) doesn't
+    # have, in general (osmesa-fails.txt) and per architecture, OS or platform
+    # (osmesa-fails-aarch64.txt, -macos, -linux-aarch64...); an entry that passes is an error
+    for suffix in "" "-${plat#*-}" "-${plat%%-*}" "-$plat"; do
+        f=$repo/patches/piglit-$short/osmesa-fails$suffix.txt
+        [ ! -f "$f" ] || args+=(--ours "$f")
     done
+    if ! command -v spirv-as >/dev/null; then
+        args+=(--ours "$repo/patches/piglit-$short/osmesa-fails-nospirv.txt")
+    fi
+    # tests that pass: fewer means tests skip or don't run instead of passing (osmesa-passes.txt)
+    minpass=$(awk -v p="$profile" -v t="$plat" '$1 == p && $2 == t {print $3}' \
+        "$repo/patches/piglit-$short/osmesa-passes.txt")
+    if [ -n "$minpass" ]; then
+        args+=(--min-pass "$minpass")
+    else
+        log "piglit: no minimum number of passing tests for $profile on $plat (osmesa-passes.txt)"
+    fi
     "$PYTHON" -I "$repo/release/piglit-compare.py" "$WORK/results/$profile" "${args[@]}" \
         --list-out "$WORK/results/$profile.txt"
 }

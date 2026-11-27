@@ -241,10 +241,10 @@ index 37c06773d..007d78195 100644
  	if (piglit_use_fbo && !test_config->requires_displayed_window) {
 diff --git a/tests/util/piglit-framework-gl/piglit_osmesa_framework.c b/tests/util/piglit-framework-gl/piglit_osmesa_framework.c
 new file mode 100644
-index 000000000..881c0b9f7
+index 000000000..a1a7d6d5e
 --- /dev/null
 +++ b/tests/util/piglit-framework-gl/piglit_osmesa_framework.c
-@@ -0,0 +1,373 @@
+@@ -0,0 +1,378 @@
 +/*
 + * Copyright © 2026 Frédéric Devernay
 + *
@@ -278,8 +278,8 @@ index 000000000..881c0b9f7
 + *
 + * The context is created with OSMesaCreateContextAttribs: a core profile if
 + * the test supports one, else (or if that fails) a compatibility profile.
-+ * OSMesa has no context flags, so tests that require a debug context are
-+ * skipped, and forward-compatible contexts are core contexts.
++ * OSMesa has no context flags, so tests that require a debug or a
++ * forward-compatible context are skipped.
 + *
 + * GL functions are looked up with OSMesaGetProcAddress (see
 + * piglit-dispatch-init.c), which also works with a mangled OSMesa (mgl*
@@ -401,7 +401,8 @@ index 000000000..881c0b9f7
 +make_context_current(const struct piglit_gl_test_config *test_config,
 +		     bool core, int version)
 +{
-+	int attribs[32];
++	/* at most 7 attribute pairs and the terminating 0 */
++	int attribs[15];
 +	int i = 0;
 +	int visual = test_config->window_visual;
 +
@@ -590,6 +591,10 @@ index 000000000..881c0b9f7
 +		puts("OSMesa can't create debug contexts");
 +		piglit_report_result(PIGLIT_SKIP);
 +	}
++	if (test_config->require_forward_compatible_context) {
++		puts("OSMesa can't create forward-compatible contexts");
++		piglit_report_result(PIGLIT_SKIP);
++	}
 +
 +	if (!piglit_gl_framework_init(&osmesa_fw.gl_fw, test_config))
 +		return NULL;
@@ -653,6 +658,3 @@ index 000000000..71312dfc4
 +
 +struct piglit_gl_framework*
 +piglit_osmesa_framework_create(const struct piglit_gl_test_config *test_config);
--- 
-2.56.1
-
