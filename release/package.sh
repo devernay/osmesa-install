@@ -49,7 +49,8 @@ llvmsyslibs=$("$llvmconfig" --link-static --system-libs | tr '\n' ' ')
 case "$(uname)" in
     Darwin) syslibs="-lc++";;
     Linux) syslibs="-lpthread -lm -ldl -lstdc++";;
-    *) syslibs="-lsynchronization -lws2_32 -lstdc++";; # MSYS2/MinGW (link with -static)
+    *) # MSYS2/MinGW (link with -static): libstdc++ (gcc, e.g. UCRT64) or libc++ (clang, e.g. CLANGARM64)
+        case "${MSYSTEM:-}" in CLANG*) syslibs="-lsynchronization -lws2_32 -lc++";; *) syslibs="-lsynchronization -lws2_32 -lstdc++";; esac;;
 esac
 libs="-lMangledGLU -lMangledOSMesa32 $llvmlibs $llvmsyslibs $syslibs"
 libs=$(echo $libs) # normalize spaces

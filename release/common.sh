@@ -15,7 +15,7 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 github_repo=devernay/osmesa-install
 gluversion=9.0.1
 demoversion=8.4.0
-PLATFORMS="macos-arm64 macos-x86_64 windows-ucrt64-x86_64 linux-x86_64 linux-aarch64"
+PLATFORMS="macos-arm64 macos-x86_64 windows-ucrt64-x86_64 windows-clangarm64-aarch64 linux-x86_64 linux-aarch64"
 
 log() { echo "[$(date '+%F %T')] $*"; }
 die() { echo "Error: $*" >&2; exit 1; }

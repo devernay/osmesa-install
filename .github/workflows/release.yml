@@ -94,9 +94,16 @@ jobs:
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
 
   llvm-windows:
-    name: LLVM, Windows x86_64 (MSYS2 UCRT64)
+    name: LLVM, Windows ${{ matrix.arch }} (MSYS2 ${{ matrix.msystem }})
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: windows-2025
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # UCRT64: MinGW-w64 gcc and libstdc++; CLANGARM64: clang and libc++
+          - {arch: x86_64, msystem: UCRT64, runner: windows-2025, compilers: 'gcc:p binutils:p', cc: gcc, cxx: g++}
+          - {arch: aarch64, msystem: CLANGARM64, runner: windows-11-arm, compilers: 'clang:p lld:p', cc: clang, cxx: clang++}
     # building LLVM takes 1.5-2 h on a Windows runner
     timeout-minutes: 360
     defaults:
@@ -109,16 +116,16 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: llvm-${{ env.CI_LLVM_VERSION }}
-          key: release-windows-ucrt64-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
+          key: release-windows-${{ matrix.msystem == 'UCRT64' && 'ucrt64' || 'clangarm64' }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
           lookup-only: true
       - uses: msys2/setup-msys2@v2
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         with:
-          msystem: UCRT64
+          msystem: ${{ matrix.msystem }}
           update: true
           cache: true
           install: make patch diffutils tar xz curl
-          pacboy: gcc:p binutils:p cmake:p python:p
+          pacboy: ${{ matrix.compilers }} cmake:p python:p
       - name: Build LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
         run: |
@@ -126,7 +133,7 @@ jobs:
           mkdir -p build "$HOME/osmesa" "$llvm"
           cd build
           env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
-              BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(nproc) \
+              CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} BUILD_OSMESA=0 BUILD_GLU=0 BUILD_OSDEMO=0 MKJOBS=$(nproc) \
               bash ../osmesa-install.sh
       - name: Cache LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
@@ -247,15 +254,23 @@ jobs:
           if-no-files-found: error
 
   osmesa-windows:
-    name: OSMesa, Windows x86_64 (MSYS2 UCRT64)
+    name: OSMesa, Windows ${{ matrix.arch }} (MSYS2 ${{ matrix.msystem }})
     needs: llvm-windows
-    runs-on: windows-2025
+    # also when the other architecture's LLVM failed (LLVM is then built here if not cached)
+    if: ${{ !cancelled() && needs.llvm-windows.result != 'skipped' }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: x86_64, msystem: UCRT64, runner: windows-2025, compilers: 'gcc:p binutils:p', cc: gcc, cxx: g++}
+          - {arch: aarch64, msystem: CLANGARM64, runner: windows-11-arm, compilers: 'clang:p lld:p', cc: clang, cxx: clang++}
     timeout-minutes: 360 # 60 min, plus LLVM if its cache is missing
     defaults:
       run:
         shell: msys2 {0}
     env:
-      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-windows-ucrt64-x86_64
+      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-windows-${{ matrix.msystem == 'UCRT64' && 'ucrt64' || 'clangarm64' }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v7
       # if the cache is missing (e.g. its save failed), osmesa-install.sh builds LLVM (LLVM_BUILD=auto)
@@ -263,16 +278,16 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: llvm-${{ env.CI_LLVM_VERSION }}
-          key: release-windows-ucrt64-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
+          key: release-windows-${{ matrix.msystem == 'UCRT64' && 'ucrt64' || 'clangarm64' }}-llvm-${{ env.CI_LLVM_VERSION }}-${{ env.CI_LLVM_CACHE_VERSION }}
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: UCRT64
+          msystem: ${{ matrix.msystem }}
           update: true
           cache: true
           install: >-
             make patch diffutils tar xz curl bison flex autoconf automake libtool
           pacboy: >-
-            gcc:p binutils:p pkgconf:p cmake:p meson:p ninja:p
+            ${{ matrix.compilers }} pkgconf:p cmake:p meson:p ninja:p
             python:p python-mako:p python-yaml:p python-packaging:p
             zlib:p freeglut:p
       - name: Build OSMesa, GLU and osdemo
@@ -281,18 +296,21 @@ jobs:
           mkdir -p build "$HOME/osmesa" "$llvm"
           cd build
           env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
-              PYTHON="$MSYSTEM_PREFIX/bin/python3" MKJOBS=$(nproc) \
+              CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} PYTHON="$MSYSTEM_PREFIX/bin/python3" MKJOBS=$(nproc) \
               bash ../osmesa-install.sh
       - name: Check the libraries
         run: |
           lib="$HOME/osmesa/lib"
-          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]' || true)" = 0
-          test "$(nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
-          test "$(nm -g "$lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
-          # the test programs only need Windows system DLLs (no MSYS2 DLLs)
+          # binutils (UCRT64) or LLVM's tools (CLANGARM64)
+          nm=$(command -v nm || command -v llvm-nm); objdump=$(command -v objdump || command -v llvm-objdump)
+          test "$($nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T gl[A-Z]' || true)" = 0
+          test "$($nm -g "$lib/libMangledOSMesa32.a" 2>/dev/null | grep -c ' T mgl[A-Z]' || true)" -gt 1000
+          test "$($nm -g "$lib/libMangledGLU.a" 2>/dev/null | grep -c ' T glu[A-Z]' || true)" = 0
+          # the test programs only need Windows system DLLs (no MSYS2 DLLs), and are for this architecture
           for f in osdemo osdemo16 osdemo32 osmesa_mt_test; do
             p=$(ls build/mesa-demos-*/src/osdemos/$f.exe)
-            deps=$(objdump -p "$p" | sed -n 's/^\s*DLL Name: //p')
+            file "$p" | grep -E "${{ matrix.arch == 'aarch64' && 'Aarch64|ARM64' || 'x86-64' }}"
+            deps=$($objdump -p "$p" | sed -n 's/^\s*DLL Name: //p')
             echo "$f:" $deps
             if echo "$deps" | grep -viE '^(kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|uuid|ws2_32|psapi|dbghelp|ntdll|bcrypt|synchronization|msvcrt|ucrtbase|opengl32|api-ms-win-.*)\.dll$'; then
               echo "::error::$f depends on non-system DLLs"; exit 1
@@ -301,9 +319,9 @@ jobs:
       - name: Package
         run: |
           mkdir -p out
-          echo "  Windows Server 2025 runner, MSYS2 UCRT64, $(gcc --version | head -1), for Windows 10 and later" > "out/$NAME.buildinfo"
+          echo "  ${{ matrix.runner }} runner, MSYS2 ${{ matrix.msystem }}, $(${{ matrix.cc }} --version | head -1), for Windows 10 and later" > "out/$NAME.buildinfo"
           bash release/package.sh "$NAME" "$HOME/osmesa" "$PWD/llvm-$CI_LLVM_VERSION" build out \
-              "Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc, UCRT)"
+              "${{ matrix.arch == 'aarch64' && 'Windows 11 and later, ARM64, MSYS2 CLANGARM64 (clang, libc++, UCRT)' || 'Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc, UCRT)' }}"
           tar tJf "out/$NAME.tar.xz" | sed -n 1,40p
       - uses: actions/upload-artifact@v5
         if: github.event_name != 'pull_request'
@@ -406,7 +424,7 @@ jobs:
   publish-windows:
     name: Publish, Windows
     needs: osmesa-windows
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') && needs.osmesa-windows.result == 'success' }}
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/osmesa-mesa-') && needs.osmesa-windows.result != 'skipped' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -421,7 +439,7 @@ jobs:
           pattern: '*-windows-*'
           path: assets
           merge-multiple: true
-      - name: Add the archive to the release
+      - name: Add the archives to the release
         run: |
           test "$TAG" = "osmesa-mesa-$CI_MESA_VERSION-llvm-$CI_LLVM_VERSION"
           ls assets/*.tar.xz || { echo "::error::no Windows archive was built"; exit 1; }

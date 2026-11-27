@@ -17,7 +17,7 @@ set -o pipefail
 tag=$1
 repo=${GITHUB_REPOSITORY:-devernay/osmesa-install}
 url="https://github.com/$repo/releases/download/$tag"
-PLATFORMS=${PLATFORMS:-"macos-arm64 macos-x86_64 windows-ucrt64-x86_64 linux-x86_64 linux-aarch64"}
+PLATFORMS=${PLATFORMS:-"macos-arm64 macos-x86_64 windows-ucrt64-x86_64 windows-clangarm64-aarch64 linux-x86_64 linux-aarch64"}
 ALLOW_MISSING=${ALLOW_MISSING:-}
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
 check=$(mktemp -d)
