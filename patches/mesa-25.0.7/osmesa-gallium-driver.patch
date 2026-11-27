@@ -27,7 +27,7 @@
  
     bool ever_used;     /*< Has this context ever been current? */
  
-@@ -140,43 +141,80 @@
+@@ -140,43 +141,83 @@
     return 0;
  }
  
@@ -55,11 +55,14 @@
 -      if (global_fscreen->screen)
 -         global_fscreen->screen->destroy(global_fscreen->screen);
 -      FREE(global_fscreen);
-+   /* At exit, a context that was never destroyed may still have rendering in
-+    * flight (e.g. a program calling exit() with a current context): destroying
-+    * its screen then races with the driver's threads (llvmpipe's rasterizer
-+    * threads wait forever at a barrier, and exit() hangs). Destroying a screen
-+    * under a live context isn't valid anyway: leave everything to the system.
++   /* At exit, a context that was never destroyed may still have queued
++    * rendering (e.g. a program calling exit() with a live context). Destroying
++    * its screen then races with llvmpipe's rasterizer threads: lp_rast_destroy()
++    * sets exit_flag while a queued scene's wakeups are pending, so the threads
++    * that already took the scene wait forever at its barrier for those that saw
++    * exit_flag, and exit() hangs in thrd_join(). Destroying a screen under a
++    * live context isn't valid anyway (and atexit handlers or static destructors
++    * that run later may still destroy that context): leave it to the system.
 +    */
 +   if (p_atomic_read(&osmesa_live_contexts) != 0)
 +      return;
@@ -105,8 +108,7 @@
 -   call_once(&create_once_flag, create_st_manager);
 +   assert(driver < OSMESA_NUM_DRIVERS);
 +   call_once(&global_fscreens_once, init_st_managers);
- 
--   return global_fscreen;
++
 +   mtx_lock(&global_fscreens_mutex);
 +   fscreen = global_fscreens[driver];
 +   if (!fscreen) {
@@ -124,12 +126,13 @@
 +      }
 +   }
 +   mtx_unlock(&global_fscreens_mutex);
-+
+ 
+-   return global_fscreen;
 +   return fscreen;
  }
  
  /* Reads the color or depth buffer from the backing context to either the user storage
-@@ -414,7 +452,7 @@
+@@ -414,7 +455,7 @@
                                 struct pipe_resource **out,
                                 struct pipe_resource **resolve)
  {
@@ -138,7 +141,7 @@
     enum st_attachment_type i;
     struct osmesa_buffer *osbuffer = drawable_to_osbuffer(drawable);
     struct pipe_resource templat;
-@@ -474,7 +512,8 @@
+@@ -474,7 +515,8 @@
   * Create new buffer and add to linked list.
   */
  static struct osmesa_buffer *
@@ -148,7 +151,7 @@
                       enum pipe_format ds_format,
                       enum pipe_format accum_format)
  {
-@@ -484,7 +523,7 @@
+@@ -484,7 +526,7 @@
        osbuffer->base.validate = osmesa_st_framebuffer_validate;
        p_atomic_set(&osbuffer->base.stamp, 1);
        osbuffer->base.ID = p_atomic_inc_return(&osmesa_fb_ID);
@@ -157,7 +160,7 @@
        osbuffer->base.visual = &osbuffer->visual;
  
        osmesa_init_st_visual(&osbuffer->visual, color_format,
-@@ -570,6 +609,8 @@
+@@ -570,6 +612,8 @@
     GLenum format = GL_RGBA;
     int depthBits = 0, stencilBits = 0, accumBits = 0;
     int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
@@ -166,10 +169,12 @@
     int i;
  
     if (sharelist) {
-@@ -628,6 +669,21 @@
+@@ -626,7 +670,22 @@
+       case OSMESA_CONTEXT_MINOR_VERSION:
+          version_minor = attribList[i+1];
           if (version_minor < 0)
-             return NULL;
-          break;
++            return NULL;
++         break;
 +      case OSMESA_GALLIUM_DRIVER:
 +         /* 0 = softpipe, 1 = llvmpipe, 2 = swr: swr was removed from Mesa (22.0),
 +          * use llvmpipe, which is also an LLVM-based rasterizer */
@@ -182,13 +187,12 @@
 +            driver = 2; /* llvmpipe */
 +            break;
 +         default:
-+            return NULL;
+             return NULL;
 +         }
-+         break;
+          break;
        case 0:
           /* end of list */
-          break;
-@@ -637,9 +693,21 @@
+@@ -637,9 +696,21 @@
        }
     }
  
@@ -210,7 +214,7 @@
  
     /* Choose depth/stencil/accum buffer formats */
     if (accumBits > 0) {
-@@ -677,7 +745,7 @@
+@@ -677,7 +748,7 @@
                           osmesa->depth_stencil_format,
                           osmesa->accum_format);
  
@@ -219,7 +223,7 @@
                                           &attribs, &st_error, st_shared);
     if (!osmesa->st) {
        FREE(osmesa);
-@@ -690,6 +758,7 @@
+@@ -690,6 +761,7 @@
     osmesa->user_row_length = 0;
     osmesa->y_up = GL_TRUE;
  
@@ -227,7 +231,7 @@
     return osmesa;
  }
  
-@@ -708,6 +777,7 @@
+@@ -708,6 +780,7 @@
        st_destroy_context(osmesa->st);
        free(osmesa->zs);
        FREE(osmesa);
@@ -235,7 +239,7 @@
     }
  }
  
-@@ -767,7 +837,8 @@
+@@ -767,7 +840,8 @@
     }
  
     if (!osmesa->current_buffer) {
@@ -245,7 +249,7 @@
                                        osmesa->depth_stencil_format,
                                        osmesa->accum_format);
     }
-@@ -875,7 +946,7 @@
+@@ -875,7 +949,7 @@
        FALLTHROUGH;
     case OSMESA_MAX_HEIGHT:
        {
