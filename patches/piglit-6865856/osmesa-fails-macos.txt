@@ -1,0 +1,11 @@
+# Expected failures on macOS, on top of osmesa-fails.txt and osmesa-fails-aarch64.txt. They pass on
+# Linux aarch64 with the same framework and LLVM, so the macOS build renders them wrongly; the
+# cause isn't known yet: https://github.com/devernay/osmesa-install/issues/30
+spec@arb_sample_shading@builtin-gl-sample-mask-simple 0,Fail
+spec@arb_sample_shading@builtin-gl-sample-mask-simple 2,Fail
+spec@arb_sample_shading@builtin-gl-sample-mask-simple 4,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x223344ff,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x76356278,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x223344ff,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x76356278,Fail

@@ -55,6 +55,11 @@ for arch in $ARCHS; do
     number "$free" "the container storage's free space"
     [ "$free" -ge "$storage_gb" ] || die "only $free GB free in the container storage, $storage_gb GB needed"
     name="osmesa-install-$tag-linux-$arch"
+    # the release gate: piglit's full llvmpipe_gl profile on the host's architecture; under
+    # emulation (qemu), where it would take hours and time out, only its sanity profile
+    profiles="sanity llvmpipe_gl"
+    case "$(uname -m)-$arch" in arm64-aarch64|aarch64-aarch64|x86_64-x86_64) ;;
+        *) profiles=sanity; log "$arch: emulated, piglit runs only its sanity profile";; esac
     log "$arch: building in a $IMAGE container ($platform; log: $WORK/out/build-$arch.log)"
     # the build runs in the container's own filesystem; only the sources, the tarballs and the
     # output are on the shared directory
@@ -63,7 +68,7 @@ for arch in $ARCHS; do
     "$CONTAINER" run --rm --platform "$platform" --security-opt label=disable \
         --cpus "$CPUS" --memory "${MEMORY_GB}g" -v "$WORK:/host" \
         -e CI_MESA_VERSION="$mesaversion" -e CI_LLVM_VERSION="$llvmversion" \
-        -e MKJOBS="$MKJOBS" -e NAME="$name" -e ARCH="$arch" \
+        -e MKJOBS="$MKJOBS" -e NAME="$name" -e ARCH="$arch" -e PIGLIT_PROFILES="$profiles" \
         -e BUILDINFO="$CONTAINER $platform on $(uname -s) $(uname -m), osmesa-install $commit (release/linux-local.sh)" \
         "$IMAGE" bash -c '
             set -eu
@@ -76,6 +81,13 @@ for arch in $ARCHS; do
             bash release/linux-build.sh package "$NAME" "$ARCH"
             bash release/linux-build.sh test-cmake "$NAME"
             bash release/linux-build.sh test-pkgconfig "$NAME"
+            # the release gate, as in the release workflow (release/piglit.sh)
+            bash release/piglit.sh deps > /root/piglit-deps.log 2>&1 || { tail -n 30 /root/piglit-deps.log; exit 1; }
+            status=0
+            WORK=/root/piglit-work JOBS=$(nproc) bash release/piglit.sh all "out/$NAME.tar.xz" $PIGLIT_PROFILES || status=$?
+            # the piglit results, also when the gate fails
+            mkdir -p "/host/out/piglit-$ARCH" && cp -R /root/piglit-work/results/. "/host/out/piglit-$ARCH/"
+            [ "$status" = 0 ] || exit "$status"
             cp "out/$NAME.tar.xz" /host/out/
             echo "container build $ARCH: OK"' > "$WORK/out/build-$arch.log" 2>&1 \
         || die "$arch build failed, see $WORK/out/build-$arch.log"

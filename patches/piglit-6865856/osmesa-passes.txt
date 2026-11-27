@@ -1,0 +1,11 @@
+# Minimum number of tests that pass, per profile and platform (release/piglit.sh compare): fewer
+# means tests that skip or don't run instead of passing, which the expected failures can't see
+# (piglit reports a test that can't get its context as skipped). About 99% of the passes measured
+# in November 2026 (sanity: all of them): raise them when more tests pass.
+# profile     platform        minimum passes
+sanity        linux-x86_64    28
+sanity        linux-aarch64   28
+sanity        macos-aarch64   28
+llvmpipe_gl   linux-x86_64    6220
+llvmpipe_gl   linux-aarch64   6215
+llvmpipe_gl   macos-aarch64   6209

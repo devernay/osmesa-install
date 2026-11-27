@@ -1,0 +1,3 @@
+# Expected failures where spirv-as (SPIRV-Tools) isn't installed (release/piglit.sh uses this file
+# only then): piglit's SPIR-V tests assemble their shaders with it.
+spec@arb_gpu_shader5@arb_gpu_shader5-xfb-streams-without-invocations spirv,Fail

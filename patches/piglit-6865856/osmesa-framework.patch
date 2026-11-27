@@ -1,0 +1,660 @@
+From 9994d6a27257c908266fbd3414743c75037c4e3c Mon Sep 17 00:00:00 2001
+From: devernay <devernay@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 12:06:03 +0100
+Subject: [PATCH] Add an OSMesa framework (PIGLIT_USE_OSMESA, platform osmesa)
+
+Creates the GL context with OSMesaCreateContextAttribs (core or
+compatibility profile, the version the test asks for) on an RGBA buffer
+in memory, with no window system: no Waffle, GLUT, GLX or EGL. Swapping
+buffers does nothing, and -fbo renders to an FBO as the Waffle FBO
+framework does. piglit-dispatch looks up every GL function with
+OSMesaGetProcAddress, which also works with a mangled OSMesa (mgl*).
+
+CMake: -DPIGLIT_USE_OSMESA=ON -DOSMesa_LIBRARIES=<library and its
+dependencies> -DOSMesa_INCLUDE_DIR=<dir with GL/osmesa.h>. Tests then
+link OSMesa_LIBRARIES in place of the GL library. Python: platform
+osmesa (piglit run -p osmesa).
+---
+ CMakeLists.txt                                |  38 +-
+ cmake/target_api/gl/CMakeLists.txt            |   2 +-
+ framework/core.py                             |   2 +-
+ tests/general/CMakeLists.gl.txt               |   4 +-
+ tests/util/CMakeLists.txt                     |  10 +-
+ tests/util/piglit-dispatch-init.c             |  37 +-
+ .../piglit-framework-gl/piglit_gl_framework.c |   8 +-
+ .../piglit_osmesa_framework.c                 | 373 ++++++++++++++++++
+ .../piglit_osmesa_framework.h                 |  29 ++
+ 9 files changed, 491 insertions(+), 12 deletions(-)
+ create mode 100644 tests/util/piglit-framework-gl/piglit_osmesa_framework.c
+ create mode 100644 tests/util/piglit-framework-gl/piglit_osmesa_framework.h
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 99ae07a4a..00ac457a9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -67,6 +67,19 @@ endif()
+ 
+ option(PIGLIT_SSE2 "Build with SSE2 support on 32-bit x86 architecture" ON)
+ 
++option(PIGLIT_USE_OSMESA "Use OSMesa (off-screen Mesa, no window system) in place of Waffle or GLUT" OFF)
++if(PIGLIT_USE_OSMESA)
++	# OSMesa creates desktop GL contexts only, without GLX, EGL or WGL
++	set(DEFAULT_WAFFLE OFF)
++	set(DEFAULT_GBM OFF)
++	set(DEFAULT_WAYLAND OFF)
++	set(DEFAULT_X11 OFF)
++	set(DEFAULT_EGL OFF)
++	set(DEFAULT_GLX OFF)
++	set(DEFAULT_WGL OFF)
++	set(DEFAULT_GLES_TESTS_BUILD OFF)
++	set(DEFAULT_VK_TESTS_BUILD OFF)
++endif()
+ option(PIGLIT_USE_WAFFLE "Use Waffle in place of GLUT" ${DEFAULT_WAFFLE})
+ 
+ option(PIGLIT_USE_GBM "Use GBM" ${DEFAULT_GBM})
+@@ -111,11 +124,32 @@ if(PIGLIT_USE_X11)
+ 	add_definitions(-DPIGLIT_HAS_X11)
+ endif()
+ 
+-if(PIGLIT_BUILD_GL_TESTS)
++if(PIGLIT_USE_OSMESA)
++	if(PIGLIT_USE_WAFFLE OR PIGLIT_USE_X11 OR PIGLIT_USE_GBM OR PIGLIT_USE_WAYLAND
++	   OR PIGLIT_BUILD_GLX_TESTS OR PIGLIT_BUILD_EGL_TESTS OR PIGLIT_BUILD_WGL_TESTS)
++		message(FATAL_ERROR "PIGLIT_USE_OSMESA excludes Waffle, X11, GBM, Wayland, GLX, EGL and WGL")
++	endif()
++	# OSMesa_LIBRARIES: the OSMesa library, with what it needs to link (e.g.
++	# a shared library that contains a static OSMesa and LLVM).
++	# OSMesa_INCLUDE_DIR: the directory of GL/osmesa.h and GL/glext.h.
++	set(OSMesa_LIBRARIES "" CACHE STRING "OSMesa library and its dependencies")
++	set(OSMesa_INCLUDE_DIR "" CACHE PATH "Directory with GL/osmesa.h")
++	if(NOT OSMesa_LIBRARIES)
++		find_library(OSMesa_LIBRARIES NAMES OSMesa OSMesa32)
++	endif()
++	if(NOT OSMesa_LIBRARIES)
++		message(FATAL_ERROR "PIGLIT_USE_OSMESA: set OSMesa_LIBRARIES")
++	endif()
++	# Every test links ${OPENGL_gl_LIBRARY}
++	set(OPENGL_gl_LIBRARY ${OSMesa_LIBRARIES})
++	set(OPENGL_INCLUDE_DIR ${OSMesa_INCLUDE_DIR})
++	add_definitions(-DPIGLIT_USE_OSMESA)
++elseif(PIGLIT_BUILD_GL_TESTS)
+ 	find_package(OpenGL REQUIRED)
+ endif()
+ 
+-if(PIGLIT_USE_WAFFLE)
++if(PIGLIT_USE_OSMESA)
++elseif(PIGLIT_USE_WAFFLE)
+ 	if (NOT WIN32)
+ 		pkg_check_modules(Waffle REQUIRED waffle-1)
+ 
+diff --git a/cmake/target_api/gl/CMakeLists.txt b/cmake/target_api/gl/CMakeLists.txt
+index d7084d6ce..e0a574175 100644
+--- a/cmake/target_api/gl/CMakeLists.txt
++++ b/cmake/target_api/gl/CMakeLists.txt
+@@ -3,7 +3,7 @@ add_definitions(
+ 	-DPIGLIT_USE_OPENGL
+ 	)
+ 
+-if(NOT PIGLIT_USE_WAFFLE)
++if(NOT PIGLIT_USE_WAFFLE AND NOT PIGLIT_USE_OSMESA)
+ 	add_definitions(-DPIGLIT_USE_GLUT)
+ 	include_directories(
+ 		${GLUT_INCLUDE_DIR}
+diff --git a/framework/core.py b/framework/core.py
+index faa9a12a4..315d4aa9c 100644
+--- a/framework/core.py
++++ b/framework/core.py
+@@ -44,7 +44,7 @@ __all__ = [
+     'parse_listfile',
+ ]
+ 
+-PLATFORMS = ["glx", "x11_egl", "wayland", "gbm", "mixed_glx_egl", "wgl", "surfaceless_egl"]
++PLATFORMS = ["glx", "x11_egl", "wayland", "gbm", "mixed_glx_egl", "wgl", "surfaceless_egl", "osmesa"]
+ 
+ 
+ class PiglitConfig(configparser.ConfigParser):
+diff --git a/tests/general/CMakeLists.gl.txt b/tests/general/CMakeLists.gl.txt
+index 23ea39e9c..9492a2862 100644
+--- a/tests/general/CMakeLists.gl.txt
++++ b/tests/general/CMakeLists.gl.txt
+@@ -9,10 +9,10 @@ link_libraries (
+ 	${OPENGL_gl_LIBRARY}
+ )
+ 
+-if(NOT PIGLIT_USE_WAFFLE)
++if(NOT PIGLIT_USE_WAFFLE AND NOT PIGLIT_USE_OSMESA)
+ 	# This test uses glutCreateSubWindow.
+ 	piglit_add_executable (windowoverlap windowoverlap.c)
+-endif(NOT PIGLIT_USE_WAFFLE)
++endif()
+ 
+ piglit_add_executable (attribs attribs.c)
+ piglit_add_executable (attribs-half-float attribs-half-float.c)
+diff --git a/tests/util/CMakeLists.txt b/tests/util/CMakeLists.txt
+index 1714ab41f..6a3e98148 100644
+--- a/tests/util/CMakeLists.txt
++++ b/tests/util/CMakeLists.txt
+@@ -71,7 +71,15 @@ set(UTIL_GL_LIBS
+ 	piglitutil
+ 	)
+ 
+-if(PIGLIT_USE_WAFFLE)
++if(PIGLIT_USE_OSMESA)
++	list(APPEND UTIL_GL_SOURCES
++		piglit-framework-gl/piglit_osmesa_framework.c
++	)
++
++	list(APPEND UTIL_GL_LIBS
++		${OPENGL_gl_LIBRARY}
++	)
++elseif(PIGLIT_USE_WAFFLE)
+ 	list(APPEND UTIL_GL_SOURCES
+ 		piglit-framework-gl/piglit_fbo_framework.c
+ 		piglit-framework-gl/piglit_wfl_framework.c
+diff --git a/tests/util/piglit-dispatch-init.c b/tests/util/piglit-dispatch-init.c
+index 3d9772d9b..aee0e2a0b 100644
+--- a/tests/util/piglit-dispatch-init.c
++++ b/tests/util/piglit-dispatch-init.c
+@@ -22,7 +22,9 @@
+ 
+ #include "piglit-util-gl.h"
+ 
+-#if defined(_WIN32)
++#if defined(PIGLIT_USE_OSMESA)
++
++#elif defined(_WIN32)
+ 
+ #elif defined(__APPLE__)
+ 
+@@ -79,7 +81,7 @@ default_get_proc_address_failure(const char *function_name)
+ 	piglit_report_result(PIGLIT_FAIL);
+ }
+ 
+-#if defined(__APPLE__) || defined(PIGLIT_HAS_EGL)
++#if !defined(PIGLIT_USE_OSMESA) && (defined(__APPLE__) || defined(PIGLIT_HAS_EGL))
+ static void *
+ do_dlsym(void **handle, const char *lib_name, const char *function_name)
+ {
+@@ -102,7 +104,36 @@ do_dlsym(void **handle, const char *lib_name, const char *function_name)
+ }
+ #endif
+ 
+-#if defined(_WIN32)
++#if defined(PIGLIT_USE_OSMESA)
++
++/* From GL/osmesa.h, which can't be included with piglit-dispatch */
++#ifdef _WIN32
++typedef void (__stdcall *OSMESAproc)(void);
++extern OSMESAproc __stdcall OSMesaGetProcAddress(const char *funcName);
++#else
++typedef void (*OSMESAproc)(void);
++extern OSMESAproc OSMesaGetProcAddress(const char *funcName);
++#endif
++
++/**
++ * This function is used to retrieve the address of all GL functions with
++ * OSMesa. OSMesaGetProcAddress returns every GL entry point, core or not;
++ * a mangled OSMesa (mgl* functions) accepts the gl* names.
++ */
++static piglit_dispatch_function_ptr
++get_ext_proc_address(const char *function_name)
++{
++	return (piglit_dispatch_function_ptr) OSMesaGetProcAddress(function_name);
++}
++
++static piglit_dispatch_function_ptr
++get_core_proc_address(const char *function_name, int gl_10x_version)
++{
++	(void) gl_10x_version;
++	return get_ext_proc_address(function_name);
++}
++
++#elif defined(_WIN32)
+ 
+ /**
+  * This function is used to retrieve the address of GL extension
+diff --git a/tests/util/piglit-framework-gl/piglit_gl_framework.c b/tests/util/piglit-framework-gl/piglit_gl_framework.c
+index 37c06773d..007d78195 100644
+--- a/tests/util/piglit-framework-gl/piglit_gl_framework.c
++++ b/tests/util/piglit-framework-gl/piglit_gl_framework.c
+@@ -28,7 +28,9 @@
+ #include "piglit_gl_framework.h"
+ #include "piglit-util-gl.h"
+ 
+-#ifdef PIGLIT_USE_WAFFLE
++#if defined(PIGLIT_USE_OSMESA)
++#	include "piglit_osmesa_framework.h"
++#elif defined(PIGLIT_USE_WAFFLE)
+ #	include "piglit_fbo_framework.h"
+ #	include "piglit_winsys_framework.h"
+ #else
+@@ -41,7 +43,9 @@
+ struct piglit_gl_framework*
+ piglit_gl_framework_factory(const struct piglit_gl_test_config *test_config)
+ {
+-#ifdef PIGLIT_USE_WAFFLE
++#if defined(PIGLIT_USE_OSMESA)
++	return piglit_osmesa_framework_create(test_config);
++#elif defined(PIGLIT_USE_WAFFLE)
+ 	struct piglit_gl_framework *gl_fw = NULL;
+ 
+ 	if (piglit_use_fbo && !test_config->requires_displayed_window) {
+diff --git a/tests/util/piglit-framework-gl/piglit_osmesa_framework.c b/tests/util/piglit-framework-gl/piglit_osmesa_framework.c
+new file mode 100644
+index 000000000..a1a7d6d5e
+--- /dev/null
++++ b/tests/util/piglit-framework-gl/piglit_osmesa_framework.c
+@@ -0,0 +1,378 @@
++/*
++ * Copyright © 2026 Frédéric Devernay
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice (including the next
++ * paragraph) shall be included in all copies or substantial portions of the
++ * Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++ * IN THE SOFTWARE.
++ */
++
++/**
++ * \file piglit_osmesa_framework.c
++ *
++ * A GL framework over OSMesa (Mesa's off-screen renderer): no window system,
++ * no Waffle, no GLX/EGL. The "window" is an RGBA buffer in memory, bound with
++ * OSMesaMakeCurrent, and swapping buffers does nothing. With -fbo, the test
++ * renders to an FBO, as with the Waffle FBO framework.
++ *
++ * The context is created with OSMesaCreateContextAttribs: a core profile if
++ * the test supports one, else (or if that fails) a compatibility profile.
++ * OSMesa has no context flags, so tests that require a debug or a
++ * forward-compatible context are skipped.
++ *
++ * GL functions are looked up with OSMesaGetProcAddress (see
++ * piglit-dispatch-init.c), which also works with a mangled OSMesa (mgl*
++ * entry points): it is given the unmangled gl* names.
++ */
++
++#include <assert.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "piglit-util-gl.h"
++#include "piglit_gl_framework.h"
++#include "piglit_osmesa_framework.h"
++
++/* Declared here rather than including GL/osmesa.h, which includes GL/gl.h,
++ * which conflicts with piglit-dispatch. */
++#ifdef _WIN32
++#define PIGLIT_OSMESA_APIENTRY __stdcall
++#else
++#define PIGLIT_OSMESA_APIENTRY
++#endif
++
++#define PIGLIT_OSMESA_FORMAT                0x22
++#define PIGLIT_OSMESA_Y_UP                  0x11
++#define PIGLIT_OSMESA_DEPTH_BITS            0x30
++#define PIGLIT_OSMESA_STENCIL_BITS          0x31
++#define PIGLIT_OSMESA_ACCUM_BITS            0x32
++#define PIGLIT_OSMESA_PROFILE               0x33
++#define PIGLIT_OSMESA_CORE_PROFILE          0x34
++#define PIGLIT_OSMESA_COMPAT_PROFILE        0x35
++#define PIGLIT_OSMESA_CONTEXT_MAJOR_VERSION 0x36
++#define PIGLIT_OSMESA_CONTEXT_MINOR_VERSION 0x37
++
++typedef struct osmesa_context *OSMesaContext;
++
++extern OSMesaContext PIGLIT_OSMESA_APIENTRY
++OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist);
++extern void PIGLIT_OSMESA_APIENTRY
++OSMesaDestroyContext(OSMesaContext ctx);
++extern GLboolean PIGLIT_OSMESA_APIENTRY
++OSMesaMakeCurrent(OSMesaContext ctx, void *buffer, GLenum type,
++		  GLsizei width, GLsizei height);
++extern void PIGLIT_OSMESA_APIENTRY
++OSMesaPixelStore(GLint pname, GLint value);
++
++struct piglit_osmesa_framework {
++	struct piglit_gl_framework gl_fw;
++	OSMesaContext context;
++	void *buffer;
++};
++
++static struct piglit_osmesa_framework osmesa_fw;
++
++static void
++destroy(struct piglit_gl_framework *gl_fw)
++{
++	(void)gl_fw;
++	if (osmesa_fw.context) {
++		OSMesaMakeCurrent(NULL, NULL, 0, 0, 0);
++		OSMesaDestroyContext(osmesa_fw.context);
++		osmesa_fw.context = NULL;
++	}
++	free(osmesa_fw.buffer);
++	osmesa_fw.buffer = NULL;
++	piglit_gl_framework_teardown(&osmesa_fw.gl_fw);
++}
++
++static void
++run_test(struct piglit_gl_framework **pgl_fw, int argc, char *argv[])
++{
++	struct piglit_gl_framework *gl_fw = *pgl_fw;
++	enum piglit_result result = PIGLIT_PASS;
++
++	if (gl_fw->test_config->init)
++		gl_fw->test_config->init(argc, argv);
++	/* There is no window and no event loop: draw once, whether or
++	 * not the run is automatic. */
++	if (gl_fw->test_config->display)
++		result = gl_fw->test_config->display();
++	piglit_report_result(result);
++}
++
++static void
++swap_buffers(struct piglit_gl_framework *gl_fw)
++{
++	(void)gl_fw;
++	/* Nothing to swap: the buffer is single-buffered memory. */
++	glFlush();
++}
++
++static void
++post_redisplay(struct piglit_gl_framework *gl_fw)
++{
++	(void)gl_fw;
++}
++
++static void
++set_keyboard_func(struct piglit_gl_framework *gl_fw,
++		  void (*func)(unsigned char key, int x, int y))
++{
++	(void)gl_fw;
++	(void)func;
++}
++
++static void
++set_reshape_func(struct piglit_gl_framework *gl_fw,
++		 void (*func)(int w, int h))
++{
++	(void)gl_fw;
++	(void)func;
++}
++
++/**
++ * Create and make current an OSMesa context of the given profile and
++ * version. Returns false if OSMesa can't create it.
++ */
++static bool
++make_context_current(const struct piglit_gl_test_config *test_config,
++		     bool core, int version)
++{
++	/* at most 7 attribute pairs and the terminating 0 */
++	int attribs[15];
++	int i = 0;
++	int visual = test_config->window_visual;
++
++	attribs[i++] = PIGLIT_OSMESA_FORMAT;
++	attribs[i++] = GL_RGBA;
++	/* Gallium OSMesa only has Z24 and Z16 (and Z24S8 with stencil);
++	 * always give the 24 bits that window-system visuals have. */
++	if (visual & (PIGLIT_GL_VISUAL_DEPTH | PIGLIT_GL_VISUAL_STENCIL)) {
++		attribs[i++] = PIGLIT_OSMESA_DEPTH_BITS;
++		attribs[i++] = 24;
++	}
++	if (visual & PIGLIT_GL_VISUAL_STENCIL) {
++		attribs[i++] = PIGLIT_OSMESA_STENCIL_BITS;
++		attribs[i++] = 8;
++	}
++	if (visual & PIGLIT_GL_VISUAL_ACCUM) {
++		attribs[i++] = PIGLIT_OSMESA_ACCUM_BITS;
++		attribs[i++] = 16;
++	}
++	attribs[i++] = PIGLIT_OSMESA_PROFILE;
++	attribs[i++] = core ? PIGLIT_OSMESA_CORE_PROFILE
++			    : PIGLIT_OSMESA_COMPAT_PROFILE;
++	attribs[i++] = PIGLIT_OSMESA_CONTEXT_MAJOR_VERSION;
++	attribs[i++] = version / 10;
++	attribs[i++] = PIGLIT_OSMESA_CONTEXT_MINOR_VERSION;
++	attribs[i++] = version % 10;
++	attribs[i++] = 0;
++	assert(i <= (int)(sizeof(attribs) / sizeof(attribs[0])));
++
++	osmesa_fw.context = OSMesaCreateContextAttribs(attribs, NULL);
++	if (!osmesa_fw.context) {
++		printf("piglit: info: OSMesa can't create a GL %d.%d %s "
++		       "context\n", version / 10, version % 10,
++		       core ? "core" : "compatibility");
++		return false;
++	}
++
++	if (!OSMesaMakeCurrent(osmesa_fw.context, osmesa_fw.buffer,
++			       GL_UNSIGNED_BYTE, test_config->window_width,
++			       test_config->window_height)) {
++		printf("piglit: error: OSMesaMakeCurrent failed\n");
++		piglit_report_result(PIGLIT_FAIL);
++	}
++	/* Row 0 is the bottom row, as in GL. */
++	OSMesaPixelStore(PIGLIT_OSMESA_Y_UP, 1);
++
++	piglit_dispatch_default_init(PIGLIT_DISPATCH_GL);
++	piglit_gl_invalidate_extensions();
++	return true;
++}
++
++static void
++destroy_context(void)
++{
++	OSMesaMakeCurrent(NULL, NULL, 0, 0, 0);
++	OSMesaDestroyContext(osmesa_fw.context);
++	osmesa_fw.context = NULL;
++	piglit_gl_invalidate_extensions();
++}
++
++/**
++ * Same logic as the Waffle framework: a core context if the test supports
++ * one (GL 3.1 contexts must lack GL_ARB_compatibility), else a compatibility
++ * context of at least the requested version.
++ */
++static void
++choose_context(const struct piglit_gl_test_config *test_config)
++{
++	int core_version = test_config->supports_gl_core_version;
++	int compat_version = test_config->supports_gl_compat_version;
++
++	if (core_version) {
++		/* OSMesa has no forward-compatible flag; a 3.1 core
++		 * context is asked for as 3.2 core, which has no
++		 * GL_ARB_compatibility. */
++		if (make_context_current(test_config, true,
++					 core_version == 31 ? 32 : core_version)) {
++			int actual = piglit_get_gl_version();
++			if (actual >= core_version) {
++				piglit_is_core_profile = !piglit_is_extension_supported(
++					"GL_ARB_compatibility");
++				return;
++			}
++			printf("piglit: info: Requested a GL %d.%d core context, "
++			       "but got %d.%d\n", core_version / 10,
++			       core_version % 10, actual / 10, actual % 10);
++			destroy_context();
++		}
++		if (compat_version)
++			printf("piglit: info: Falling back to GL %d.%d "
++			       "compatibility context\n",
++			       compat_version / 10, compat_version % 10);
++	}
++
++	piglit_is_core_profile = false;
++
++	if (compat_version) {
++		if (make_context_current(test_config, false, compat_version)) {
++			int actual = piglit_get_gl_version();
++			if (actual < compat_version) {
++				printf("piglit: info: Requested a GL %d.%d "
++				       "compatibility context, but got %d.%d\n",
++				       compat_version / 10, compat_version % 10,
++				       actual / 10, actual % 10);
++				piglit_report_result(PIGLIT_SKIP);
++			}
++			if (compat_version == 31 &&
++			    !piglit_is_extension_supported("GL_ARB_compatibility")) {
++				printf("piglit: info: Failed to create a compat profile\n");
++				piglit_report_result(PIGLIT_SKIP);
++			}
++			return;
++		}
++	}
++
++	printf("piglit: info: Failed to create any GL context\n");
++	piglit_report_result(PIGLIT_SKIP);
++}
++
++/**
++ * The -fbo mode: render to a texture-backed FBO instead of the OSMesa
++ * buffer, as piglit_fbo_framework.c does. Returns false (and the test then
++ * renders to the OSMesa buffer) if the context can't.
++ */
++static bool
++init_fbo(const struct piglit_gl_test_config *test_config)
++{
++	GLuint tex, depth = 0;
++	GLenum status;
++
++	if (piglit_get_gl_version() < 20 ||
++	    !piglit_is_extension_supported("GL_ARB_framebuffer_object"))
++		return false;
++
++	glGenFramebuffers(1, &piglit_winsys_fbo);
++	glBindFramebuffer(GL_FRAMEBUFFER, piglit_winsys_fbo);
++
++	glGenTextures(1, &tex);
++	glBindTexture(GL_TEXTURE_2D, tex);
++	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
++	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
++	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, piglit_width, piglit_height,
++		     0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
++	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
++			       GL_TEXTURE_2D, tex, 0);
++
++	if (test_config->window_visual & (PIGLIT_GL_VISUAL_DEPTH |
++					  PIGLIT_GL_VISUAL_STENCIL)) {
++		glGenTextures(1, &depth);
++		glBindTexture(GL_TEXTURE_2D, depth);
++		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
++		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
++		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_STENCIL,
++			     piglit_width, piglit_height, 0,
++			     GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL);
++		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
++				       GL_TEXTURE_2D, depth, 0);
++		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
++				       GL_TEXTURE_2D, depth, 0);
++	}
++
++	glBindTexture(GL_TEXTURE_2D, 0);
++
++	status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
++	if (status != GL_FRAMEBUFFER_COMPLETE) {
++		fprintf(stderr, "framebuffer status is incomplete, falling "
++			"back to the OSMesa buffer\n");
++		glBindFramebuffer(GL_FRAMEBUFFER, 0);
++		glDeleteFramebuffers(1, &piglit_winsys_fbo);
++		glDeleteTextures(1, &depth);
++		glDeleteTextures(1, &tex);
++		piglit_winsys_fbo = 0;
++		return false;
++	}
++	return true;
++}
++
++struct piglit_gl_framework*
++piglit_osmesa_framework_create(const struct piglit_gl_test_config *test_config)
++{
++	if (test_config->window_samples > 1) {
++		puts("OSMesa doesn't support multisample visuals");
++		piglit_report_result(PIGLIT_SKIP);
++	}
++	if (test_config->require_debug_context) {
++		puts("OSMesa can't create debug contexts");
++		piglit_report_result(PIGLIT_SKIP);
++	}
++	if (test_config->require_forward_compatible_context) {
++		puts("OSMesa can't create forward-compatible contexts");
++		piglit_report_result(PIGLIT_SKIP);
++	}
++
++	if (!piglit_gl_framework_init(&osmesa_fw.gl_fw, test_config))
++		return NULL;
++
++	osmesa_fw.buffer = calloc((size_t)test_config->window_width *
++				  test_config->window_height, 4);
++	if (!osmesa_fw.buffer) {
++		puts("piglit: error: out of memory");
++		piglit_report_result(PIGLIT_FAIL);
++	}
++
++	choose_context(test_config);
++
++	if (piglit_use_fbo && !test_config->requires_displayed_window &&
++	    !init_fbo(test_config))
++		piglit_use_fbo = false;
++
++	osmesa_fw.gl_fw.run_test = run_test;
++	osmesa_fw.gl_fw.swap_buffers = swap_buffers;
++	osmesa_fw.gl_fw.post_redisplay = post_redisplay;
++	osmesa_fw.gl_fw.set_keyboard_func = set_keyboard_func;
++	osmesa_fw.gl_fw.set_reshape_func = set_reshape_func;
++	/* Not registered with piglit_set_destroy_func: piglit_report_result
++	 * may run on the timeout thread, while the test still renders. */
++	osmesa_fw.gl_fw.destroy = destroy;
++
++	return &osmesa_fw.gl_fw;
++}
+diff --git a/tests/util/piglit-framework-gl/piglit_osmesa_framework.h b/tests/util/piglit-framework-gl/piglit_osmesa_framework.h
+new file mode 100644
+index 000000000..71312dfc4
+--- /dev/null
++++ b/tests/util/piglit-framework-gl/piglit_osmesa_framework.h
+@@ -0,0 +1,29 @@
++/*
++ * Copyright © 2026 Frédéric Devernay
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice (including the next
++ * paragraph) shall be included in all copies or substantial portions of the
++ * Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++ * IN THE SOFTWARE.
++ */
++
++#pragma once
++
++#include "piglit_gl_framework.h"
++
++struct piglit_gl_framework*
++piglit_osmesa_framework_create(const struct piglit_gl_test_config *test_config);

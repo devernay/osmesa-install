@@ -1,0 +1,7 @@
+# Expected failures on AArch64 (Linux aarch64 and macOS arm64), on top of osmesa-fails.txt. They
+# pass on x86_64: these are llvmpipe bugs on AArch64 (wrong rendering), which Mesa's llvmpipe CI
+# expectations (made on x86_64) don't list. To be fixed:
+# https://github.com/devernay/osmesa-install/issues/29
+spec@!opengl 1.1@triangle-guardband-viewport,Fail
+spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
+spec@ext_framebuffer_object@fbo-blending-snorm,Fail
