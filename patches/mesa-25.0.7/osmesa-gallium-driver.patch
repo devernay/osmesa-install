@@ -27,7 +27,7 @@
  
     bool ever_used;     /*< Has this context ever been current? */
  
-@@ -140,43 +141,70 @@
+@@ -140,43 +141,80 @@
     return 0;
  }
  
@@ -44,6 +44,8 @@
 +static struct pipe_frontend_screen *global_fscreens[OSMESA_NUM_DRIVERS];
 +static mtx_t global_fscreens_mutex;
 +static once_flag global_fscreens_once = ONCE_FLAG_INIT;
++/* number of contexts not destroyed yet (see destroy_st_managers) */
++static int osmesa_live_contexts = 0;
  
  static void
 -destroy_st_manager(void)
@@ -53,6 +55,14 @@
 -      if (global_fscreen->screen)
 -         global_fscreen->screen->destroy(global_fscreen->screen);
 -      FREE(global_fscreen);
++   /* At exit, a context that was never destroyed may still have rendering in
++    * flight (e.g. a program calling exit() with a current context): destroying
++    * its screen then races with the driver's threads (llvmpipe's rasterizer
++    * threads wait forever at a barrier, and exit() hangs). Destroying a screen
++    * under a live context isn't valid anyway: leave everything to the system.
++    */
++   if (p_atomic_read(&osmesa_live_contexts) != 0)
++      return;
 +   for (unsigned i = 0; i < OSMESA_NUM_DRIVERS; i++) {
 +      if (global_fscreens[i]) {
 +         if (global_fscreens[i]->screen)
@@ -119,7 +129,7 @@
  }
  
  /* Reads the color or depth buffer from the backing context to either the user storage
-@@ -414,7 +442,7 @@
+@@ -414,7 +452,7 @@
                                 struct pipe_resource **out,
                                 struct pipe_resource **resolve)
  {
@@ -128,7 +138,7 @@
     enum st_attachment_type i;
     struct osmesa_buffer *osbuffer = drawable_to_osbuffer(drawable);
     struct pipe_resource templat;
-@@ -474,7 +502,8 @@
+@@ -474,7 +512,8 @@
   * Create new buffer and add to linked list.
   */
  static struct osmesa_buffer *
@@ -138,7 +148,7 @@
                       enum pipe_format ds_format,
                       enum pipe_format accum_format)
  {
-@@ -484,7 +513,7 @@
+@@ -484,7 +523,7 @@
        osbuffer->base.validate = osmesa_st_framebuffer_validate;
        p_atomic_set(&osbuffer->base.stamp, 1);
        osbuffer->base.ID = p_atomic_inc_return(&osmesa_fb_ID);
@@ -147,7 +157,7 @@
        osbuffer->base.visual = &osbuffer->visual;
  
        osmesa_init_st_visual(&osbuffer->visual, color_format,
-@@ -570,6 +599,8 @@
+@@ -570,6 +609,8 @@
     GLenum format = GL_RGBA;
     int depthBits = 0, stencilBits = 0, accumBits = 0;
     int profile = OSMESA_COMPAT_PROFILE, version_major = 1, version_minor = 0;
@@ -156,7 +166,7 @@
     int i;
  
     if (sharelist) {
-@@ -628,6 +659,21 @@
+@@ -628,6 +669,21 @@
           if (version_minor < 0)
              return NULL;
           break;
@@ -178,12 +188,10 @@
        case 0:
           /* end of list */
           break;
-@@ -635,11 +681,23 @@
-          fprintf(stderr, "Bad attribute in OSMesaCreateContextAttribs()\n");
-          return NULL;
+@@ -637,9 +693,21 @@
        }
-+   }
-+
+    }
+ 
 +   if (sharelist) {
 +      /* contexts sharing objects must use the same driver */
 +      fscreen = sharelist->fscreen;
@@ -191,10 +199,10 @@
 +         return NULL;
 +   } else {
 +      fscreen = get_st_manager(driver >= 0 ? driver : 0);
-    }
++   }
 +   if (!fscreen)
 +      return NULL;
- 
++
     osmesa = (OSMesaContext) CALLOC_STRUCT(osmesa_context);
     if (!osmesa)
        return NULL;
@@ -202,7 +210,7 @@
  
     /* Choose depth/stencil/accum buffer formats */
     if (accumBits > 0) {
-@@ -677,7 +735,7 @@
+@@ -677,7 +745,7 @@
                           osmesa->depth_stencil_format,
                           osmesa->accum_format);
  
@@ -211,7 +219,23 @@
                                           &attribs, &st_error, st_shared);
     if (!osmesa->st) {
        FREE(osmesa);
-@@ -767,7 +825,8 @@
+@@ -690,6 +758,7 @@
+    osmesa->user_row_length = 0;
+    osmesa->y_up = GL_TRUE;
+ 
++   p_atomic_inc(&osmesa_live_contexts);
+    return osmesa;
+ }
+ 
+@@ -708,6 +777,7 @@
+       st_destroy_context(osmesa->st);
+       free(osmesa->zs);
+       FREE(osmesa);
++      p_atomic_dec(&osmesa_live_contexts);
+    }
+ }
+ 
+@@ -767,7 +837,8 @@
     }
  
     if (!osmesa->current_buffer) {
@@ -221,7 +245,7 @@
                                        osmesa->depth_stencil_format,
                                        osmesa->accum_format);
     }
-@@ -875,7 +934,7 @@
+@@ -875,7 +946,7 @@
        FALLTHROUGH;
     case OSMESA_MAX_HEIGHT:
        {
