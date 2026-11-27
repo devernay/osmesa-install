@@ -15,7 +15,7 @@ sudo port install cmake pkgconfig xz meson ninja bison flex py313-mako py313-yam
 ```
 and pass that Python with `PYTHON` (e.g. `PYTHON=/opt/local/bin/python3.13`): Mesa 25.0.7's meson build needs Python 3 with the `mako`, `yaml` (PyYAML) and `packaging` modules (or `python3 -m pip install mako pyyaml packaging`).
 
-For Mesa 18.3.6 (`OSMESA_VERSION=18.3.6`, autoconf build), instead of meson, ninja and the Python 3 modules:
+For Mesa 18.3.6 (`OSMESA_VERSION=18.3.6`, autoconf build; the default before macOS 10.12), instead of meson, ninja and the Python 3 modules:
 ```
 sudo port install python27 autoconf automake libtool gsed
 sudo port select --set python python27
@@ -26,7 +26,7 @@ sudo port select --set python python27
 
 ## Prerequisites (Linux)
 
-On Debian/Ubuntu: `sudo apt-get install build-essential cmake pkg-config xz-utils zlib1g-dev meson ninja-build python3-mako python3-yaml python3-packaging bison flex freeglut3-dev` (`freeglut3-dev` provides `GL/glut.h`, needed to compile the osdemo tests). Mesa 18.3.6 (`OSMESA_VERSION=18.3.6`) needs autoconf, automake, libtool and Python 2 instead of meson, ninja and the Python 3 modules.
+On Debian/Ubuntu: `sudo apt-get install build-essential cmake pkg-config xz-utils zlib1g-dev meson ninja-build python3-mako python3-yaml python3-packaging bison flex freeglut3-dev` (`freeglut3-dev` provides `GL/glut.h`, needed to compile the osdemo tests). Mesa 18.3.6 (`OSMESA_VERSION=18.3.6`) needs autoconf, automake, libtool and Python 2 instead of meson, ninja and the Python 3 modules (current Debian/Ubuntu releases no longer package Python 2, and CI only builds 18.3.6 on macOS).
 
 ## Prerequisites (Windows)
 

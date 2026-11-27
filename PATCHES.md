@@ -1,6 +1,6 @@
 # Why OSMesa, and what the patches do
 
-This document explains why this script exists, and what each change it makes to Mesa is for. The patch descriptions below refer to the patch set for Mesa 18.3.6 (`patches/mesa-18.3.6/`), the newest autoconf version; older versions use the same patches, with small adaptations. Mesa 25.0.7, the default, has its own section.
+This document explains why this script exists, and what each change it makes to Mesa is for. The patch descriptions below refer to the patch set for Mesa 18.3.6 (`patches/mesa-18.3.6/`), the newest autoconf version; older versions use the same patches, with small adaptations. Mesa 25.0.7, the default, has its own section ([6. Moving to Mesa 25.0.7](#6-moving-to-mesa-2507)).
 
 ## What OSMesa is for
 
@@ -99,7 +99,7 @@ On top of these patches, the script passes `-Wno-int-conversion` to clang ≥ 15
 | Build system | autoconf | autoconf was removed in 19.0 and SCons in 21.1. Only meson remains. |
 | Classic `swrast` driver | yes | Removed in 21.0. |
 
-## 6. Moving to Mesa 25.0.7 (work in progress)
+## 6. Moving to Mesa 25.0.7
 
 Mesa 25.0.7 is the last release with OSMesa. It was tested on macOS 27 (Xcode 27.2) and macOS 15.7.7 (Xcode 16.4), both arm64, and covers both requirements:
 
