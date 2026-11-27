@@ -23,7 +23,7 @@
 # The tests that Mesa's CI skips on llvmpipe (*-skips.txt) are excluded (piglit run -x).
 #
 # Environment: WORK (/root/piglit-work; for "local", on the host: /tmp/osmesa-piglit-local),
-# PROFILE (llvmpipe_gl), JOBS (4: tests run in parallel), MKJOBS (4), TIMEOUT (120 s per test),
+# PROFILE (llvmpipe_gl), JOBS (4: tests run in parallel), MKJOBS (4), TIMEOUT (300 s per test),
 # GALLIUM_DRIVER (llvmpipe; or softpipe), PYTHON (python3: runs piglit and piglit-compare.py),
 # CMAKE_PREFIX_PATH (/opt/local on macOS, for libpng), MESA_VERSION (from the archive's README.txt, else
 # 25.0.7: the Mesa release whose CI expectations are used).
@@ -49,7 +49,7 @@ stage=$1; shift
 PROFILE=${PROFILE:-llvmpipe_gl}
 JOBS=${JOBS:-4}
 MKJOBS=${MKJOBS:-4}
-TIMEOUT=${TIMEOUT:-120}
+TIMEOUT=${TIMEOUT:-300} # GitHub's 4-CPU runners: a few tests take more than 2 min
 export GALLIUM_DRIVER=${GALLIUM_DRIVER:-llvmpipe}
 PYTHON=${PYTHON:-python3}
 osname=$(uname)
@@ -254,10 +254,17 @@ do_compare() {
     e=$WORK/expectations
     args=(--fails "$e/llvmpipe-fails.txt" --flakes "$e/llvmpipe-flakes.txt"
           --skips "$e/llvmpipe-skips.txt" --skips "$e/all-skips.txt")
-    # ours: failures with OSMesa that Mesa's CI (with a window system) doesn't have
+    # ours: failures with OSMesa that Mesa's CI (with a window system, on x86_64 Linux) doesn't have,
+    # in general (osmesa-KIND.txt), on AArch64 (osmesa-KIND-aarch64.txt) and on macOS
+    # (osmesa-KIND-macos.txt)
+    local arch os suffix
+    case "$(uname -m)" in arm64|aarch64) arch=aarch64;; *) arch=$(uname -m);; esac
+    case "$osname" in Darwin) os=macos;; Linux) os=linux;; *) os=windows;; esac
     for kind in fails flakes skips; do
-        f=$repo/patches/piglit-$short/osmesa-$kind.txt
-        [ ! -f "$f" ] || args+=("--$kind" "$f")
+        for suffix in "" "-$arch" "-$os"; do
+            f=$repo/patches/piglit-$short/osmesa-$kind$suffix.txt
+            [ ! -f "$f" ] || args+=("--$kind" "$f")
+        done
     done
     "$PYTHON" -I "$repo/release/piglit-compare.py" "$WORK/results/$profile" "${args[@]}" \
         --list-out "$WORK/results/$profile.txt"

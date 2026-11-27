@@ -1,0 +1,11 @@
+# Expected failures on macOS, on top of osmesa-fails.txt and osmesa-fails-aarch64.txt: they pass
+# on Linux aarch64 and x86_64 (Mesa built with gcc and libstdc++), so they come from the macOS build
+# (Apple clang, libc++).
+spec@arb_sample_shading@builtin-gl-sample-mask-simple 0,Fail
+spec@arb_sample_shading@builtin-gl-sample-mask-simple 2,Fail
+spec@arb_sample_shading@builtin-gl-sample-mask-simple 4,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x223344ff,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color 0 0x76356278,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x223344ff,Fail
+spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x76356278,Fail

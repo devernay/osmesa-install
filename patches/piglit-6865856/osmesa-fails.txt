@@ -10,6 +10,7 @@ spec@!opengl 1.0@gl-1.0-front-invalidate-back,Fail
 spec@!opengl 3.0@gl30basic,Fail
 spec@ext_framebuffer_blit@fbo-sys-blit,Fail
 spec@ext_framebuffer_blit@fbo-sys-sub-blit,Fail
+spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
 
 # OSMesa can't create forward-compatible contexts (no such attribute)
 spec@!opengl 3.0@forward-compatible-bit yes,Fail

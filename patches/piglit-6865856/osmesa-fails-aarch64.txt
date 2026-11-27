@@ -1,0 +1,6 @@
+# Expected failures on AArch64 (Linux aarch64 and macOS arm64), on top of osmesa-fails.txt: they
+# also happen on Linux aarch64 and pass on x86_64, so they come from llvmpipe on AArch64, which
+# Mesa's CI doesn't test (its llvmpipe expectations are made on x86_64), not from OSMesa.
+spec@!opengl 1.1@triangle-guardband-viewport,Fail
+spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
+spec@ext_framebuffer_object@fbo-blending-snorm,Fail
