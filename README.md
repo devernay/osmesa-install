@@ -94,6 +94,10 @@ The static library (`libMangledOSMesa32.a`, the default) needs more LLVM compone
 
 C++20 (VFX Reference Platform CY2027): code using OSMesa can be compiled as C++20 and linked with the default (C++17) static library. Mesa 25.0.7 itself also builds as C++20. See [PATCHES.md](PATCHES.md#c20-vfx-reference-platform-cy2027).
 
+### Testing with piglit (work in progress)
+
+[`release/piglit.sh`](release/piglit.sh) runs [piglit](https://gitlab.freedesktop.org/mesa/piglit), Mesa's OpenGL test suite, on a Linux release archive. Piglit has no OSMesa support (it creates its contexts with Waffle, GLX or EGL), so `patches/piglit-6865856/osmesa-framework.patch` adds one (`-DPIGLIT_USE_OSMESA=ON`, platform `osmesa`), to piglit at the commit Mesa 25.0's CI uses. The results are compared with Mesa 25.0.7's CI expectations for llvmpipe, so that only new failures count. For example, on any machine with podman: `release/piglit.sh local osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-linux-aarch64.tar.xz sanity llvmpipe_gl`.
+
 ## Why these patches?
 
 OSMesa is used here by applications that render with OpenGL from many threads, without a GPU, in the same process as the system's OpenGL. Stock Mesa supports neither. See [PATCHES.md](PATCHES.md) for why OSMesa is used, what each patch does, and which of these fixes are now upstream.
