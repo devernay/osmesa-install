@@ -61,7 +61,7 @@ def read_results(results_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     parser.add_argument("results")
     parser.add_argument("--fails", action="append", default=[])
     parser.add_argument("--flakes", action="append", default=[])

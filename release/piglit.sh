@@ -1,7 +1,9 @@
 #!/bin/bash
-# Run piglit (Mesa's OpenGL test suite) on a Linux release archive, with piglit's OSMesa framework
+# Run piglit (Mesa's OpenGL test suite) on a release archive, with piglit's OSMesa framework
 # (patches/piglit-<commit>/), and compare the results with Mesa's llvmpipe CI expectations, so that
-# only new failures count. Run as root in a rockylinux:9 container, from the repository's root:
+# only new failures count. Run from the repository's root, on Linux (as root in a rockylinux:9
+# container: "deps" installs what it needs) or on macOS (MacPorts' cmake, libpng and a python3
+# with mako and numpy, given with PYTHON):
 #
 #   release/piglit.sh deps                 install the tools to build and run piglit
 #   release/piglit.sh fetch                clone piglit at PIGLIT_COMMIT in $WORK/piglit, and patch it
@@ -22,7 +24,8 @@
 #
 # Environment: WORK (/root/piglit-work; for "local", on the host: /tmp/osmesa-piglit-local),
 # PROFILE (llvmpipe_gl), JOBS (4: tests run in parallel), MKJOBS (4), TIMEOUT (120 s per test),
-# GALLIUM_DRIVER (llvmpipe; or softpipe), MESA_VERSION (from the archive's README.txt, else
+# GALLIUM_DRIVER (llvmpipe; or softpipe), PYTHON (python3: runs piglit and piglit-compare.py),
+# CMAKE_PREFIX_PATH (/opt/local on macOS, for libpng), MESA_VERSION (from the archive's README.txt, else
 # 25.0.7: the Mesa release whose CI expectations are used).
 # "local" only: CONTAINER (podman), IMAGE (docker.io/library/rockylinux:9), PLATFORM (the host's:
 # linux/arm64 or linux/amd64), CPUS (4), MEMORY_GB (6).
@@ -34,7 +37,7 @@ set -o pipefail
 PIGLIT_COMMIT=68658566da1c9cd6a378b5ca36999617e26440e7
 PIGLIT_URL=https://gitlab.freedesktop.org/mesa/piglit.git
 # applied in this order, from patches/piglit-<first 7 characters of PIGLIT_COMMIT>/
-PIGLIT_PATCHES="osmesa-framework.patch disable-vs_in.patch"
+PIGLIT_PATCHES="osmesa-framework.patch disable-vs_in.patch numpy2-reshape.patch"
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 usage() { sed -n '2,/^$/s/^# \{0,1\}//p' "$0"; exit 1; }
@@ -48,6 +51,9 @@ JOBS=${JOBS:-4}
 MKJOBS=${MKJOBS:-4}
 TIMEOUT=${TIMEOUT:-120}
 export GALLIUM_DRIVER=${GALLIUM_DRIVER:-llvmpipe}
+PYTHON=${PYTHON:-python3}
+osname=$(uname)
+sha256() { if command -v sha256sum >/dev/null; then sha256sum "$@"; else shasum -a 256 "$@"; fi; }
 
 toolset() {
     # gcc-toolset-14's enable script uses unset variables
@@ -114,7 +120,7 @@ do_fetch() {
 # archives are built with -fPIC. -u pulls the OSMesa API, and with it every GL function, which
 # piglit-dispatch gets from OSMesaGetProcAddress (with gl* names, also with a mangled OSMesa).
 build_osmesa_lib() {
-    local d=$1 out=$2 lib l libs
+    local d=$1 out=$2 lib l libs f
     lib=
     for l in libMangledOSMesa32.a libOSMesa32.a libOSMesa.a; do
         if [ -f "$d/osmesa/lib/$l" ]; then lib=$l; break; fi
@@ -123,6 +129,19 @@ build_osmesa_lib() {
     # link-flags.txt: -lMangledGLU -lMangledOSMesa32 -lLLVM... and the system libraries; no GLU
     libs=$(sed -e 's/-lMangledGLU //' -e 's/-lGLU //' "$d/link-flags.txt")
     mkdir -p "$(dirname "$out")"
+    if [ "$osname" = Darwin ]; then
+        # a dylib named by its absolute path (the tests find it without rpath); symbols have a
+        # leading underscore; undefined symbols are errors by default
+        # shellcheck disable=SC2086 # word splitting of the flags is intended
+        clang++ -dynamiclib -o "$out" -install_name "$out" \
+            -Wl,-u,_OSMesaCreateContextAttribs -Wl,-u,_OSMesaMakeCurrent -Wl,-u,_OSMesaDestroyContext \
+            -Wl,-u,_OSMesaGetProcAddress -Wl,-u,_OSMesaPixelStore \
+            -L"$d/osmesa/lib" -L"$d/llvm/lib" $libs
+        f=$(nm -gU "$out")
+        echo "$out ($lib): $(echo "$f" | grep -c ' T _mgl[A-Z]' || true) mgl* and" \
+            "$(echo "$f" | grep -c ' T _gl[A-Z]' || true) gl* functions exported"
+        return 0
+    fi
     # shellcheck disable=SC2086 # word splitting of the flags is intended
     g++ -shared -o "$out" -Wl,-soname,"$(basename "$out")" \
         -Wl,-u,OSMesaCreateContextAttribs -Wl,-u,OSMesaMakeCurrent -Wl,-u,OSMesaDestroyContext \
@@ -133,7 +152,7 @@ build_osmesa_lib() {
 }
 
 do_build() {
-    local d p
+    local d p lib ext=so prefixpath cxxflags
     [ $# -ge 1 ] || usage
     toolset
     d=$(archive_dir "$1")
@@ -141,11 +160,23 @@ do_build() {
     echo "$d" > "$WORK/archive-dir"
     p=$(piglit_dir)
     [ -d "$p" ] || do_fetch
-    build_osmesa_lib "$d" "$WORK/lib/libOSMesaPiglit.so"
+    [ "$osname" != Darwin ] || ext=dylib
+    lib=$WORK/lib/libOSMesaPiglit.$ext
+    build_osmesa_lib "$d" "$lib"
+    prefixpath=${CMAKE_PREFIX_PATH:-}
+    cxxflags=
+    if [ "$osname" = Darwin ]; then
+        prefixpath=${prefixpath:-/opt/local}
+        # piglit is built with gcc in Mesa's CI: clang makes some of its narrowing conversions
+        # errors (e.g. tests/util/piglit-test-pattern.cpp)
+        cxxflags="-Wno-c++11-narrowing"
+    fi
     # in the source tree, as Mesa's CI does: "piglit run" runs from there
     cmake -S "$p" -B "$p" -DCMAKE_BUILD_TYPE=Release \
-        -DPIGLIT_USE_OSMESA=ON \
-        -DOSMesa_LIBRARIES="$WORK/lib/libOSMesaPiglit.so" -DOSMesa_INCLUDE_DIR="$d/osmesa/include" \
+        -DPIGLIT_USE_OSMESA=ON -DPython_EXECUTABLE="$(command -v "$PYTHON")" \
+        -DPYTHON_EXECUTABLE="$(command -v "$PYTHON")" ${prefixpath:+-DCMAKE_PREFIX_PATH="$prefixpath"} \
+        -DOSMesa_LIBRARIES="$lib" -DOSMesa_INCLUDE_DIR="$d/osmesa/include" \
+        ${cxxflags:+-DCMAKE_CXX_FLAGS="$cxxflags"} \
         -DPIGLIT_BUILD_GL_TESTS=ON -DPIGLIT_BUILD_GLES1_TESTS=OFF -DPIGLIT_BUILD_GLES2_TESTS=OFF \
         -DPIGLIT_BUILD_GLES3_TESTS=OFF -DPIGLIT_BUILD_CL_TESTS=OFF -DPIGLIT_BUILD_VK_TESTS=OFF \
         -DPIGLIT_BUILD_DMA_BUF_TESTS=OFF
@@ -171,7 +202,7 @@ do_expectations() {
         mv "$t.part" "$t"
     fi
     if [ "$v" = 25.0.7 ]; then
-        echo "592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6  $t" | sha256sum -c -
+        echo "592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6  $t" | sha256 -c -
     fi
     ci=mesa-$v/src/gallium/drivers/llvmpipe/ci
     rm -rf "$WORK/mesa-ci" && mkdir -p "$WORK/mesa-ci"
@@ -208,7 +239,10 @@ do_run() {
     log "piglit: running $profile with $GALLIUM_DRIVER ($JOBS jobs, ${TIMEOUT}s timeout) into $r"
     # results go to the log; the summary is in "compare"
     local start=$SECONDS
-    (cd "$p" && PIGLIT_PLATFORM=osmesa ./piglit run -p osmesa -j "$JOBS" --timeout "$TIMEOUT" \
+    # PIGLIT_NO_FAST_SKIP: piglit's runner pre-filters tests with wflinfo (waffle), which has no
+    # OSMesa backend; without it, every test with a GL or GLSL version requirement would be skipped
+    # as needing more than "0.0". Each test then checks its own requirements when it runs.
+    (cd "$p" && PIGLIT_PLATFORM=osmesa PIGLIT_NO_FAST_SKIP=1 "$PYTHON" ./piglit run -p osmesa -j "$JOBS" --timeout "$TIMEOUT" \
         -l verbose "${excludes[@]}" "$profile" "$r") > "$WORK/results/$profile.log" 2>&1 \
         || { tail -n 30 "$WORK/results/$profile.log"; die "piglit run failed, see $WORK/results/$profile.log"; }
     log "piglit: $profile ran in $((SECONDS - start)) s"
@@ -225,7 +259,7 @@ do_compare() {
         f=$repo/patches/piglit-$short/osmesa-$kind.txt
         [ ! -f "$f" ] || args+=("--$kind" "$f")
     done
-    python3 -I "$repo/release/piglit-compare.py" "$WORK/results/$profile" "${args[@]}" \
+    "$PYTHON" -I "$repo/release/piglit-compare.py" "$WORK/results/$profile" "${args[@]}" \
         --list-out "$WORK/results/$profile.txt"
 }
 
