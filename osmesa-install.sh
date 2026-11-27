@@ -12,7 +12,7 @@
 #   minimum macOS version, so it is not suitable for redistribution.
 # - OSMESA_VERSION: Mesa version (25.0.7, the last Mesa with OSMesa, by default: built with meson, it
 #   needs meson, ninja and a python3 (PYTHON) with the mako, yaml and packaging modules; 18.3.6 for the
-#   autoconf build)
+#   autoconf build, and the default on macOS before 10.12, where Mesa 25 was never tested)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 # - BUILD_OSDEMO: try to compile and run osdemo (0/1, 1 by default)
 # - MANGLED: build a mangled OSMesa and GLU (function names are prefixed with "m") (0/1, 1 by default)
@@ -26,7 +26,12 @@ set -u # Treat unset variables as an error when substituting.
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-25.0.7}"
+# (Darwin 16 is macOS 10.12: older macOS keeps the tested Mesa 18.3.6 autoconf build by default)
+defaultmesaversion=25.0.7
+if [ "$(uname)" = Darwin ] && [ "$(uname -r | awk -F . '{print $1}')" -lt 16 ]; then
+    defaultmesaversion=18.3.6
+fi
+mesaversion="${OSMESA_VERSION:-$defaultmesaversion}"
 # mesa-demos version
 demoversion=8.4.0
 # glu version
@@ -44,6 +49,7 @@ mkjobs="${MKJOBS:-4}"
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
 # - 4 to use the "swr" Gallium driver (also includes the softpipe driver, which can
 #     be selected at run-time by setting en var GALLIUM_DRIVER to "softpipe")
+#   swr only exists in Mesa < 22 and not on macOS: 4 means llvmpipe there (e.g. for Mesa 25.0.7)
 osmesadriver=${OSMESA_DRIVER:-4}
 # do we want a mangled mesa + GLU ?
 mangled="${MANGLED:-1}"

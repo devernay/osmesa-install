@@ -1,6 +1,6 @@
 # Why OSMesa, and what the patches do
 
-This document explains why this script exists, and what each change it makes to Mesa is for. The patch descriptions refer to the patch set for Mesa 18.3.6 (`patches/mesa-18.3.6/`), the newest version the script builds. Older versions use the same patches, with small adaptations.
+This document explains why this script exists, and what each change it makes to Mesa is for. The patch descriptions below refer to the patch set for Mesa 18.3.6 (`patches/mesa-18.3.6/`), the newest autoconf version; older versions use the same patches, with small adaptations. Mesa 25.0.7, the default, has its own section.
 
 ## What OSMesa is for
 
