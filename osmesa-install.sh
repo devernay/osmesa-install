@@ -10,7 +10,9 @@
 #   LLVM installed by MacPorts, Homebrew, or the system (0/1, 0 by default). LLVM is still linked
 #   statically, but the result depends on that LLVM's dependencies (e.g. libzstd, libxml2) and
 #   minimum macOS version, so it is not suitable for redistribution.
-# - OSMESA_VERSION: Mesa version (18.3.6 by default; 25.0.7, the last Mesa with OSMesa, uses meson)
+# - OSMESA_VERSION: Mesa version (25.0.7, the last Mesa with OSMesa, by default: built with meson, it
+#   needs meson, ninja and a python3 (PYTHON) with the mako, yaml and packaging modules; 18.3.6 for the
+#   autoconf build)
 # - SILENT_LOG: redirect output and error to log file (0/1, 0 by default)
 # - BUILD_OSDEMO: try to compile and run osdemo (0/1, 1 by default)
 # - MANGLED: build a mangled OSMesa and GLU (function names are prefixed with "m") (0/1, 1 by default)
@@ -24,7 +26,7 @@ set -u # Treat unset variables as an error when substituting.
 # prefix to the osmesa installation
 osmesaprefix="${OSMESA_PREFIX:-/opt/osmesa}"
 # mesa version
-mesaversion="${OSMESA_VERSION:-18.3.6}"
+mesaversion="${OSMESA_VERSION:-25.0.7}"
 # mesa-demos version
 demoversion=8.4.0
 # glu version
@@ -284,7 +286,7 @@ if [ "$osname" = Darwin ] && [ "$buildosmesa" = 1 ] && [ "$mesonbuild" = 0 ] && 
     exit 1
 fi
 
-# Meson builds (Mesa 19 and later) need meson, ninja, and python3 with the mako and yaml modules
+# Meson builds (Mesa 19 and later) need meson, ninja, and python3 with the mako, yaml and packaging modules
 pythonbin="${PYTHON:-$(type -P python3 || true)}"
 if [ "$buildosmesa" = 1 ] && [ "$mesonbuild" = 1 ]; then
     case "$osname" in
@@ -1147,6 +1149,7 @@ elif [ "$use_meson" = 1 ]; then
         -Dvulkan-drivers= \
         -Dvalgrind=disabled \
         -Dlibunwind=disabled \
+        -Dlmsensors=disabled \
         -Dzstd=disabled \
         -Dzlib=disabled \
         -Dshader-cache=disabled \

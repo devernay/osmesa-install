@@ -5,24 +5,30 @@ Script and patches to build and install variations of OSMesa http://www.mesa3d.o
 - debug or not
 - choice of osmesa driver: `swrast`, `softpipe`, `llvmpipe` or `swr` (SWR is not yet supported on macOS)
 - possibility to also compile and install LLVM 6.0.1, 4.0.1 or 3.4.2 for the `llvmpipe` driver (LLVM 19.1.7 for Mesa 25.0.7)
-- Mesa 18.3.6 (default, autoconf) or Mesa 25.0.7, the last Mesa release with OSMesa (meson, see below)
+- Mesa 25.0.7 (default), the last Mesa release with OSMesa (meson, see below), or Mesa 18.3.6 (`OSMESA_VERSION=18.3.6`, autoconf)
 
 ## Prerequisites (macOS)
 
 Xcode or the Command Line Tools, plus the following, e.g. from MacPorts:
 ```
-sudo port install python27 cmake autoconf automake libtool pkgconfig gsed xz
+sudo port install cmake pkgconfig xz meson ninja py313-mako py313-yaml py313-packaging
+```
+and pass that Python with `PYTHON` (e.g. `PYTHON=/opt/local/bin/python3.13`): Mesa 25.0.7's meson build needs Python 3 with the `mako`, `yaml` (PyYAML) and `packaging` modules (or `python3 -m pip install mako pyyaml packaging`).
+
+For Mesa 18.3.6 (`OSMESA_VERSION=18.3.6`, autoconf build), instead of meson, ninja and the Python 3 modules:
+```
+sudo port install python27 autoconf automake libtool gsed
 sudo port select --set python python27
 ```
-- GNU sed (`gsed`; `brew install gnu-sed` on Homebrew) is required for Mesa 18.3.6 and earlier (autoconf build): Mesa's configure is run with `SED=gsed` on macOS. It is not needed for Mesa 25.0.7.
+- GNU sed (`gsed`; `brew install gnu-sed` on Homebrew) is required for Mesa 18.3.6 and earlier: Mesa's configure is run with `SED=gsed` on macOS. It is not needed for Mesa 25.0.7.
 - `xz` provides `xzcat`, used to unpack the Mesa and LLVM tarballs (macOS doesn't ship it).
 - On macOS older than 10.12, the script also needs MacPorts `clang-9.0`, and on 10.6 and older, `coreutils` (for `gsort`).
 
-## Prerequisites (Linux, Mesa 25.0.7)
+## Prerequisites (Linux)
 
 On Debian/Ubuntu: `sudo apt-get install build-essential cmake pkg-config xz-utils zlib1g-dev meson ninja-build python3-mako python3-yaml python3-packaging bison flex freeglut3-dev` (`freeglut3-dev` provides `GL/glut.h`, needed to compile the osdemo tests).
 
-## Prerequisites (Windows, Mesa 25.0.7)
+## Prerequisites (Windows)
 
 In an MSYS2 MINGW64 shell: `pacman -S make patch diffutils tar xz curl bison flex autoconf automake libtool mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils mingw-w64-x86_64-pkgconf mingw-w64-x86_64-cmake mingw-w64-x86_64-meson mingw-w64-x86_64-ninja mingw-w64-x86_64-python mingw-w64-x86_64-python-mako mingw-w64-x86_64-python-yaml mingw-w64-x86_64-python-packaging mingw-w64-x86_64-zlib mingw-w64-x86_64-llvm mingw-w64-x86_64-freeglut`, then e.g. `env OSMESA_VERSION=25.0.7 LLVM_PREFIX=/mingw64 PYTHON=/mingw64/bin/python3 bash ../osmesa-install.sh` (with MSYS2's static LLVM libraries; building LLVM on Windows takes hours). Only the static library is supported on Windows (no `SHARED=1`). Programs linking it also need `-lsynchronization -lws2_32` (see `pkg-config --static --libs osmesa`).
 
@@ -73,13 +79,11 @@ The release is then at `https://github.com/devernay/osmesa-install/releases/tag/
 
 ## Mesa 25.0.7
 
-Mesa 25.0.7 is the last Mesa release with OSMesa (it was removed in 25.1). It is thread-safe without patches, and the script adds back mangling support and per-context driver selection (see [PATCHES.md](PATCHES.md)). To build it:
-```
-env OSMESA_VERSION=25.0.7 bash ../osmesa-install.sh
-```
-It needs, in addition to the prerequisites above:
+Mesa 25.0.7 is the last Mesa release with OSMesa (it was removed in 25.1), and the default. It is thread-safe without patches, and the script adds back mangling support and per-context driver selection (see [PATCHES.md](PATCHES.md)). Mesa 18.3.6 is still available with `env OSMESA_VERSION=18.3.6 bash ../osmesa-install.sh`.
+
+Mesa 25.0.7 needs:
 - `meson` and `ninja` (e.g. `sudo port install meson ninja`)
-- Python 3 with the `mako`, `yaml` and `packaging` modules (e.g. `sudo port install py313-mako py313-yaml py313-packaging`, or `python3 -m pip install mako pyyaml packaging`), passed with `PYTHON` (e.g. `PYTHON=/opt/local/bin/python3.13`)
+- Python 3 with the `mako`, `yaml` (PyYAML) and `packaging` modules (e.g. `sudo port install py313-mako py313-yaml py313-packaging`, or `python3 -m pip install mako pyyaml packaging`), passed with `PYTHON` (e.g. `PYTHON=/opt/local/bin/python3.13`); the script checks for them
 - LLVM 15 or later for `llvmpipe` (15.0.7, 19.1.7, 22.1.8 and 23.1.4 were tested). LLVM 19.1.7, the version used by Mesa 25.0's CI, is built by default if `LLVM_PREFIX` has no LLVM. The LLVM built by the script has no dependencies besides the system libraries, so it is the one to use for redistributed binaries.
 
 The static library (`libMangledOSMesa32.a`, the default) needs more LLVM components than with Mesa 18. Link with:
