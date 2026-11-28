@@ -147,6 +147,8 @@ Paths given to native Windows programs (meson, ar, and `osmesa.pc`, whose output
 - **Build system:** meson and ninja, plus Python 3 with `mako` and `PyYAML`.
 - **Exported symbols of the shared library:** on macOS, the dylib also exports all internal LLVM and Mesa symbols. The `osmesa.sym` version script is only used with GNU ld, so macOS needs an `-exported_symbols_list`. This only matters if `SHARED=1`.
 
+- **llvmpipe on AArch64: saturating packs.** `patches/mesa-25.0.7/llvmpipe-pack-saturate.patch` makes gallivm's `lp_build_pack2()` saturate on every architecture. On x86 (and PowerPC) it uses the `packss`/`packus` instructions, which saturate, and some callers rely on that although the function's contract says they must clamp first. Elsewhere it used a plain shuffle, so out-of-range values wrapped around: e.g. blending into an snorm format gave −0.165 instead of 1.0 on AArch64 (piglit's `fbo-blending-snorm`, [#29](https://github.com/devernay/osmesa-install/issues/29)). Mesa's CI only tests llvmpipe on x86, and Mesa 26.3 has the same code.
+
 ## 7. Piglit on OSMesa (release gate)
 
 Piglit creates its GL contexts through its "framework" layer (`tests/util/piglit-framework-gl/`), over Waffle (GLX, EGL, WGL, CGL) or GLUT. None of them can create an OSMesa context, and our builds have no GLX or EGL. `patches/piglit-6865856/` (piglit at `6865856`, the commit used by Mesa 25.0's CI) has:

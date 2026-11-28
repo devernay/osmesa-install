@@ -1,0 +1,27 @@
+--- a/src/gallium/auxiliary/gallivm/lp_bld_pack.c
++++ b/src/gallium/auxiliary/gallivm/lp_bld_pack.c
+@@ -689,6 +689,24 @@
+          }
+          return res;
+       }
++   }
++
++   /* generic shuffle: saturate first, as the x86 and altivec pack instructions
++    * above do. Some callers rely on that (e.g. blending into snorm formats),
++    * which only works there: elsewhere (e.g. AArch64), out-of-range values
++    * would wrap around.
++    */
++   if (src_type.sign) {
++      struct lp_build_context bld;
++      unsigned dst_bits = dst_type.sign ? dst_type.width - 1 : dst_type.width;
++      long long dst_max = ((long long)1 << dst_bits) - 1;
++      long long dst_min = dst_type.sign ? -((long long)1 << dst_bits) : 0;
++      LLVMValueRef max = lp_build_const_int_vec(gallivm, src_type, dst_max);
++      LLVMValueRef min = lp_build_const_int_vec(gallivm, src_type, dst_min);
++
++      lp_build_context_init(&bld, gallivm, src_type);
++      lo = lp_build_max(&bld, lp_build_min(&bld, lo, max), min);
++      hi = lp_build_max(&bld, lp_build_min(&bld, hi, max), min);
+    }
+ 
+    /* generic shuffle */

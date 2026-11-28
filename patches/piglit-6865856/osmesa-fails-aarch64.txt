@@ -4,4 +4,3 @@
 # https://github.com/devernay/osmesa-install/issues/29
 spec@!opengl 1.1@triangle-guardband-viewport,Fail
 spec@arb_framebuffer_object@fbo-blit-scaled-linear,Fail
-spec@ext_framebuffer_object@fbo-blending-snorm,Fail
