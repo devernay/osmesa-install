@@ -564,7 +564,11 @@ if [ "$osmesadriver" = 3 ] || [ "$osmesadriver" = 4 ]; then
                  Msys*|MSYS*|MINGW*)
                      cmakegen="MSYS Makefiles"
                      #cmake_archflags="-DLLVM_ENABLE_CXX1Y=ON" # is that really what we want???????
-                     cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
+                     # (MSVC runtime options: clang, e.g. MSYS2 CLANGARM64, would embed
+                     # libcmt/libcpmt/oldnames dependencies that MinGW doesn't have)
+                     if ! $CC --version 2>/dev/null | grep -q clang; then
+                         cmake_archflags="-DLLVM_USE_CRT_DEBUG=MTd -DLLVM_USE_CRT_RELEASE=MT"
+                     fi
                      llvm_patches="msys2_add_pi.patch"
                      ;;
             esac

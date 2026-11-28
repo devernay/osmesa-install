@@ -43,7 +43,7 @@ env:
   CI_MESA_VERSION: 25.0.7
   CI_LLVM_VERSION: 19.1.7
   # Bump when the LLVM build in osmesa-install.sh changes, to rebuild the cached LLVMs.
-  CI_LLVM_CACHE_VERSION: v1
+  CI_LLVM_CACHE_VERSION: v2
 
 jobs:
   ##################################################################################################
