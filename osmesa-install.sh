@@ -1179,6 +1179,14 @@ elif [ "$use_meson" = 1 ]; then
         # llvmpipe (also includes softpipe, which can be selected at run-time)
         mesonopts="$mesonopts -Dgallium-drivers=llvmpipe,softpipe -Dllvm=enabled -Dshared-llvm=disabled"
         echo "llvm-config = '$(nativepath "$llvmconfigbinary")'" >> meson-native.ini
+        case "$osname" in
+            Msys*|MSYS*|MINGW*)
+                # on Windows, Mesa finds LLVM with method "auto", which may use CMake's
+                # find_package and ignore llvm-config: make it find ours first (and not, e.g.,
+                # the MSVC-built LLVM that comes with Visual Studio)
+                mesonopts="$mesonopts -Dcmake_prefix_path=$(nativepath "$llvmprefix")"
+                ;;
+        esac
     fi
     mesonflags=
     if [ "$mangled" = 1 ]; then
