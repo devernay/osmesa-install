@@ -1181,15 +1181,11 @@ elif [ "$use_meson" = 1 ]; then
         echo "llvm-config = '$(nativepath "$llvmconfigbinary")'" >> meson-native.ini
         case "$osname" in
             Msys*|MSYS*|MINGW*)
-                # on Windows, Mesa finds LLVM with method "auto", which may use CMake's
-                # find_package and ignore llvm-config: make it find ours first (and not, e.g.,
-                # the MSVC-built LLVM that comes with Visual Studio)
-                mesonopts="$mesonopts -Dcmake_prefix_path=$(nativepath "$llvmprefix")"
-                # LLVM_DIR comes first in find_package (e.g. GitHub's Windows ARM runner finds
-                # Visual Studio's LLVM before CMAKE_PREFIX_PATH)
-                if [ -d "$llvmprefix/lib/cmake/llvm" ]; then
-                    export LLVM_DIR="$(nativepath "$llvmprefix/lib/cmake/llvm")"
-                fi
+                # On Windows, Mesa looks LLVM up with method "auto", whose CMake lookup comes
+                # first and ignores llvm-config: on GitHub's Windows ARM runner it found the
+                # MSVC-built LLVM of Visual Studio (libcmt, DIA SDK...) instead of ours. Without
+                # CMake for meson, LLVM is found with our llvm-config, as on Linux and macOS.
+                echo "cmake = 'false'" >> meson-native.ini
                 ;;
         esac
     fi
