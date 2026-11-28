@@ -50,7 +50,7 @@ jobs:
   # Stage 1: LLVM
 
   llvm-macos:
-    name: LLVM, macOS ${{ matrix.arch }}
+    name: LLVM, macOS ${{ matrix.arch }} (target ${{ matrix.target }})
     # with CI_MACOS_ON_VM=1, not on tags: the macOS release archives are built by release/macos-vm.sh
     if: (github.ref_type != 'tag' || vars.CI_MACOS_ON_VM != '1') && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ${{ matrix.runner }}
@@ -59,10 +59,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {arch: arm64, runner: macos-15}
-          - {arch: x86_64, runner: macos-15-intel}
+          # macos14: MACOSX_DEPLOYMENT_TARGET 14.0 (the VFX Reference Platform's), macos15: 15.0,
+          # both built on GitHub's oldest macOS runners (macOS 15)
+          - {arch: arm64, runner: macos-15, macos: macos14, target: '14.0'}
+          - {arch: x86_64, runner: macos-15-intel, macos: macos14, target: '14.0'}
+          - {arch: arm64, runner: macos-15, macos: macos15, target: '15.0'}
+          - {arch: x86_64, runner: macos-15-intel, macos: macos15, target: '15.0'}
     env:
-      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v7
       - name: Look for a cached LLVM
@@ -182,7 +186,7 @@ jobs:
   # Stage 2: OSMesa, with the cached LLVM
 
   osmesa-macos:
-    name: OSMesa, macOS ${{ matrix.arch }}
+    name: OSMesa, macOS ${{ matrix.arch }} (target ${{ matrix.target }})
     needs: llvm-macos
     # also when the other architecture's LLVM failed (LLVM is then built here if not cached)
     if: ${{ !cancelled() && needs.llvm-macos.result != 'skipped' }}
@@ -192,11 +196,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {arch: arm64, runner: macos-15}
-          - {arch: x86_64, runner: macos-15-intel}
+          # macos14: MACOSX_DEPLOYMENT_TARGET 14.0 (the VFX Reference Platform's), macos15: 15.0,
+          # both built on GitHub's oldest macOS runners (macOS 15)
+          - {arch: arm64, runner: macos-15, macos: macos14, target: '14.0'}
+          - {arch: x86_64, runner: macos-15-intel, macos: macos14, target: '14.0'}
+          - {arch: arm64, runner: macos-15, macos: macos15, target: '15.0'}
+          - {arch: x86_64, runner: macos-15-intel, macos: macos15, target: '15.0'}
     env:
-      MACOSX_DEPLOYMENT_TARGET: '14.0'
-      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-macos-${{ matrix.arch }}
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.target }}
+      NAME: osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-${{ matrix.macos }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v7
       # if the cache is missing (e.g. its save failed), osmesa-install.sh builds LLVM (LLVM_BUILD=auto)
@@ -412,7 +420,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v5
         with:
-          pattern: '*-macos-*'
+          pattern: '*-macos1*'
           path: assets
           merge-multiple: true
       - name: Add the archives to the release
@@ -488,7 +496,7 @@ jobs:
           # release/macos-vm.sh --upload or release/linux-local.sh --upload adds them and finalizes
           ALLOW_MISSING=
           if [ "${{ vars.CI_MACOS_ON_VM }}" = 1 ]; then
-            ALLOW_MISSING="$ALLOW_MISSING macos-arm64 macos-x86_64"
+            ALLOW_MISSING="$ALLOW_MISSING macos14-arm64 macos14-x86_64 macos15-arm64 macos15-x86_64"
           fi
           if [ "${{ vars.CI_LINUX_LOCAL }}" = 1 ]; then
             ALLOW_MISSING="$ALLOW_MISSING linux-x86_64 linux-aarch64"

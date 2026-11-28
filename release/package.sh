@@ -8,7 +8,7 @@
 #   link-flags.txt, licenses/, README.txt
 #
 # Usage: release/package.sh NAME OSMESA_PREFIX LLVM_PREFIX BUILD_DIR OUT_DIR PLATFORM_DESCRIPTION
-#   NAME: archive name (e.g. osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-macos-arm64), BUILD_DIR:
+#   NAME: archive name (e.g. osmesa-install-osmesa-mesa-25.0.7-llvm-19.1.7-macos14-arm64), BUILD_DIR:
 #   the directory where osmesa-install.sh was run (for the Mesa and GLU licenses), OUT_DIR: where
 #   NAME.tar.xz goes.
 

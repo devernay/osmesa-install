@@ -12,8 +12,10 @@ Prebuilt OSMesa: Mesa $mesaversion, static, mangled (mgl*), llvmpipe and softpip
 
 | Archive | Platform |
 |---|---|
-| \`osmesa-install-$tag-macos-arm64.tar.xz\` | macOS 14.0 and later, arm64 |
-| \`osmesa-install-$tag-macos-x86_64.tar.xz\` | macOS 14.0 and later, x86_64 |
+| \`osmesa-install-$tag-macos14-arm64.tar.xz\` | macOS 14.0 and later (VFX Reference Platform CY2026-2027), arm64 |
+| \`osmesa-install-$tag-macos14-x86_64.tar.xz\` | macOS 14.0 and later, x86_64 |
+| \`osmesa-install-$tag-macos15-arm64.tar.xz\` | macOS 15.0 and later, arm64 |
+| \`osmesa-install-$tag-macos15-x86_64.tar.xz\` | macOS 15.0 and later, x86_64 |
 | \`osmesa-install-$tag-windows-ucrt64-x86_64.tar.xz\` | Windows 10 and later, x86_64, MSYS2 UCRT64 (MinGW-w64 gcc), only Windows system DLLs |
 | \`osmesa-install-$tag-windows-clangarm64-aarch64.tar.xz\` | Windows 11 and later, ARM64, MSYS2 CLANGARM64 (clang, libc++), only Windows system DLLs |
 | \`osmesa-install-$tag-linux-x86_64.tar.xz\` | Linux x86_64, glibc 2.34+ (Rocky/RHEL 9, gcc-toolset-14), no libdrm |

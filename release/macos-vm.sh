@@ -28,7 +28,8 @@
 # MAX_LOAD (number of CPUs: each VM waits until the host load average is below it), MIN_FREE_GB (30:
 # and until that much disk space is free).
 
-OS=macos
+# the VM is macOS 14, so it can build (and test) only the macos14 archives (target 14.0)
+OS=macos14
 OSNAME=macOS
 DEFAULT_ARCHS="arm64 x86_64"
 DEFAULT_WORK=/tmp/osmesa-macos-vm
@@ -124,7 +125,7 @@ for f in osdemo osdemo16 osdemo32 osmesa_mt_test; do
     fi
 done
 
-name="osmesa-install-$tag-macos-$arch"
+name="osmesa-install-$tag-macos14-$arch"
 echo "  macOS $(sw_vers -productVersion) tart VM (cirruslabs macos-sonoma-base), Command Line Tools $(pkgutil --pkg-info=com.apple.pkg.CLTools_Executables | sed -n 's/^version: //p'), $(basename "$sdk"), Apple clang $(clang -dumpversion), $([ "$arch" = x86_64 ] && echo 'x86_64 under Rosetta, ')Python build tools from PyPI, MACOSX_DEPLOYMENT_TARGET=$deploymenttarget, osmesa-install $commit (release/macos-vm.sh)" > "$w/out/$name.buildinfo"
 arch -$arch /usr/bin/env MACOSX_DEPLOYMENT_TARGET=$deploymenttarget \
     /bin/bash ../src/release/package.sh "$name" "$HOME/osmesa" "$HOME/llvm" . "$w/out" \
