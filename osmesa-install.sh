@@ -770,6 +770,7 @@ echo "* applying patches..."
 #lp_scene-safe.patch still valid with Mesa 17.0.3
 #mesa-glversion-override.patch
 #osmesa-gallium-driver.patch still valid with Mesa 17.0.3
+#llvmpipe-pack-saturate.patch only for Mesa 25.0.7 (llvmpipe on AArch64: saturating packs, as on x86)
 #redefinition-of-typedef-nirshader.patch only for Mesa 12.0.x
 #scons25.patch only for Mesa < 12.0.1
 #scons-llvm-3-9-libs.patch still valid with Mesa 17.0.3
@@ -797,6 +798,7 @@ osmesa-gl-DispatchTSD.patch \
 osmesa-configure-ac.patch \
 gallivm_math_h.patch \
 gallium_llvm.patch \
+llvmpipe-pack-saturate.patch \
 "
 
 if [ "$osname" = Darwin ] && [ "$osver" -lt 14 ]; then

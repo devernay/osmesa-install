@@ -1,0 +1,28 @@
+--- a/src/gallium/auxiliary/gallivm/lp_bld_pack.c
++++ b/src/gallium/auxiliary/gallivm/lp_bld_pack.c
+@@ -691,6 +691,25 @@
+       }
+    }
+ 
++   /* generic shuffle: saturate signed sources first, as x86's packss/packus
++    * instructions above do. Some callers rely on that (e.g. blending into snorm
++    * formats, see "Will break on everything not implementing clamping pack
++    * intrinsics" in lp_bld_blend.c): elsewhere (e.g. AArch64), out-of-range
++    * values would wrap around. Unsigned sources still truncate.
++    */
++   if (src_type.sign) {
++      struct lp_build_context bld;
++      unsigned dst_bits = dst_type.sign ? dst_type.width - 1 : dst_type.width;
++      long long dst_max = ((long long)1 << dst_bits) - 1;
++      long long dst_min = dst_type.sign ? -((long long)1 << dst_bits) : 0;
++      LLVMValueRef max = lp_build_const_int_vec(gallivm, src_type, dst_max);
++      LLVMValueRef min = lp_build_const_int_vec(gallivm, src_type, dst_min);
++
++      lp_build_context_init(&bld, gallivm, src_type);
++      lo = lp_build_clamp(&bld, lo, min, max);
++      hi = lp_build_clamp(&bld, hi, min, max);
++   }
++
+    /* generic shuffle */
+    lo = LLVMBuildBitCast(builder, lo, dst_vec_type, "");
+    hi = LLVMBuildBitCast(builder, hi, dst_vec_type, "");
