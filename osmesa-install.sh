@@ -1185,6 +1185,11 @@ elif [ "$use_meson" = 1 ]; then
                 # find_package and ignore llvm-config: make it find ours first (and not, e.g.,
                 # the MSVC-built LLVM that comes with Visual Studio)
                 mesonopts="$mesonopts -Dcmake_prefix_path=$(nativepath "$llvmprefix")"
+                # LLVM_DIR comes first in find_package (e.g. GitHub's Windows ARM runner finds
+                # Visual Studio's LLVM before CMAKE_PREFIX_PATH)
+                if [ -d "$llvmprefix/lib/cmake/llvm" ]; then
+                    export LLVM_DIR="$(nativepath "$llvmprefix/lib/cmake/llvm")"
+                fi
                 ;;
         esac
     fi
