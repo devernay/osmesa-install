@@ -1360,7 +1360,13 @@ if [ "$mangled" = 1 ]; then
      CPPFLAGS=-DUSE_MGL_NAMESPACE"
 fi
 
-env PKG_CONFIG_PATH="${osmesaprefix}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}" ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS"
+# GLU's C++ uses "register", an error with C++17, the default of recent clang (e.g. MSYS2
+# CLANGARM64): accept it where the compiler knows -Wno-register (older ones don't need it)
+glucxxflags="$CXXFLAGS"
+if echo 'int main() { return 0; }' | $CXX -Wno-register -x c++ -c -o /dev/null - >/dev/null 2>&1; then
+    glucxxflags="$glucxxflags -Wno-register"
+fi
+env PKG_CONFIG_PATH="${osmesaprefix}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}" ./configure ${confopts} CFLAGS="$CFLAGS" CXXFLAGS="$glucxxflags"
 make -j"${mkjobs}"
 
 echo "* installing GLU..."
