@@ -272,7 +272,7 @@ jobs:
       matrix:
         include:
           - {arch: x86_64, msystem: UCRT64, runner: windows-2025, compilers: 'gcc:p binutils:p', cc: gcc, cxx: g++}
-          - {arch: aarch64, msystem: CLANGARM64, runner: windows-11-arm, compilers: 'clang:p lld:p', cc: clang, cxx: clang++}
+          - {arch: aarch64, msystem: CLANGARM64, runner: windows-11-arm, compilers: 'clang:p lld:p lldb:p', cc: clang, cxx: clang++}
     timeout-minutes: 360 # 60 min, plus LLVM if its cache is missing
     defaults:
       run:
@@ -306,6 +306,18 @@ jobs:
           env OSMESA_VERSION=$CI_MESA_VERSION LLVM_VERSION=$CI_LLVM_VERSION OSMESA_PREFIX="$HOME/osmesa" LLVM_PREFIX="$llvm" \
               CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} PYTHON="$MSYSTEM_PREFIX/bin/python3" MKJOBS=$(nproc) \
               bash ../osmesa-install.sh
+      # TEMPORARY: locate the osdemo crash on Windows ARM64
+      - name: Diagnose the osdemo crash (Windows ARM64)
+        if: ${{ failure() && matrix.arch == 'aarch64' }}
+        run: |
+          cd build/mesa-demos-*/src/osdemos
+          for d in softpipe llvmpipe; do
+            echo "== GALLIUM_DRIVER=$d"
+            GALLIUM_DRIVER=$d ./osdemo32 image32-$d.tga; echo "exit status $?"
+            GALLIUM_DRIVER=$d ./osdemo image-$d.tga; echo "exit status $?"
+          done
+          echo "== lldb backtrace (llvmpipe)"
+          GALLIUM_DRIVER=llvmpipe lldb --batch -o run -o "bt 40" -o "register read pc lr sp" -o "disassemble -p -c 8" -- ./osdemo32 image32-lldb.tga || true
       - name: Check the libraries
         run: |
           lib="$HOME/osmesa/lib"
